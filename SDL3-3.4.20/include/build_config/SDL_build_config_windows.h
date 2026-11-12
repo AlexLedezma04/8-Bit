@@ -25,92 +25,15 @@
 
 #include <SDL3/SDL_platform_defines.h>
 
-/* winsdkver.h defines _WIN32_MAXVER for SDK version detection. It is present since at least the Windows 7 SDK,
- * but out of caution we'll only use it if the compiler supports __has_include() to confirm its presence.
- * If your compiler doesn't support __has_include() but you have winsdkver.h, define HAVE_WINSDKVER_H.  */
-#if !defined(HAVE_WINSDKVER_H) && defined(__has_include)
-#if __has_include(<winsdkver.h>)
-#define HAVE_WINSDKVER_H 1
-#endif
-#endif
-
-#ifdef HAVE_WINSDKVER_H
-#include <winsdkver.h>
-#endif
-
-/* sdkddkver.h defines more specific SDK version numbers. This is needed because older versions of the
- * Windows 10 SDK have broken declarations for the C API for DirectX 12. */
-#if !defined(HAVE_SDKDDKVER_H) && defined(__has_include)
-#if __has_include(<sdkddkver.h>)
-#define HAVE_SDKDDKVER_H 1
-#endif
-#endif
-
-#ifdef HAVE_SDKDDKVER_H
-#include <sdkddkver.h>
-#endif
-
-/* This is a set of defines to configure the SDL features */
-
-#if !defined(HAVE_STDINT_H) && !defined(_STDINT_H_)
-/* Most everything except Visual Studio 2008 and earlier has stdint.h now */
-#if defined(_MSC_VER) && (_MSC_VER < 1600)
-typedef signed __int8 int8_t;
-typedef unsigned __int8 uint8_t;
-typedef signed __int16 int16_t;
-typedef unsigned __int16 uint16_t;
-typedef signed __int32 int32_t;
-typedef unsigned __int32 uint32_t;
-typedef signed __int64 int64_t;
-typedef unsigned __int64 uint64_t;
-#ifndef _UINTPTR_T_DEFINED
-#ifdef  _WIN64
-typedef unsigned __int64 uintptr_t;
-#else
-typedef unsigned int uintptr_t;
-#endif
-#endif
-#else
-#define HAVE_STDINT_H 1
-#endif /* Visual Studio 2008 */
-#endif /* !_STDINT_H_ && !HAVE_STDINT_H */
+/* 8-Bit: trimmed SDL config for Windows. Only what a text editor needs:
+ * windowing, input events, clipboard, timers, files and OpenGL. */
 
 #ifdef __clang__
 # define HAVE_GCC_ATOMICS 1
 #endif
 
-#define HAVE_DDRAW_H 1
-#define HAVE_DINPUT_H 1
-#define HAVE_DSOUND_H 1
-#define HAVE_DXGI_H 1
-#define HAVE_XINPUT_H 1
-#if defined(_WIN32_MAXVER) && _WIN32_MAXVER >= 0x0A00  /* Windows 10 SDK */
-#define HAVE_DXGI1_5_H 1
-#define HAVE_DXGI1_6_H 1
-#define HAVE_WINDOWS_GAMING_INPUT_H 1
-#endif
-#if defined(_WIN32_MAXVER) && _WIN32_MAXVER >= 0x0602  /* Windows 8 SDK */
-#define HAVE_D3D11_H 1
-#define HAVE_ROAPI_H 1
-#endif
-#if defined(_WIN32_MAXVER) && _WIN32_MAXVER >= 0x0603  /* Windows 8.1 SDK */
-#define HAVE_SHELLSCALINGAPI_H 1
-#endif
-#define HAVE_MMDEVICEAPI_H 1
-#define HAVE_AUDIOCLIENT_H 1
-#define HAVE_TPCSHRD_H 1
-#define HAVE_SENSORSAPI_H 1
-#if defined(__has_include) && __has_include(<gameinput.h>)
-#define HAVE_GAMEINPUT_H 1
-#endif
-#if (defined(_M_IX86) || defined(_M_X64) || defined(_M_AMD64)) && (defined(_MSC_VER) && _MSC_VER >= 1600)
-#elif defined(__has_include) && (defined(__i386__) || defined(__x86_64))
-# if !__has_include(<immintrin.h>)
-#   define SDL_DISABLE_AVX 1
-# endif
-#else
-# define SDL_DISABLE_AVX 1
-#endif
+#define HAVE_STDINT_H 1
+#define SDL_DISABLE_AVX 1
 
 #define HAVE_STDARG_H 1
 #define HAVE_STDDEF_H 1
@@ -215,91 +138,34 @@ typedef unsigned int uintptr_t;
 #endif /* _MSC_VER */
 #endif
 
-/* Enable various audio drivers */
-#if defined(HAVE_MMDEVICEAPI_H) && defined(HAVE_AUDIOCLIENT_H)
-#define SDL_AUDIO_DRIVER_WASAPI 1
-#endif
-#define SDL_AUDIO_DRIVER_DSOUND 1
-#define SDL_AUDIO_DRIVER_DISK 1
-#define SDL_AUDIO_DRIVER_DUMMY 1
+/* Disabled subsystems */
+#define SDL_AUDIO_DISABLED 1
+#define SDL_CAMERA_DISABLED 1
+#define SDL_JOYSTICK_DISABLED 1
+#define SDL_HAPTIC_DISABLED 1
+#define SDL_HIDAPI_DISABLED 1
+#define SDL_SENSOR_DISABLED 1
+#define SDL_GPU_DISABLED 1
+#define SDL_POWER_DISABLED 1
+#define SDL_DIALOG_DISABLED 1
 
-/* Enable various input drivers */
-#define SDL_JOYSTICK_DINPUT 1
-#ifdef HAVE_GAMEINPUT_H
-#define SDL_JOYSTICK_GAMEINPUT 1
-#endif
-#define SDL_JOYSTICK_HIDAPI 1
-#define SDL_JOYSTICK_RAWINPUT 1
-#define SDL_JOYSTICK_VIRTUAL 1
-#ifdef HAVE_WINDOWS_GAMING_INPUT_H
-#define SDL_JOYSTICK_WGI 1
-#endif
-#define SDL_JOYSTICK_XINPUT 1
-#define SDL_HAPTIC_DINPUT 1
+#define SDL_PROCESS_DUMMY 1
+#define SDL_TRAY_DUMMY 1
 
-/* Enable various process implementations */
-#define SDL_PROCESS_WINDOWS 1
-
-/* Enable the sensor driver */
-#ifdef HAVE_SENSORSAPI_H
-#define SDL_SENSOR_WINDOWS 1
-#else
-#define SDL_SENSOR_DUMMY 1
-#endif
-
-/* Enable various shared object loading systems */
 #define SDL_LOADSO_WINDOWS 1
-
-/* Enable various threading systems */
 #define SDL_THREAD_GENERIC_COND_SUFFIX 1
 #define SDL_THREAD_GENERIC_RWLOCK_SUFFIX 1
 #define SDL_THREAD_WINDOWS 1
-
-/* Enable RTC system */
 #define SDL_TIME_WINDOWS 1
-
-/* Enable various timer systems */
 #define SDL_TIMER_WINDOWS 1
-
-/* Enable various video drivers */
-#define SDL_VIDEO_DRIVER_DUMMY 1
-#define SDL_VIDEO_DRIVER_OFFSCREEN 1
-#define SDL_VIDEO_DRIVER_WINDOWS 1
-#define SDL_VIDEO_RENDER_D3D 1
-#ifdef HAVE_D3D11_H
-#define SDL_VIDEO_RENDER_D3D11 1
-#endif
-#define SDL_VIDEO_RENDER_D3D12 1
-
-/* Enable OpenGL support */
-#define SDL_VIDEO_OPENGL 1
-#define SDL_VIDEO_OPENGL_WGL 1
-#define SDL_VIDEO_RENDER_OGL 1
-#define SDL_VIDEO_RENDER_OGL_ES2 1
-#define SDL_VIDEO_OPENGL_ES2 1
-#define SDL_VIDEO_OPENGL_EGL 1
-
-/* Enable Vulkan support */
-#define SDL_VIDEO_VULKAN 1
-#define SDL_VIDEO_RENDER_VULKAN 1
-
-/* Enable GPU support */
-#ifdef HAVE_D3D11_H
-#define SDL_GPU_D3D11 1
-#endif
-#define SDL_GPU_D3D12 1
-#define SDL_GPU_VULKAN 1
-#define SDL_VIDEO_RENDER_GPU 1
-
-/* Enable system power support */
-#define SDL_POWER_WINDOWS 1
-
-/* Enable filesystem support */
 #define SDL_FILESYSTEM_WINDOWS 1
 #define SDL_FSOPS_WINDOWS 1
 
-/* Enable the camera driver */
-#define SDL_CAMERA_DRIVER_MEDIAFOUNDATION 1
-#define SDL_CAMERA_DRIVER_DUMMY 1
+#define SDL_VIDEO_DRIVER_WINDOWS 1
+
+/* OpenGL only */
+#define SDL_VIDEO_OPENGL 1
+#define SDL_VIDEO_OPENGL_WGL 1
+#define SDL_VIDEO_RENDER_OGL 1
 
 #endif /* SDL_build_config_windows_h_ */

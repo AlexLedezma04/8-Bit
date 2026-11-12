@@ -28,7 +28,10 @@
 
 #include "SDL_windowsevents.h"
 
-#include "../../joystick/usb_ids.h"
+// HID usage page / usages for the raw input devices we register
+#define USB_USAGEPAGE_GENERIC_DESKTOP 0x0001
+#define USB_USAGE_GENERIC_MOUSE       0x0002
+#define USB_USAGE_GENERIC_KEYBOARD    0x0006
 #include "../../events/SDL_events_c.h"
 #include "../../thread/SDL_systhread.h"
 

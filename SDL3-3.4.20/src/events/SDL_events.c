@@ -26,8 +26,12 @@
 #include "SDL_eventwatch_c.h"
 #include "SDL_windowevents_c.h"
 #include "../SDL_hints_c.h"
+#ifndef SDL_AUDIO_DISABLED
 #include "../audio/SDL_audio_c.h"
+#endif
+#ifndef SDL_CAMERA_DISABLED
 #include "../camera/SDL_camera_c.h"
+#endif
 #include "../timer/SDL_timer_c.h"
 #include "../core/linux/SDL_udev.h"
 #ifndef SDL_JOYSTICK_DISABLED
@@ -46,10 +50,6 @@
 #include "../video/android/SDL_androidevents.h"
 #endif
 
-#ifdef SDL_PLATFORM_UNIX
-#include "../tray/SDL_tray_utils.h"
-#endif
-
 // An arbitrary limit so we don't have unbounded growth
 #define SDL_MAX_QUEUED_EVENTS 65535
 
@@ -59,8 +59,6 @@
 // Determines how often to pump events if joysticks or sensors are actively being read
 #define EVENT_POLL_INTERVAL_NS SDL_MS_TO_NS(1)
 
-// Determines how often to pump events if tray items are active
-#define TRAY_POLL_INTERVAL_NS SDL_MS_TO_NS(50)
 
 // Determines how often to pump events if DBus is active
 #define DBUS_POLL_INTERVAL_NS (3 * SDL_NS_PER_SECOND)
@@ -1488,8 +1486,6 @@ void SDL_PumpEventMaintenance(void)
 
     SDL_UpdateCursorAnimation();
 
-    SDL_UpdateTrays();
-
     SDL_SendPendingSignalEvents(); // in case we had a signal handler fire, etc.
 }
 
@@ -1574,13 +1570,6 @@ static Sint64 SDL_events_get_polling_interval(void)
     if (SDL_WasInit(SDL_INIT_SENSOR) && SDL_update_sensors && SDL_SensorsOpened()) {
         // If we have sensors open, we need to poll rapidly for events
         poll_intervalNS = SDL_min(poll_intervalNS, EVENT_POLL_INTERVAL_NS);
-    }
-#endif
-
-#ifdef SDL_PLATFORM_UNIX
-    if (SDL_HasActiveTrays()) {
-        // Tray events on *nix platforms run separately from window system events, and need periodic polling
-        poll_intervalNS = SDL_min(poll_intervalNS, TRAY_POLL_INTERVAL_NS);
     }
 #endif
 

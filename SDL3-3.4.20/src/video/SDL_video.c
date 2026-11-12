@@ -34,7 +34,9 @@
 #include "../SDL_hints_c.h"
 #include "../SDL_properties_c.h"
 #include "../timer/SDL_timer_c.h"
+#ifndef SDL_CAMERA_DISABLED
 #include "../camera/SDL_camera_c.h"
+#endif
 #include "../render/SDL_sysrender.h"
 #include "../main/SDL_main_callbacks.h"
 

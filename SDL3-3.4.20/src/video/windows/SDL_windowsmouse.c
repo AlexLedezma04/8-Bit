@@ -28,7 +28,6 @@
 
 #include "../SDL_video_c.h"
 #include "../../events/SDL_mouse_c.h"
-#include "../../joystick/usb_ids.h"
 #include "../../core/windows/SDL_windows.h" // for checking windows version
 
 #define RIFF_FOURCC(c0, c1, c2, c3)                 \

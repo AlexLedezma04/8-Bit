@@ -24,7 +24,6 @@
 #include <unistd.h>
 #endif
 
-#include "joystick/SDL_joystick_c.h" // For SDL_GetGamepadTypeFromVIDPID()
 
 #ifdef SDL_PLATFORM_EMSCRIPTEN
 #include <emscripten.h>
@@ -528,36 +527,11 @@ char *SDL_CreateDeviceName(Uint16 vendor, Uint16 product, const char *vendor_nam
     } else if (*product_name) {
         name = SDL_strdup(product_name);
     } else if (vendor || product) {
-        // Couldn't find a controller name, try to give it one based on device type
-        switch (SDL_GetGamepadTypeFromVIDPID(vendor, product, NULL, true)) {
-        case SDL_GAMEPAD_TYPE_XBOX360:
-            name = SDL_strdup("Xbox 360 Controller");
-            break;
-        case SDL_GAMEPAD_TYPE_XBOXONE:
-            name = SDL_strdup("Xbox One Controller");
-            break;
-        case SDL_GAMEPAD_TYPE_PS3:
-            name = SDL_strdup("PS3 Controller");
-            break;
-        case SDL_GAMEPAD_TYPE_PS4:
-            name = SDL_strdup("PS4 Controller");
-            break;
-        case SDL_GAMEPAD_TYPE_PS5:
-            name = SDL_strdup("DualSense Wireless Controller");
-            break;
-        case SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_PRO:
-            name = SDL_strdup("Nintendo Switch Pro Controller");
-            break;
-        case SDL_GAMEPAD_TYPE_STEAM:
-            name = SDL_strdup("Steam Controller");
-            break;
-        default:
-            len = (6 + 1 + 6 + 1);
-            name = (char *)SDL_malloc(len);
-            if (name) {
-                (void)SDL_snprintf(name, len, "0x%.4x/0x%.4x", vendor, product);
-            }
-            break;
+        // Couldn't find a name, fall back to the vendor/product IDs
+        size_t l = (6 + 1 + 6 + 1);
+        name = (char *)SDL_malloc(l);
+        if (name) {
+            (void)SDL_snprintf(name, l, "0x%.4x/0x%.4x", vendor, product);
         }
     } else if (default_name) {
         name = SDL_strdup(default_name);
