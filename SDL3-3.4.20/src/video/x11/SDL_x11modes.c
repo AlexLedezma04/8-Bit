@@ -27,7 +27,6 @@
 #include "edid.h"
 #include "../../events/SDL_displayevents_c.h"
 
-#include "../../core/unix/SDL_gtk.h"
 
 // #define X11MODES_DEBUG
 

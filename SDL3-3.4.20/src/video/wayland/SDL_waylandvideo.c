@@ -25,7 +25,6 @@
 
 #include "../../core/linux/SDL_system_theme.h"
 #include "../../core/linux/SDL_progressbar.h"
-#include "../../core/unix/SDL_gtk.h"
 #include "../../events/SDL_events_c.h"
 
 #include "SDL_waylandclipboard.h"

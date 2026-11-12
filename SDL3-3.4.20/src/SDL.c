@@ -31,7 +31,6 @@
 #include "core/linux/SDL_dbus.h"
 
 #if defined(SDL_PLATFORM_UNIX) && !defined(SDL_PLATFORM_ANDROID)
-#include "core/unix/SDL_gtk.h"
 #endif
 
 #ifdef SDL_PLATFORM_EMSCRIPTEN
@@ -727,9 +726,6 @@ void SDL_Quit(void)
     SDL_DBus_Quit();
 #endif
 
-#if defined(SDL_PLATFORM_UNIX) && !defined(SDL_PLATFORM_ANDROID) && !defined(SDL_PLATFORM_EMSCRIPTEN) && !defined(SDL_PLATFORM_PRIVATE)
-    SDL_Gtk_Quit();
-#endif
 
     SDL_QuitTimers();
     SDL_QuitAsyncIO();

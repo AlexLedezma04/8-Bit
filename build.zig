@@ -44,6 +44,7 @@ fn buildSdl(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.built
     mod.addIncludePath(b.path(sdl_root ++ "/include"));
     mod.addIncludePath(b.path(sdl_root ++ "/include/build_config"));
     mod.addIncludePath(b.path(sdl_root ++ "/src"));
+    mod.addIncludePath(b.path(sdl_root ++ "/src/video/khronos"));
     mod.addCMacro("SDL_STATIC_LIB", "1");
 
     const flags: []const []const u8 = &.{ "-fno-sanitize=undefined", "-Wno-deprecated-declarations" };
@@ -61,7 +62,6 @@ fn buildSdl(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.built
         },
         .linux => {
             mod.addCSourceFiles(.{ .root = root, .files = &linux_sources, .flags = flags });
-            mod.linkSystemLibrary("X11", .{});
         },
         .macos => {
             mod.addCSourceFiles(.{ .root = root, .files = &macos_sources, .flags = flags, .language = .objective_c });
@@ -231,6 +231,43 @@ const windows_sources = [_][]const u8{
 };
 
 // TODO: written but unverified, needs the Linux config + X11 headers.
-const linux_sources = [_][]const u8{};
+const linux_sources = [_][]const u8{
+    "core/unix/SDL_appid.c",
+    "core/unix/SDL_poll.c",
+    "core/linux/SDL_threadprio.c",
+    "filesystem/posix/SDL_sysfsops.c",
+    "filesystem/unix/SDL_sysfilesystem.c",
+    "loadso/dlopen/SDL_sysloadso.c",
+    "locale/unix/SDL_syslocale.c",
+    "misc/unix/SDL_sysurl.c",
+    "thread/generic/SDL_sysrwlock.c",
+    "thread/pthread/SDL_syscond.c",
+    "thread/pthread/SDL_sysmutex.c",
+    "thread/pthread/SDL_syssem.c",
+    "thread/pthread/SDL_systhread.c",
+    "thread/pthread/SDL_systls.c",
+    "time/unix/SDL_systime.c",
+    "timer/unix/SDL_systimer.c",
+    "video/x11/edid-parse.c",
+    "video/x11/SDL_x11clipboard.c",
+    "video/x11/SDL_x11dyn.c",
+    "video/x11/SDL_x11events.c",
+    "video/x11/SDL_x11framebuffer.c",
+    "video/x11/SDL_x11keyboard.c",
+    "video/x11/SDL_x11modes.c",
+    "video/x11/SDL_x11mouse.c",
+    "video/x11/SDL_x11opengl.c",
+    "video/x11/SDL_x11opengles.c",
+    "video/x11/SDL_x11pen.c",
+    "video/x11/SDL_x11settings.c",
+    "video/x11/SDL_x11shape.c",
+    "video/x11/SDL_x11touch.c",
+    "video/x11/SDL_x11video.c",
+    "video/x11/SDL_x11window.c",
+    "video/x11/SDL_x11xfixes.c",
+    "video/x11/SDL_x11xtest.c",
+    "video/x11/SDL_x11xinput2.c",
+    "video/x11/xsettings-client.c",
+};
 // TODO: written but unverified, needs macOS SDK.
 const macos_sources = [_][]const u8{};

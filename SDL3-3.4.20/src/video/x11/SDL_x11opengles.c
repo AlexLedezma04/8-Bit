@@ -37,10 +37,10 @@ bool X11_GLES_LoadLibrary(SDL_VideoDevice *_this, const char *path)
 {
     SDL_VideoData *data = _this->internal;
 
+#ifdef SDL_VIDEO_OPENGL_GLX
     // If the profile requested is not GL ES, switch over to X11_GL functions
     if ((_this->gl_config.profile_mask != SDL_GL_CONTEXT_PROFILE_ES) &&
         !SDL_GetHintBoolean(SDL_HINT_VIDEO_FORCE_EGL, false)) {
-#ifdef SDL_VIDEO_OPENGL_GLX
         X11_GLES_UnloadLibrary(_this);
         _this->GL_LoadLibrary = X11_GL_LoadLibrary;
         _this->GL_GetProcAddress = X11_GL_GetProcAddress;
@@ -52,10 +52,9 @@ bool X11_GLES_LoadLibrary(SDL_VideoDevice *_this, const char *path)
         _this->GL_SwapWindow = X11_GL_SwapWindow;
         _this->GL_DestroyContext = X11_GL_DestroyContext;
         return X11_GL_LoadLibrary(_this, path);
-#else
-        return SDL_SetError("SDL not configured with OpenGL/GLX support");
-#endif
     }
+
+#endif // SDL_VIDEO_OPENGL_GLX
 
     if (!_this->gl_config.egl_platform) {
         _this->gl_config.egl_platform = EGL_PLATFORM_X11_KHR;

@@ -34,6 +34,16 @@
 #include "SDL_x11xinput2.h"
 #include "SDL_x11xfixes.h"
 
+// 8-Bit: OpenGL goes through EGL; GLX is only used if it was compiled in.
+#ifdef SDL_VIDEO_OPENGL_GLX
+#define X11_USE_EGL(_this)                                                              \
+    (((_this)->gl_config.profile_mask == SDL_GL_CONTEXT_PROFILE_ES ||                   \
+      SDL_GetHintBoolean(SDL_HINT_VIDEO_FORCE_EGL, false)) &&                           \
+     (!(_this)->gl_data || X11_GL_UseEGL(_this)))
+#else
+#define X11_USE_EGL(_this) (true)
+#endif
+
 #ifdef SDL_VIDEO_OPENGL_EGL
 #include "SDL_x11opengles.h"
 #endif
@@ -450,13 +460,7 @@ static bool SetupWindowData(SDL_VideoDevice *_this, SDL_Window *window, Window w
 
 
 #if defined(SDL_VIDEO_OPENGL_ES) || defined(SDL_VIDEO_OPENGL_ES2) || defined(SDL_VIDEO_OPENGL_EGL)
-    if ((window->flags & SDL_WINDOW_OPENGL) &&
-        ((_this->gl_config.profile_mask == SDL_GL_CONTEXT_PROFILE_ES) ||
-         SDL_GetHintBoolean(SDL_HINT_VIDEO_FORCE_EGL, false))
-#ifdef SDL_VIDEO_OPENGL_GLX
-        && (!_this->gl_data || X11_GL_UseEGL(_this))
-#endif
-    ) {
+    if ((window->flags & SDL_WINDOW_OPENGL) && X11_USE_EGL(_this)) {
 #ifdef SDL_VIDEO_OPENGL_EGL
         if (!_this->egl_data) {
             goto error_cleanup;
@@ -622,12 +626,7 @@ bool X11_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Properties
         XVisualInfo *vinfo = NULL;
 
 #ifdef SDL_VIDEO_OPENGL_EGL
-        if (((_this->gl_config.profile_mask == SDL_GL_CONTEXT_PROFILE_ES) ||
-             SDL_GetHintBoolean(SDL_HINT_VIDEO_FORCE_EGL, false))
-#ifdef SDL_VIDEO_OPENGL_GLX
-            && (!_this->gl_data || X11_GL_UseEGL(_this))
-#endif
-        ) {
+        if (X11_USE_EGL(_this)) {
             vinfo = X11_GLES_GetVisual(_this, display, screen, transparent);
         } else
 #endif
