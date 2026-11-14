@@ -2,12 +2,51 @@ const std = @import("std");
 
 const sdl_root = "third_party/SDL3-3.4.20";
 
+/// Hard rule: every release exe must be at most 2 MiB.
+const size_limit = 2 * 1024 * 1024;
+
+/// Targets checked by `zig build size`.
+const size_targets = [_]struct { name: []const u8, query: std.Target.Query }{
+    .{ .name = "linux-x86_64", .query = .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu } },
+    .{ .name = "windows-x86_64", .query = .{ .cpu_arch = .x86_64, .os_tag = .windows } },
+};
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const sdl = buildSdl(b, target, optimize);
+    const exe = addEditor(b, target, optimize);
+    b.installArtifact(exe);
 
+    const run = b.addRunArtifact(exe);
+    b.step("run", "Run the editor").dependOn(&run.step);
+
+    const tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tests.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    b.step("test", "Run SDL-free unit tests").dependOn(&b.addRunArtifact(tests).step);
+
+    const size_check = b.addRunArtifact(b.addExecutable(.{
+        .name = "size_check",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/size_check.zig"),
+            .target = b.graph.host,
+        }),
+    }));
+    size_check.addArg(b.fmt("{d}", .{size_limit}));
+    for (size_targets) |t| {
+        size_check.addArg(t.name);
+        size_check.addFileArg(addEditor(b, b.resolveTargetQuery(t.query), .ReleaseSmall).getEmittedBin());
+    }
+    b.step("size", "Fail if a release exe is over 2 MiB").dependOn(&size_check.step);
+}
+
+/// The editor exe with SDL linked in. Used by the normal build and by the size check.
+fn addEditor(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
     const sdl_c = b.addTranslateC(.{
         .root_source_file = b.path("src/platform/sdl.h"),
         .target = target,
@@ -25,20 +64,8 @@ pub fn build(b: *std.Build) void {
             .imports = &.{.{ .name = "sdl", .module = sdl_c.createModule() }},
         }),
     });
-    exe.root_module.linkLibrary(sdl);
-    b.installArtifact(exe);
-
-    const run = b.addRunArtifact(exe);
-    b.step("run", "Run the editor").dependOn(&run.step);
-
-    const tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/tests.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
-    b.step("test", "Run SDL-free unit tests").dependOn(&b.addRunArtifact(tests).step);
+    exe.root_module.linkLibrary(buildSdl(b, target, optimize));
+    return exe;
 }
 
 fn buildSdl(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
