@@ -19,6 +19,7 @@ assets/
   themes/         theme data files
   grammars/       one grammar file per language
 tests/            integration tests (unit tests stay next to the code)
+tools/            small build helpers (size_check: `zig build size`)
 third_party/      vendored C dependencies (SDL3)
 ```
 
