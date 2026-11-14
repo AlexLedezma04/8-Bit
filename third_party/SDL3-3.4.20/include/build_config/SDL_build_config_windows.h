@@ -97,6 +97,7 @@
 #define HAVE_LOG10 1
 #define HAVE_POW 1
 #define HAVE_SIN 1
+#define HAVE_MODF 1
 #define HAVE_SQRT 1
 #define HAVE_TAN 1
 #define HAVE_ACOSF 1

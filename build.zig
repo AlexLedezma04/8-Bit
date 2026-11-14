@@ -76,12 +76,18 @@ fn buildSdl(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.built
         .link_libc = true,
     });
     const lib = b.addLibrary(.{ .name = "SDL3", .root_module = mod, .linkage = .static });
+    // One section per function/data, so the linker drops every SDL part we never call.
+    lib.link_function_sections = true;
+    lib.link_data_sections = true;
 
     mod.addIncludePath(b.path(sdl_root ++ "/include"));
     mod.addIncludePath(b.path(sdl_root ++ "/include/build_config"));
     mod.addIncludePath(b.path(sdl_root ++ "/src"));
     mod.addIncludePath(b.path(sdl_root ++ "/src/video/khronos"));
     mod.addCMacro("SDL_STATIC_LIB", "1");
+    // SDL's own small-build switch: no optimized blitters, RLE, YUV or software renderer.
+    mod.addCMacro("SDL_LEAN_AND_MEAN", "1");
+    mod.addCMacro("SDL_DISABLE_STB", "1"); // no PNG/JPEG loading
 
     const flags: []const []const u8 = &.{ "-fno-sanitize=undefined", "-Wno-deprecated-declarations" };
     const root = b.path(sdl_root ++ "/src");
@@ -106,12 +112,7 @@ fn buildSdl(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.built
                 .flags = flags,
             });
         },
-        .macos => {
-            mod.addCSourceFiles(.{ .root = root, .files = &macos_sources, .flags = flags, .language = .objective_c });
-            for ([_][]const u8{ "Cocoa", "IOKit", "CoreFoundation", "CoreVideo", "CoreServices", "AppKit", "Foundation", "OpenGL" }) |name|
-                mod.linkFramework(name, .{});
-        },
-        else => @panic("8-Bit supports Windows, macOS and Linux only"),
+        else => @panic("8-Bit supports Windows and Linux only"),
     }
 
     return lib;
@@ -154,46 +155,13 @@ const common_sources = [_][]const u8{
     "io/generic/SDL_asyncio_generic.c",
     "main/SDL_main_callbacks.c",
     "main/generic/SDL_sysmain_callbacks.c",
-    "libm/e_atan2.c",
-    "libm/e_exp.c",
-    "libm/e_fmod.c",
-    "libm/e_log.c",
-    "libm/e_log10.c",
-    "libm/e_pow.c",
-    "libm/e_rem_pio2.c",
-    "libm/e_sqrt.c",
-    "libm/k_cos.c",
-    "libm/k_rem_pio2.c",
-    "libm/k_sin.c",
-    "libm/k_tan.c",
-    "libm/s_atan.c",
-    "libm/s_copysign.c",
-    "libm/s_cos.c",
-    "libm/s_fabs.c",
-    "libm/s_floor.c",
-    "libm/s_isinf.c",
-    "libm/s_isinff.c",
-    "libm/s_isnan.c",
-    "libm/s_isnanf.c",
-    "libm/s_modf.c",
-    "libm/s_scalbn.c",
-    "libm/s_sin.c",
-    "libm/s_tan.c",
     "locale/SDL_locale.c",
     "misc/SDL_url.c",
     "process/SDL_process.c",
     "process/dummy/SDL_dummyprocess.c",
     "render/SDL_render.c",
-    "render/SDL_yuv_sw.c",
     "render/opengl/SDL_render_gl.c",
     "render/opengl/SDL_shaders_gl.c",
-    "render/software/SDL_blendfillrect.c",
-    "render/software/SDL_blendline.c",
-    "render/software/SDL_blendpoint.c",
-    "render/software/SDL_drawline.c",
-    "render/software/SDL_drawpoint.c",
-    "render/software/SDL_render_sw.c",
-    "render/software/SDL_triangle.c",
     "stdlib/SDL_crc16.c",
     "stdlib/SDL_crc32.c",
     "stdlib/SDL_getenv.c",
@@ -213,11 +181,6 @@ const common_sources = [_][]const u8{
     "time/SDL_time.c",
     "timer/SDL_timer.c",
     "video/SDL_blit.c",
-    "video/SDL_blit_0.c",
-    "video/SDL_blit_1.c",
-    "video/SDL_blit_A.c",
-    "video/SDL_blit_N.c",
-    "video/SDL_blit_auto.c",
     "video/SDL_blit_copy.c",
     "video/SDL_blit_slow.c",
     "video/SDL_bmp.c",
@@ -226,17 +189,12 @@ const common_sources = [_][]const u8{
     "video/SDL_fillrect.c",
     "video/SDL_pixels.c",
     "video/SDL_rect.c",
-    "video/SDL_RLEaccel.c",
     "video/SDL_rotate.c",
     "video/SDL_stb.c",
     "video/SDL_stretch.c",
     "video/SDL_surface.c",
     "video/SDL_video.c",
-    "video/SDL_vulkan_utils.c",
     "video/SDL_yuv.c",
-    "video/yuv2rgb/yuv_rgb_lsx.c",
-    "video/yuv2rgb/yuv_rgb_sse.c",
-    "video/yuv2rgb/yuv_rgb_std.c",
 };
 
 const windows_sources = [_][]const u8{
@@ -355,5 +313,3 @@ const wayland_protocols = [_][]const u8{
     "xdg-shell",
     "xdg-toplevel-icon-v1",
 };
-// TODO: written but unverified, needs macOS SDK.
-const macos_sources = [_][]const u8{};
