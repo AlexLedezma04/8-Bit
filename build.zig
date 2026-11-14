@@ -70,6 +70,7 @@ fn buildSdl(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.built
             }) |name| mod.linkSystemLibrary(name, .{});
         },
         .linux => {
+            mod.addIncludePath(b.path("third_party/X11/include"));
             mod.addCSourceFiles(.{ .root = root, .files = &linux_sources, .flags = flags });
         },
         .macos => {
@@ -239,7 +240,6 @@ const windows_sources = [_][]const u8{
     "video/windows/SDL_windowswindow.c",
 };
 
-// TODO: written but unverified, needs the Linux config + X11 headers.
 const linux_sources = [_][]const u8{
     "core/unix/SDL_appid.c",
     "core/unix/SDL_poll.c",
