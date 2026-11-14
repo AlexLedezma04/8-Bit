@@ -1,0 +1,16 @@
+.{
+    .name = .eight_bit,
+    .version = "0.0.0",
+    .fingerprint = 0xa2d7b7f716f0ea91,
+    // CI reads this to pick the Zig version (.github/workflows/ci.yml).
+    .minimum_zig_version = "0.17.0",
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "tests",
+        "tools",
+        "assets",
+        "third_party",
+    },
+}
