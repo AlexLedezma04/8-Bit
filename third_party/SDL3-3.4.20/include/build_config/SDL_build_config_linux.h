@@ -26,7 +26,8 @@
 #include <SDL3/SDL_platform_defines.h>
 
 /* 8-Bit: trimmed SDL config for Linux (glibc/musl). Only what a text editor
- * needs: X11 windowing, input events, clipboard, timers, files and OpenGL. */
+ * needs: Wayland and X11 windowing, input events, clipboard, timers, files
+ * and OpenGL. */
 
 #define HAVE_GCC_ATOMICS 1
 #define HAVE_STDINT_H 1
@@ -159,6 +160,9 @@
 #define HAVE_O_CLOEXEC 1
 #define HAVE_INOTIFY_INIT1 1
 #define HAVE_INOTIFY 1
+#define HAVE_SIGTIMEDWAIT 1
+#define HAVE_GETRESUID 1
+#define HAVE_GETRESGID 1
 
 /* Disabled subsystems */
 #define SDL_AUDIO_DISABLED 1
@@ -197,6 +201,22 @@
 #define SDL_VIDEO_DRIVER_X11_XINPUT2 1
 #define SDL_VIDEO_DRIVER_X11_XINPUT2_SUPPORTS_MULTITOUCH 1
 #define SDL_VIDEO_DRIVER_X11_XRANDR 1
+
+/* Wayland (preferred when available), with every library loaded at runtime.
+ * Versions match the headers in third_party/wayland/include. */
+#define SDL_VIDEO_DRIVER_WAYLAND 1
+#define SDL_VIDEO_DRIVER_WAYLAND_DYNAMIC "libwayland-client.so.0"
+#define SDL_VIDEO_DRIVER_WAYLAND_DYNAMIC_CURSOR "libwayland-cursor.so.0"
+#define SDL_VIDEO_DRIVER_WAYLAND_DYNAMIC_EGL "libwayland-egl.so.1"
+#define SDL_VIDEO_DRIVER_WAYLAND_DYNAMIC_XKBCOMMON "libxkbcommon.so.0"
+#define SDL_VIDEO_DRIVER_WAYLAND_DYNAMIC_LIBDECOR "libdecor-0.so.0"
+#define HAVE_LIBDECOR_H 1
+#define SDL_XKBCOMMON_VERSION_MAJOR 1
+#define SDL_XKBCOMMON_VERSION_MINOR 7
+#define SDL_XKBCOMMON_VERSION_PATCH 0
+#define SDL_LIBDECOR_VERSION_MAJOR 0
+#define SDL_LIBDECOR_VERSION_MINOR 2
+#define SDL_LIBDECOR_VERSION_PATCH 2
 
 /* OpenGL only */
 #define SDL_VIDEO_OPENGL 1

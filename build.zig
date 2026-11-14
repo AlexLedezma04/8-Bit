@@ -71,7 +71,13 @@ fn buildSdl(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.built
         },
         .linux => {
             mod.addIncludePath(b.path("third_party/X11/include"));
+            mod.addIncludePath(b.path("third_party/wayland/include"));
+            mod.addIncludePath(b.path("third_party/wayland/generated"));
             mod.addCSourceFiles(.{ .root = root, .files = &linux_sources, .flags = flags });
+            for (wayland_protocols) |name| mod.addCSourceFile(.{
+                .file = b.path(b.fmt("third_party/wayland/generated/{s}-protocol.c", .{name})),
+                .flags = flags,
+            });
         },
         .macos => {
             mod.addCSourceFiles(.{ .root = root, .files = &macos_sources, .flags = flags, .language = .objective_c });
@@ -242,6 +248,7 @@ const windows_sources = [_][]const u8{
 
 const linux_sources = [_][]const u8{
     "core/unix/SDL_appid.c",
+    "core/unix/SDL_gtk.c",
     "core/unix/SDL_poll.c",
     "core/linux/SDL_threadprio.c",
     "filesystem/posix/SDL_sysfsops.c",
@@ -277,6 +284,49 @@ const linux_sources = [_][]const u8{
     "video/x11/SDL_x11xtest.c",
     "video/x11/SDL_x11xinput2.c",
     "video/x11/xsettings-client.c",
+    "dialog/unix/SDL_zenitymessagebox.c",
+    "video/wayland/SDL_waylandclipboard.c",
+    "video/wayland/SDL_waylandcolor.c",
+    "video/wayland/SDL_waylanddatamanager.c",
+    "video/wayland/SDL_waylanddyn.c",
+    "video/wayland/SDL_waylandevents.c",
+    "video/wayland/SDL_waylandkeyboard.c",
+    "video/wayland/SDL_waylandmessagebox.c",
+    "video/wayland/SDL_waylandmouse.c",
+    "video/wayland/SDL_waylandopengles.c",
+    "video/wayland/SDL_waylandshmbuffer.c",
+    "video/wayland/SDL_waylandutil.c",
+    "video/wayland/SDL_waylandvideo.c",
+    "video/wayland/SDL_waylandwindow.c",
+};
+
+/// Wayland protocols SDL uses. Their code is pre-generated with wayland-scanner
+/// into third_party/wayland/generated, so building needs no extra tools.
+const wayland_protocols = [_][]const u8{
+    "alpha-modifier-v1",
+    "color-management-v1",
+    "cursor-shape-v1",
+    "fractional-scale-v1",
+    "frog-color-management-v1",
+    "idle-inhibit-unstable-v1",
+    "input-timestamps-unstable-v1",
+    "keyboard-shortcuts-inhibit-unstable-v1",
+    "pointer-constraints-unstable-v1",
+    "pointer-gestures-unstable-v1",
+    "pointer-warp-v1",
+    "primary-selection-unstable-v1",
+    "relative-pointer-unstable-v1",
+    "tablet-v2",
+    "text-input-unstable-v3",
+    "viewporter",
+    "wayland",
+    "xdg-activation-v1",
+    "xdg-decoration-unstable-v1",
+    "xdg-dialog-v1",
+    "xdg-foreign-unstable-v2",
+    "xdg-output-unstable-v1",
+    "xdg-shell",
+    "xdg-toplevel-icon-v1",
 };
 // TODO: written but unverified, needs macOS SDK.
 const macos_sources = [_][]const u8{};
