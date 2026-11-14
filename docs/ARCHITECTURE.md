@@ -30,3 +30,14 @@ third_party/      vendored C dependencies (SDL3)
   They may depend on `core/`, never on `editor/` or `ui/`.
 - `editor/` owns state and depends on the feature modules.
 - `ui/` renders `editor/` state through `platform/renderer.zig`.
+
+## Tests
+
+- `zig build test` runs unit tests and the integration tests in `tests/`.
+- Every SDL-free folder has a `root.zig` that imports all of its files.
+  `src/tests.zig` imports only these roots. A new file only needs one line
+  in its folder's `root.zig`; a new integration test needs one line in
+  `tests/root.zig`.
+- `ui/root.zig` imports only the SDL-free files (`theme`, `layout`).
+- The test build has no SDL, so a test that reaches SDL code fails to build.
+  Keep testable logic out of `platform/`, `panels/` and `widgets/`.

@@ -21,14 +21,21 @@ pub fn build(b: *std.Build) void {
     const run = b.addRunArtifact(exe);
     b.step("run", "Run the editor").dependOn(&run.step);
 
-    const tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/tests.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+    // All SDL-free code. Unit tests live next to it; tests/ imports it as "8-bit".
+    const sdl_free = b.createModule(.{
+        .root_source_file = b.path("src/tests.zig"),
+        .target = target,
+        .optimize = optimize,
     });
-    b.step("test", "Run SDL-free unit tests").dependOn(&b.addRunArtifact(tests).step);
+    const integration = b.createModule(.{
+        .root_source_file = b.path("tests/root.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "8-bit", .module = sdl_free }},
+    });
+    const test_step = b.step("test", "Run SDL-free unit and integration tests");
+    for ([_]*std.Build.Module{ sdl_free, integration }) |mod|
+        test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = mod })).step);
 
     const size_check = b.addRunArtifact(b.addExecutable(.{
         .name = "size_check",
