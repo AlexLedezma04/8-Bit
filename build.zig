@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const sdl_root = "SDL3-3.4.20";
+const sdl_root = "third_party/SDL3-3.4.20";
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -9,7 +9,7 @@ pub fn build(b: *std.Build) void {
     const sdl = buildSdl(b, target, optimize);
 
     const sdl_c = b.addTranslateC(.{
-        .root_source_file = b.path("src/sdl.h"),
+        .root_source_file = b.path("src/platform/sdl.h"),
         .target = target,
         .optimize = optimize,
     });
@@ -30,6 +30,15 @@ pub fn build(b: *std.Build) void {
 
     const run = b.addRunArtifact(exe);
     b.step("run", "Run the editor").dependOn(&run.step);
+
+    const tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tests.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    b.step("test", "Run SDL-free unit tests").dependOn(&b.addRunArtifact(tests).step);
 }
 
 fn buildSdl(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {

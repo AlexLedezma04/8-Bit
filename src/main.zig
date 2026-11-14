@@ -1,29 +1,21 @@
-const std = @import("std");
-const c = @import("sdl");
+const Window = @import("platform/window.zig").Window;
+const Renderer = @import("platform/renderer.zig").Renderer;
+const input = @import("platform/input.zig");
+const Theme = @import("ui/theme.zig").Theme;
 
 pub fn main() !void {
-    if (!c.SDL_Init(c.SDL_INIT_VIDEO)) return error.SdlInit;
-    defer c.SDL_Quit();
+    var window = try Window.init(.{});
+    defer window.deinit();
+    var renderer = try Renderer.init(&window);
+    defer renderer.deinit();
 
-    const window = c.SDL_CreateWindow("8-Bit", 800, 600, c.SDL_WINDOW_OPENGL) orelse {
-        std.debug.print("SDL_CreateWindow failed: {s}\n", .{c.SDL_GetError()});
-        return error.Window;
-    };
-    defer c.SDL_DestroyWindow(window);
+    const theme: Theme = .{};
 
-    const ctx = c.SDL_GL_CreateContext(window) orelse {
-        std.debug.print("GL context failed: {s}\n", .{c.SDL_GetError()});
-        return error.GlContext;
-    };
-    defer _ = c.SDL_GL_DestroyContext(ctx);
-    std.debug.print("OpenGL ready\n", .{});
+    while (true) {
+        renderer.clear(theme.background);
+        renderer.present();
 
-    var running = true;
-    while (running) {
-        var ev: c.SDL_Event = undefined;
-        while (c.SDL_WaitEvent(&ev)) {
-            if (ev.type == c.SDL_EVENT_QUIT) running = false;
-            break;
-        }
+        const ev = input.wait() orelse break;
+        if (ev == .quit) break;
     }
 }
