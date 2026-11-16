@@ -150,7 +150,7 @@ test "run moves, selects and edits" {
 
     _ = run(&editor, .move_word_right);
     _ = run(&editor, .select_line_end);
-    try testing.expectEqual(@as(usize, 1), editor.decorations.items.len);
+    try testing.expectEqual(@as(usize, 2), editor.decorations.items.len);
     _ = run(&editor, .delete_left);
     _ = run(&editor, .insert_newline);
     _ = run(&editor, .indent);
@@ -197,11 +197,11 @@ test "zoom and wrap commands" {
     defer editor.deinit();
     _ = run(&editor, .zoom_in);
     _ = run(&editor, .zoom_in);
-    try testing.expectEqual(@as(u8, 4), editor.zoom);
-    _ = run(&editor, .zoom_out);
     try testing.expectEqual(@as(u8, 3), editor.zoom);
-    _ = run(&editor, .zoom_reset);
+    _ = run(&editor, .zoom_out);
     try testing.expectEqual(@as(u8, 2), editor.zoom);
+    _ = run(&editor, .zoom_reset);
+    try testing.expectEqual(@as(u8, 1), editor.zoom);
 
     _ = run(&editor, .toggle_wrap);
     try testing.expect(editor.view.wrap);

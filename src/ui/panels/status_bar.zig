@@ -10,7 +10,7 @@ const utf8 = @import("../../core/utf8.zig");
 pub fn draw(renderer: *Renderer, theme: *const Theme, status: Status, layout: *const Layout) void {
     const bar = layout.status;
     const cell = layout.metrics.cell;
-    const text_y = layout.metrics.textTop(bar.y);
+    const text_y = bar.y;
     renderer.fillRect(bar, theme.status_bar);
 
     var buffer: [64]u8 = undefined;

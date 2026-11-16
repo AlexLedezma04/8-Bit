@@ -56,10 +56,10 @@ pub const Editor = struct {
     path: ?[]u8 = null,
     folder: ?[]u8 = null,
     /// Screen pixels per font pixel.
-    zoom: u8 = 2,
-    default_zoom: u8 = 2,
+    zoom: u8 = 1,
+    default_zoom: u8 = 1,
     /// The zoom that matches the screen, used when the setting is 0.
-    screen_zoom: u8 = 2,
+    screen_zoom: u8 = 1,
     loader: config.Loader,
     settings: config.Settings = undefined,
     bindings: []const keymap.Binding = &keymap.default,
@@ -79,7 +79,7 @@ pub const Editor = struct {
     clipboard: std.ArrayList(u8) = .empty,
 
     pub const min_zoom = 1;
-    pub const max_zoom = 8;
+    pub const max_zoom = 4;
     const message_ms = 4000;
     const untitled = "untitled";
 
@@ -176,11 +176,19 @@ pub const Editor = struct {
         self.refreshDecorations();
     }
 
+    /// The cursor line, and the selection, sorted by start.
     fn refreshDecorations(self: *Editor) void {
         self.decorations.clearRetainingCapacity();
-        const selection = self.doc.cursor.selection();
-        if (selection.len() == 0) return;
-        self.decorations.append(self.allocator, .{ .range = selection, .kind = .{ .text_background = .selection } }) catch {};
+        const doc = &self.doc;
+        const start = doc.buffer.lineStart(doc.buffer.lineOf(doc.cursor.pos));
+        const selection = doc.cursor.selection();
+        const marks = [_]Decoration{
+            .{ .range = selection, .kind = .{ .text_background = .selection } },
+            .{ .range = .{ .start = start, .end = start }, .kind = .{ .line_background = .current_line } },
+        };
+        const swapped = [_]Decoration{ marks[1], marks[0] };
+        const order: []const Decoration = if (selection.len() == 0) marks[1..] else if (selection.start < start) &marks else &swapped;
+        self.decorations.appendSlice(self.allocator, order) catch {};
     }
 
     // Clipboard
@@ -479,7 +487,7 @@ test "mouse: click, shift+click, double and triple click, drag" {
     try testing.expectEqual(@as(usize, 2), editor.doc.cursor.pos);
     editor.mouseDown(3, 1, 1, true);
     try testing.expectEqual(Range{ .start = 2, .end = 11 }, editor.doc.cursor.selection());
-    try testing.expectEqual(@as(usize, 1), editor.decorations.items.len);
+    try testing.expectEqual(@as(usize, 2), editor.decorations.items.len);
 
     editor.mouseDown(5, 0, 2, false);
     try testing.expectEqual(Range{ .start = 4, .end = 7 }, editor.doc.cursor.selection());
@@ -487,7 +495,7 @@ test "mouse: click, shift+click, double and triple click, drag" {
     try testing.expectEqual(Range{ .start = 8, .end = 19 }, editor.doc.cursor.selection());
 
     editor.mouseDown(1, 0, 1, false);
-    try testing.expectEqual(@as(usize, 0), editor.decorations.items.len);
+    try testing.expectEqual(@as(usize, 1), editor.decorations.items.len);
     editor.mouseDrag(2, 1);
     try testing.expectEqual(Range{ .start = 1, .end = 10 }, editor.doc.cursor.selection());
     // Below the last row: the view scrolls and the selection grows.
@@ -515,11 +523,11 @@ test "status and title" {
     try testing.expectEqualStrings("\u{25CF} untitled - 8-Bit", editor.title(&buffer));
 }
 
-test "zoom stays between 1x and 8x" {
+test "zoom stays between 1x and 4x" {
     var editor = try testEditor("");
     defer editor.deinit();
     editor.setZoom(0);
     try testing.expectEqual(@as(u8, 1), editor.zoom);
     editor.setZoom(99);
-    try testing.expectEqual(@as(u8, 8), editor.zoom);
+    try testing.expectEqual(@as(u8, 4), editor.zoom);
 }

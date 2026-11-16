@@ -22,6 +22,7 @@ pub const Theme = struct {
     cursor: Color,
     selection: Color,
     search_match: Color,
+    current_line: Color,
 
     gutter: Color,
     line_number: Color,
@@ -37,6 +38,8 @@ pub const Theme = struct {
     tab_text: Color,
     tab_active_text: Color,
 
+    border: Color,
+    accent: Color,
     list_selection: Color,
 
     git_added: Color,
@@ -78,7 +81,7 @@ test "built-in themes set every color" {
     defer arena.deinit();
     const dark = config.builtin(Theme, testing.allocator, arena.allocator(), "themes/dark");
     const light = config.builtin(Theme, testing.allocator, arena.allocator(), "themes/light");
-    try testing.expectEqual(Color.rgb(0x101018), dark.background);
+    try testing.expectEqual(Color.rgb(0x1e1f22), dark.background);
     try testing.expectEqual(Color.rgb(0xf8f8f4), light.background);
 }
 
@@ -99,8 +102,8 @@ test "a theme that leaves colors out gets them from the default theme" {
     const mine = load(loader, arena.allocator(), "mine", &notifier);
     try testing.expectEqual(Color.rgb(0xff0000), mine.text);
     try testing.expectEqual(Color.rgb(0x00ff00), mine.syntax.keyword);
-    try testing.expectEqual(Color.rgb(0x101018), mine.background);
-    try testing.expectEqual(Color.rgb(0x6a7a6a), mine.syntax.comment);
+    try testing.expectEqual(Color.rgb(0x1e1f22), mine.background);
+    try testing.expectEqual(Color.rgb(0x7a7e85), mine.syntax.comment);
 
     const light = load(loader, arena.allocator(), "light", &notifier);
     try testing.expectEqual(Color.rgb(0xf8f8f4), light.background);

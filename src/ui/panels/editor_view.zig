@@ -29,7 +29,9 @@ const Painter = struct {
     decorations: []const Decoration,
 
     fn drawLine(self: Painter, visible: VisibleLine) void {
-        for (self.decorations) |item| self.drawDecoration(item, visible);
+        // Line backgrounds first, so marks on the text stay on top.
+        for (self.decorations) |item| if (item.kind == .line_background) self.drawDecoration(item, visible);
+        for (self.decorations) |item| if (item.kind != .line_background) self.drawDecoration(item, visible);
         if (visible.first_wrap == 0 and self.layout.number_cols > 0) self.drawLineNumber(visible);
         self.drawText(visible);
         self.drawCursor(visible);
@@ -56,7 +58,7 @@ const Painter = struct {
             },
             .gutter_text => |text| if (visible.first_wrap == 0) {
                 const rect = self.gutterRows(visible);
-                self.renderer.drawText(rect.x + self.layout.metrics.cell, self.layout.metrics.textTop(rect.y), text, self.theme.line_number);
+                self.renderer.drawText(rect.x + self.layout.metrics.cell, rect.y, text, self.theme.line_number);
             },
         }
     }
@@ -90,7 +92,7 @@ const Painter = struct {
         const rect = self.gutterRows(visible);
         self.renderer.drawText(
             rect.x + column * layout.metrics.cell,
-            layout.metrics.textTop(rect.y),
+            rect.y,
             number,
             if (current) self.theme.line_number_current else self.theme.line_number,
         );
@@ -134,7 +136,7 @@ const Painter = struct {
 
     fn drawRowText(self: Painter, visible: VisibleLine, wrap: usize, text: []const u8) void {
         const rect = self.layout.cellRect(0, visible.y + wrap - visible.first_wrap, 0);
-        self.renderer.drawText(rect.x, self.layout.metrics.textTop(rect.y), text, self.theme.text);
+        self.renderer.drawText(rect.x, rect.y, text, self.theme.text);
     }
 
     fn drawCursor(self: Painter, visible: VisibleLine) void {
@@ -155,6 +157,7 @@ const Painter = struct {
     fn color(self: Painter, style: decoration.Style) Color {
         return switch (style) {
             .selection => self.theme.selection,
+            .current_line => self.theme.current_line,
             .match => self.theme.search_match,
             .added => self.theme.git_added,
             .changed => self.theme.git_changed,

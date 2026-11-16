@@ -38,11 +38,6 @@ pub const Renderer = struct {
         c.SDL_DestroyRenderer(self.handle);
     }
 
-    /// Width and height of one character on screen.
-    pub fn cellSize(self: *const Renderer) f32 {
-        return bitmap_font.cell * self.scale;
-    }
-
     /// Size of the drawing area in pixels.
     pub fn outputSize(self: *const Renderer) struct { w: f32, h: f32 } {
         var w: c_int = 0;
@@ -54,7 +49,8 @@ pub const Renderer = struct {
     /// Draws one line of text with its top-left corner at `x`, `y`.
     /// All text on screen goes through here.
     pub fn drawText(self: *Renderer, x: f32, y: f32, text: []const u8, col: Color) void {
-        const size = self.cellSize();
+        const w = bitmap_font.width * self.scale;
+        const h = bitmap_font.height * self.scale;
         const tint: c.SDL_FColor = .{
             .r = @as(f32, @floatFromInt(col.r)) / 255,
             .g = @as(f32, @floatFromInt(col.g)) / 255,
@@ -69,15 +65,15 @@ pub const Renderer = struct {
                 self.drawQuads(quads[0..count]);
                 count = 0;
             }
-            const left = x + @as(f32, @floatFromInt(glyph.column)) * size;
+            const left = x + @as(f32, @floatFromInt(glyph.column)) * w;
             const atlas_x: f32 = @floatFromInt(glyph.atlas_x);
             const atlas_y: f32 = @floatFromInt(glyph.atlas_y);
             for (&quads[count], quad_corners) |*vertex, corner| vertex.* = .{
-                .position = .{ .x = left + corner.x * size, .y = y + corner.y * size },
+                .position = .{ .x = left + corner.x * w, .y = y + corner.y * h },
                 .color = tint,
                 .tex_coord = .{
-                    .x = (atlas_x + corner.x * bitmap_font.cell) / bitmap_font.atlas_width,
-                    .y = (atlas_y + corner.y * bitmap_font.cell) / bitmap_font.atlas_height,
+                    .x = (atlas_x + corner.x * bitmap_font.width) / bitmap_font.atlas_width,
+                    .y = (atlas_y + corner.y * bitmap_font.height) / bitmap_font.atlas_height,
                 },
             };
             count += 1;

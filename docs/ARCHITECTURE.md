@@ -52,8 +52,8 @@ third_party/      vendored C dependencies (SDL3)
 
 ## Drawing text
 
-- `font/font8x8.zig` holds the glyph bits (ASCII, Latin-1, box drawing; a
-  missing character is a small box). `font/bitmap_font.zig` turns them into
+- `font/spleen.zig` holds the glyph bits of the 8x16 Spleen font (ASCII,
+  Latin-1, box drawing, blocks; a missing character is a small box). `font/bitmap_font.zig` turns them into
   atlas pixels and places the glyphs of a line. Both are SDL-free.
 - `platform/renderer.zig` uploads the atlas once and draws all text through
   `drawText`, in batches, tinted with the text color.
@@ -87,7 +87,7 @@ third_party/      vendored C dependencies (SDL3)
 - **Messages.** Everything reports through `Editor.notify`; the status bar
   shows the message for a few seconds.
 - **Sizes.** `ui/layout.zig` derives every size from the cell size, which is
-  the 8x8 font times the zoom (1x to 8x).
+  the 8x16 font times the zoom (1x to 4x).
 
 ## Config (`editor/config.zig`)
 

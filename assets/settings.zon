@@ -5,7 +5,7 @@
     .use_spaces = true,
     // Long lines continue on the next row.
     .wrap = false,
-    // Screen pixels per font pixel, 1 to 8. 0 matches the screen.
+    // Screen pixels per font pixel, 1 to 4. 0 matches the screen.
     .zoom = 0,
     // A file in assets/themes or in the themes folder of the config folder.
     .theme = "dark",

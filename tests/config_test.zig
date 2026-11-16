@@ -71,13 +71,13 @@ test "open settings with Ctrl+, , change them, save, and they apply at once" {
     try testing.expect(std.mem.indexOf(u8, text, ".tab_width = 4,") != null);
     try testing.expectEqual(true, editor.settings.line_numbers);
 
-    session.retype(".{ .tab_width = 2, .use_spaces = false, .wrap = true, .zoom = 5, .line_numbers = false, .undo_limit_mb = 1 }");
+    session.retype(".{ .tab_width = 2, .use_spaces = false, .wrap = true, .zoom = 3, .line_numbers = false, .undo_limit_mb = 1 }");
     _ = session.press("ctrl+s");
     try testing.expectEqualStrings("Saved settings.zon", editor.currentMessage().?);
     try testing.expectEqual(@as(usize, 2), editor.doc.tab_width);
     try testing.expect(!editor.doc.soft_tabs);
     try testing.expect(editor.view.wrap);
-    try testing.expectEqual(@as(u8, 5), editor.zoom);
+    try testing.expectEqual(@as(u8, 3), editor.zoom);
     try testing.expect(!editor.settings.line_numbers);
     try testing.expectEqual(@as(usize, 1 << 20), editor.doc.history.max_size);
     // Left out of the file: the built-in value.
@@ -108,7 +108,7 @@ test "Alt+T switches themes, the settings file remembers it, and user themes joi
     defer session.deinit();
     const editor = &session.editor;
 
-    try testing.expectEqual(app.ui.theme.Color.rgb(0x101018), session.loadTheme().background);
+    try testing.expectEqual(app.ui.theme.Color.rgb(0x1e1f22), session.loadTheme().background);
     _ = session.press("alt+t");
     try testing.expectEqualStrings("Theme: light", editor.currentMessage().?);
     try testing.expectEqualStrings("light", editor.settings.theme);
@@ -125,7 +125,7 @@ test "Alt+T switches themes, the settings file remembers it, and user themes joi
     try testing.expectEqualStrings("mine", editor.settings.theme);
     const mine = session.loadTheme();
     try testing.expectEqual(app.ui.theme.Color.rgb(0xff0000), mine.text);
-    try testing.expectEqual(app.ui.theme.Color.rgb(0x101018), mine.background);
+    try testing.expectEqual(app.ui.theme.Color.rgb(0x1e1f22), mine.background);
 
     _ = session.press("alt+t");
     try testing.expectEqualStrings("dark", editor.settings.theme);
@@ -133,7 +133,7 @@ test "Alt+T switches themes, the settings file remembers it, and user themes joi
     // A theme that does not exist: a message and the dark theme.
     try session.write("settings.zon", ".{ .theme = \"gone\" }");
     editor.reloadConfig();
-    try testing.expectEqual(app.ui.theme.Color.rgb(0x101018), session.loadTheme().background);
+    try testing.expectEqual(app.ui.theme.Color.rgb(0x1e1f22), session.loadTheme().background);
     try testing.expectEqualStrings("No themes/gone.zon", editor.currentMessage().?);
 }
 
