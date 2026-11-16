@@ -1,6 +1,7 @@
 //! The sidebar panel with the files of the open folder. Folders come first,
 //! sorted by name, and are read only when opened. `.git` is hidden. Files
-//! and folders can be made, renamed and deleted from here.
+//! and folders can be made, renamed and deleted from here. Each one shows
+//! its git status: a color, and a letter for files.
 const std = @import("std");
 const Editor = @import("../../editor/editor.zig").Editor;
 const fs = @import("../../platform/fs.zig");
@@ -16,6 +17,7 @@ const List = list_zig.List;
 const Prompt = @import("../widgets/prompt.zig").Prompt;
 const Theme = @import("../theme.zig").Theme;
 const Event = @import("../../platform/event.zig").Event;
+const status = @import("../../git/status.zig");
 
 pub const FileTree = struct {
     editor: *Editor,
@@ -286,11 +288,20 @@ pub const FileTree = struct {
         pub fn row(self: Rows, index: usize) list_zig.Row {
             const entry = self.tree.entries.items[index];
             const is_current = if (self.current) |path| std.mem.eql(u8, path, entry.path) else false;
+            const git = &self.tree.editor.git;
+            var color = self.theme.text;
+            var mark: ?list_zig.Row.Mark = null;
+            if (git.statusOf(entry.path, entry.is_dir)) |change| {
+                const kind = change.kind();
+                color = self.theme.gitColor(kind);
+                if (!entry.is_dir and kind != .ignored) mark = .{ .char = status.letter(kind), .color = color };
+            } else if (entry.is_dir and git.changedInside(entry.path)) color = self.theme.git_changed;
             return .{
                 .text = std.fs.path.basename(entry.path),
-                .color = if (is_current) self.theme.accent else self.theme.text,
+                .color = if (is_current) self.theme.accent else color,
                 .indent = entry.depth,
                 .icon = if (!entry.is_dir) ' ' else if (entry.open) 'v' else '>',
+                .mark = mark,
             };
         }
     };

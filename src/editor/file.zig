@@ -1,11 +1,28 @@
 //! One open file: its document and highlighting, where it is on disk, and
-//! when it was last read or written there.
+//! when it was last read or written there. A file can also be a read-only
+//! view, like a diff, or a commit message.
 const std = @import("std");
 const Document = @import("../core/edit.zig").Document;
 const fs = @import("../platform/fs.zig");
 const Highlighter = @import("../syntax/syntax.zig").Highlighter;
+const Decoration = @import("decoration.zig").Decoration;
+const Tracking = @import("tracking.zig").Tracking;
+
+pub const Role = union(enum) {
+    /// Text the user edits and saves.
+    text,
+    /// A read-only diff.
+    diff,
+    /// The message of the next commit; true to amend the last one.
+    commit: bool,
+};
 
 pub const File = struct {
+    /// Stays the same while the file is open; background work finds it by this.
+    id: u32 = 0,
+    role: Role = .text,
+    /// The name of a view or a commit message.
+    title: ?[]u8 = null,
     doc: Document,
     /// Null until the file is saved for the first time.
     path: ?[]u8 = null,
@@ -14,6 +31,9 @@ pub const File = struct {
     highlighter: Highlighter,
     /// The language picked by hand, by name; null to detect it.
     language: ?[]u8 = null,
+    /// Sorted decorations the file keeps, like the lines of a diff.
+    marks: std.ArrayList(Decoration) = .empty,
+    tracking: Tracking = .{},
 
     pub const untitled = "untitled";
 
@@ -41,6 +61,9 @@ pub const File = struct {
         const allocator = self.gpa();
         if (self.path) |path| allocator.free(path);
         if (self.language) |chosen| allocator.free(chosen);
+        if (self.title) |title| allocator.free(title);
+        self.marks.deinit(allocator);
+        self.tracking.deinit(allocator);
         self.highlighter.deinit();
         self.doc.deinit();
         allocator.destroy(self);
@@ -51,16 +74,18 @@ pub const File = struct {
     }
 
     pub fn name(self: *const File) []const u8 {
+        if (self.title) |title| return title;
         return if (self.path) |path| std.fs.path.basename(path) else untitled;
     }
 
+    /// Unsaved changes. Views and commit messages are never saved.
     pub fn isModified(self: *const File) bool {
-        return self.doc.history.isModified();
+        return self.role == .text and self.doc.history.isModified();
     }
 
     /// Unsaved, empty and without a path: can be replaced by an opened file.
     pub fn isBlank(self: *const File) bool {
-        return self.path == null and self.doc.buffer.len() == 0 and !self.isModified();
+        return self.role == .text and self.path == null and self.doc.buffer.len() == 0 and !self.doc.history.isModified();
     }
 
     pub fn setPath(self: *File, path: []const u8) !void {
@@ -129,4 +154,14 @@ test "a new file is blank and untitled" {
     defer file.destroy();
     try testing.expect(file.isBlank());
     try testing.expectEqualStrings("untitled", file.name());
+}
+
+test "a commit message has a title and is never modified" {
+    const file = try File.create(testing.allocator);
+    defer file.destroy();
+    file.role = .{ .commit = false };
+    file.title = try testing.allocator.dupe(u8, "Commit message");
+    try file.doc.insert("fix");
+    try testing.expect(!file.isModified());
+    try testing.expectEqualStrings("Commit message", file.name());
 }

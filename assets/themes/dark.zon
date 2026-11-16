@@ -28,6 +28,9 @@
     .git_added = 0x549159,
     .git_changed = 0x375fad,
     .git_removed = 0x868a91,
+    .git_untracked = 0xc7746b,
+    .diff_added = 0x294436,
+    .diff_removed = 0x4c3434,
 
     .syntax = .{
         .comment = 0x7a7e85,

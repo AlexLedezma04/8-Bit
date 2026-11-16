@@ -4,6 +4,7 @@
 test {
     _ = @import("config_test.zig");
     _ = @import("editor_session_test.zig");
+    _ = @import("git_test.zig");
     _ = @import("search_test.zig");
     _ = @import("syntax_test.zig");
     _ = @import("text_draw_test.zig");

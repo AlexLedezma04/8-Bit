@@ -55,11 +55,13 @@ pub fn ask(window: *const Window, question: editor.Question, name: []const u8) ?
         .save => std.fmt.bufPrint(&text, "Save changes to {s}?\x00", .{name}),
         .reload => std.fmt.bufPrint(&text, "{s} changed on disk. Reload it and lose your changes?\x00", .{name}),
         .delete => std.fmt.bufPrint(&text, "Delete {s}?\x00", .{name}),
+        .discard => std.fmt.bufPrint(&text, "Discard the changes to {s}?\x00", .{name}),
     } catch "Are you sure?\x00";
     const buttons: []const Button = switch (question) {
         .save => &.{ .{ .answer = .yes, .text = "Save" }, .{ .answer = .no, .text = "Don't save" }, .{ .answer = .cancel, .text = "Cancel" } },
         .reload => &.{ .{ .answer = .yes, .text = "Reload" }, .{ .answer = .no, .text = "Keep mine" } },
         .delete => &.{ .{ .answer = .yes, .text = "Delete" }, .{ .answer = .cancel, .text = "Cancel" } },
+        .discard => &.{ .{ .answer = .yes, .text = "Discard" }, .{ .answer = .cancel, .text = "Cancel" } },
     };
     var data: [3]c.SDL_MessageBoxButtonData = undefined;
     for (buttons, 0..) |button, i| data[i] = .{

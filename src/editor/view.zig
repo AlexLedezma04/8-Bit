@@ -29,6 +29,17 @@ pub const View = struct {
     const margin_rows = 2;
     const margin_cols = 4;
 
+    /// The text area got a new size. When it got wider, the view scrolls
+    /// back left as far as the cursor at `pos` allows.
+    pub fn setSize(self: *View, doc: *const Document, pos: usize, cols: usize, rows: usize) void {
+        const wider = cols > self.cols;
+        self.cols = cols;
+        self.rows = rows;
+        if (!wider or self.wrap) return;
+        const side = @min(margin_cols, (cols -| 1) / 2);
+        self.left = @min(self.left, (doc.columnOf(pos) + side + 1) -| cols);
+    }
+
     pub fn setWrap(self: *View, wrap: bool) void {
         self.wrap = wrap;
         self.top.wrap = 0;
@@ -215,6 +226,23 @@ test "horizontal scroll follows the cursor when wrap is off" {
     view.setWrap(true);
     view.scrollToCursor(&doc);
     try testing.expectEqual(@as(usize, 0), view.left);
+}
+
+test "a wider text area scrolls back left, as far as the cursor allows" {
+    var doc = try testDocument("0123456789abcdefghijklmnopqrstuvwxyz");
+    defer doc.deinit();
+    var view: View = .{ .cols = 10, .rows = 5 };
+    doc.cursor.pos = 20;
+    view.scrollToCursor(&doc);
+    try testing.expectEqual(@as(usize, 15), view.left);
+    view.setSize(&doc, 20, 20, 5);
+    try testing.expectEqual(@as(usize, 5), view.left);
+    view.setSize(&doc, 20, 40, 5);
+    try testing.expectEqual(@as(usize, 0), view.left);
+    // Narrower: nothing moves until the cursor does.
+    view.left = 3;
+    view.setSize(&doc, 20, 30, 5);
+    try testing.expectEqual(@as(usize, 3), view.left);
 }
 
 test "scrollBy moves the top row and the left column" {

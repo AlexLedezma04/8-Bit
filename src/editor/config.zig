@@ -20,6 +20,8 @@ pub const Settings = struct {
     line_numbers: bool,
     undo_limit_mb: u16,
     search_exclude: []const []const u8,
+    /// The git program, by name or path.
+    git: []const u8,
 };
 
 pub const Loader = struct {

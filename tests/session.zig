@@ -1,5 +1,6 @@
 //! A whole window for end to end tests: editor, workbench and a recording
-//! canvas, with a real folder on disk. Driven by the events `main.zig` passes on.
+//! canvas, with a real folder on disk that is a git repository. Driven by
+//! the events `main.zig` passes on.
 const std = @import("std");
 const app = @import("8-bit");
 
@@ -37,9 +38,56 @@ pub const Session = struct {
         self.folder_len = folder.len;
         try self.write("b.txt", "bee\n");
         try self.write("a/x.txt", "ex\n");
-        try self.write(".git/HEAD", "");
+        try self.git(&.{ "init", "-q", "-b", "main" });
+        for ([_][2][]const u8{
+            .{ "user.name", "Tester" },    .{ "user.email", "tester@example.com" }, .{ "commit.gpgsign", "false" },
+            // Windows runners turn on autocrlf; tests expect files as written.
+            .{ "core.autocrlf", "false" },
+        }) |pair| {
+            try self.git(&.{ "config", pair[0], pair[1] });
+        }
         self.editor.openFolder(folder);
         self.draw();
+    }
+
+    pub fn folderPath(self: *const Session) []const u8 {
+        return self.folder[0..self.folder_len];
+    }
+
+    /// Runs git in the folder, as the user would in a terminal.
+    pub fn git(self: *Session, args: []const []const u8) !void {
+        const output = try app.git.repo.run(testing.allocator, testing.io, "git", self.folderPath(), args);
+        defer output.deinit(testing.allocator);
+        if (!output.ok) {
+            std.debug.print("git {s}: {s}\n", .{ args[0], output.stderr });
+            return error.GitFailed;
+        }
+    }
+
+    /// What git prints, trimmed. Free it.
+    pub fn gitOutput(self: *Session, args: []const []const u8) ![]u8 {
+        const output = try app.git.repo.run(testing.allocator, testing.io, "git", self.folderPath(), args);
+        defer testing.allocator.free(output.stderr);
+        defer testing.allocator.free(output.stdout);
+        return testing.allocator.dupe(u8, std.mem.trim(u8, output.stdout, " \r\n"));
+    }
+
+    /// Lets git work as the main loop would: ticks the editor and takes what
+    /// the git jobs post until none is left, then draws. Returns the last
+    /// request an answer made.
+    pub fn waitForGit(self: *Session) ?Request {
+        var request: ?Request = null;
+        while (true) {
+            _ = self.editor.tick();
+            if (self.editor.git.jobs.items.len == 0) break;
+            const posted = self.mailbox.take() orelse {
+                std.Thread.yield() catch {};
+                continue;
+            };
+            if (self.editor.receive(posted)) |made| request = made;
+        }
+        self.draw();
+        return request;
     }
 
     pub fn deinit(self: *Session) void {
@@ -106,7 +154,13 @@ pub const Session = struct {
 
     /// Takes what find in project posts until it is done, then draws.
     pub fn waitForSearch(self: *Session) void {
-        app.editor.project_search.waitForTest(&self.editor.project, &self.mailbox);
+        while (self.editor.project.running) {
+            const posted = self.mailbox.take() orelse {
+                std.Thread.yield() catch {};
+                continue;
+            };
+            _ = self.editor.receive(posted);
+        }
         self.draw();
     }
 };

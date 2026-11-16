@@ -77,7 +77,8 @@ const others = [_]Binding{
     .{ .key = .char('b'), .mods = ctrl, .command = .toggle_sidebar },
     .{ .key = .char('j'), .mods = ctrl, .command = .toggle_bottom },
     .{ .key = .char('1'), .mods = alt, .command = .focus_sidebar },
-    .{ .key = .char('e'), .mods = ctrl_shift, .command = .focus_sidebar },
+    .{ .key = .char('e'), .mods = ctrl_shift, .command = .show_files },
+    .{ .key = .char('g'), .mods = ctrl_shift, .command = .show_git },
     .{ .key = .escape, .command = .focus_editor },
     .{ .key = .char('0'), .mods = alt, .command = .focus_bottom },
     .{ .key = .char('g'), .mods = ctrl, .command = .goto_line },
@@ -94,6 +95,13 @@ const others = [_]Binding{
     .{ .key = .char('7'), .mods = ctrl_shift, .command = .toggle_comment },
     .{ .key = .char('m'), .mods = ctrl_shift, .command = .goto_bracket },
     .{ .key = .char('l'), .mods = alt, .command = .set_language },
+    .{ .key = .enter, .mods = ctrl, .command = .git_commit },
+    .{ .key = .enter, .mods = ctrl_shift, .command = .git_amend },
+    .{ .key = .char('d'), .mods = alt, .command = .show_changes },
+    .{ .key = .f7, .command = .next_change },
+    .{ .key = .f7, .mods = shift, .command = .prev_change },
+    .{ .key = .char('b'), .mods = alt, .command = .toggle_blame },
+    .{ .key = .char('h'), .mods = alt, .command = .file_history },
 };
 
 pub const default = moves ++ selecting(moves) ++ others;

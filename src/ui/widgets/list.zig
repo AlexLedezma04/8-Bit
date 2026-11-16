@@ -1,6 +1,7 @@
-//! A scrollable list of rows: text, color, indent and a one-character icon.
-//! Only the visible rows are asked for and drawn, so the number of rows
-//! does not matter. Used by the file tree, messages and later search and git.
+//! A scrollable list of rows: text, color, indent, a one-character icon and
+//! a mark at the right end. Only the visible rows are asked for and drawn,
+//! so the number of rows does not matter. Used by the file tree, messages,
+//! search results and the git panel.
 const std = @import("std");
 const Canvas = @import("../canvas.zig").Canvas;
 const layout = @import("../layout.zig");
@@ -16,6 +17,10 @@ pub const Row = struct {
     /// Levels of two cells each.
     indent: usize = 0,
     icon: u8 = ' ',
+    /// A letter at the right end, like the git status of a file.
+    mark: ?Mark = null,
+
+    pub const Mark = struct { char: u8, color: Color };
 };
 
 pub const Action = enum { moved, activate };
@@ -87,6 +92,7 @@ pub const List = struct {
             const x = rect.x + @as(f32, @floatFromInt(1 + 2 * row.indent)) * metrics.cell;
             if (row.icon != ' ') canvas.drawText(x, y, &.{row.icon}, look.theme.line_number);
             canvas.drawText(x + 2 * metrics.cell, y, row.text, row.color);
+            if (row.mark) |mark| canvas.drawText(rect.x + rect.w - 2 * metrics.cell, y, &.{mark.char}, mark.color);
             y += metrics.row;
         }
     }

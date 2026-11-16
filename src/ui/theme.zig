@@ -46,9 +46,26 @@ pub const Theme = struct {
     git_added: Color,
     git_changed: Color,
     git_removed: Color,
+    git_untracked: Color,
+    /// Line backgrounds of a diff view.
+    diff_added: Color,
+    diff_removed: Color,
 
     syntax: Syntax,
+
+    /// The color of a file with this git status.
+    pub fn gitColor(self: *const Theme, kind: GitKind) Color {
+        return switch (kind) {
+            .modified, .renamed => self.git_changed,
+            .added => self.git_added,
+            .deleted => self.git_removed,
+            .untracked, .conflict => self.git_untracked,
+            .ignored => self.line_number,
+        };
+    }
 };
+
+const GitKind = @import("../git/status.zig").Kind;
 
 pub const Syntax = struct {
     comment: Color,

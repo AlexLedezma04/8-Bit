@@ -14,4 +14,6 @@
     .undo_limit_mb = 8,
     // Folders that find in project skips, by name. `.git` is always skipped.
     .search_exclude = .{ "zig-out", ".zig-cache", "node_modules" },
+    // The git program, by name or path. Git features are off without it.
+    .git = "git",
 }

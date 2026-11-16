@@ -92,13 +92,13 @@ third_party/      vendored C dependencies (SDL3)
   wrap, which text position is under a cell. It works in cells and only
   measures lines near the screen, so file size does not matter.
   `ui/panels/editor_view.zig` only draws what the view says is visible.
-- **Decorations.** The current line, selection, and later search matches,
-  git markers and blame, are entries in `Tab.decorations` (`editor/decoration.zig`).
+- **Decorations.** The current line, selection, search matches, git markers,
+  diff lines and blame are entries in `Tab.decorations` (`editor/decoration.zig`).
   Features add entries; only the editor view draws them.
 - **Background work.** A thread hands a result to the main loop with
   `Mailbox.post` (`platform/mailbox.zig`), which wakes the event wait. The
-  main thread takes the item and `Editor.receive` frees it. Dialogs and
-  find in project use it.
+  main thread takes the item and `Editor.receive` frees it. Dialogs, find
+  in project and git use it.
 - **Prompts.** A command that needs typed text returns `Request.prompt`;
   the workbench opens the prompt and sends the text back to the editor.
 - **Files.** `platform/fs.zig` reads whole files and saves through a
@@ -138,6 +138,29 @@ third_party/      vendored C dependencies (SDL3)
 - Grammars load with the settings into the config arena. `tools/embed_dir.zig`
   embeds every file of `assets/grammars/` at build time.
 - The editor view draws each run of one style in its theme color.
+
+## Git (`git/`, `editor/git.zig`, `editor/tracking.zig`)
+
+- `git/repo.zig` finds the repository (walks up to `.git`) and runs the git
+  CLI. Every git feature goes through `repo.run`. The program comes from the
+  `git` setting; when it is missing, git features hide and one message says why.
+- `git/status.zig`, `git/log.zig` know the commands and read their output:
+  `status --porcelain=v1 -z`, `log`, `branch`, `blame --porcelain`.
+- `git/diff.zig` is the one line diff (Myers, at most 1000 edits, else one
+  hunk) and the unified diff made from it. Gutter markers and diff views use it.
+- `editor/git.zig` runs each git command as a `Job` on a thread of its own;
+  the job comes back through the mailbox to `Git.receive`. It keeps the
+  status, the history (200 commits a page) and the branches. Each status also
+  reads the hash of HEAD, so a commit made in a terminal is noticed too.
+- `editor/tracking.zig` is what git knows about one open file: its text at
+  HEAD (fetched once), the gutter markers, and blame. `Editor.tick` asks for
+  what is missing and makes markers again once the text has rested for
+  300 ms. Files over 50,000 lines get no markers.
+- A diff view and the commit message are files with a `role`: a diff view is
+  read-only (`Document.read_only`) with its lines as `File.marks`; the commit
+  message is committed with Ctrl+Enter and is never "modified".
+- The sidebar has the file tree and the git panel; each dock switches its
+  panels with the tabs widget.
 
 ## Config (`editor/config.zig`)
 

@@ -83,6 +83,15 @@ pub const Command = enum {
     focus_sidebar,
     focus_editor,
     focus_bottom,
+    show_files,
+    show_git,
+    git_commit,
+    git_amend,
+    show_changes,
+    next_change,
+    prev_change,
+    toggle_blame,
+    file_history,
 
     pub fn fromName(name: []const u8) ?Command {
         return std.meta.stringToEnum(Command, name);
@@ -182,6 +191,15 @@ fn execute(editor: *Editor, command: Command) !?Request {
         .focus_sidebar => editor.focusArea(.sidebar),
         .focus_editor => editor.focusArea(.editor),
         .focus_bottom => editor.focusArea(.bottom),
+        .show_files => editor.showSide(.files),
+        .show_git => editor.showSide(.git),
+        .git_commit => try editor.commit(),
+        .git_amend => editor.git.amend(),
+        .show_changes => try editor.git.showFileChanges(editor.file()),
+        .next_change => editor.jumpToChange(true),
+        .prev_change => editor.jumpToChange(false),
+        .toggle_blame => editor.toggleBlame(),
+        .file_history => editor.fileHistory(),
     }
     return null;
 }

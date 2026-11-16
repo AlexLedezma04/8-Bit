@@ -20,6 +20,8 @@ const ProjectSearch = project_search.ProjectSearch;
 const Rules = @import("../syntax/grammar.zig").Rules;
 const language = @import("../syntax/language.zig");
 const comment = @import("../core/comment.zig");
+const git_zig = @import("git.zig");
+const Git = git_zig.Git;
 
 pub const Pick = enum { open_file, save_file, open_folder };
 
@@ -30,10 +32,12 @@ pub const Question = enum {
     reload,
     /// Delete / Cancel.
     delete,
+    /// Discard / Cancel.
+    discard,
 };
 
 /// What the prompt asks for.
-pub const PromptKind = enum { new_file, new_folder, rename, find, replace, goto_line, find_in_project, language };
+pub const PromptKind = enum { new_file, new_folder, rename, find, replace, goto_line, find_in_project, language, branch };
 
 /// The language of a file without a grammar.
 pub const plain_text = "Plain Text";
@@ -65,6 +69,7 @@ pub const Posted = union(enum) {
     dialog_failed,
     found: project_search.Found,
     search_done: project_search.Done,
+    git: *git_zig.Job,
 };
 
 pub const Mailbox = @import("../platform/mailbox.zig").Mailbox(Posted);
@@ -78,11 +83,17 @@ pub const Status = struct {
     column: usize,
     line_ending: []const u8,
     language: []const u8,
+    /// Empty outside a repository.
+    branch: []const u8,
     message: ?[]const u8,
 };
 
 /// The parts of the window that can have focus.
 pub const Area = enum { sidebar, editor, bottom };
+
+/// The panels of the sidebar and of the bottom dock.
+pub const SidePanel = enum { files, git };
+pub const BottomPanel = enum { messages, search };
 
 /// A panel at an edge of the window.
 pub const Dock = struct {
@@ -101,6 +112,8 @@ pub const Editor = struct {
     focus: Area = .editor,
     sidebar: Dock = .{ .size = 30 },
     bottom: Dock = .{ .size = 10 },
+    side_panel: SidePanel = .files,
+    bottom_panel: BottomPanel = .messages,
     folder: ?[]u8 = null,
     /// Goes up whenever `folder` changes.
     folder_version: u32 = 0,
@@ -132,8 +145,11 @@ pub const Editor = struct {
     clipboard: std.ArrayList(u8) = .empty,
     find: Find,
     project: ProjectSearch,
-    /// Where background work posts results. Needed for find in project.
+    git: Git,
+    /// Where background work posts results. Needed for find in project and git.
     mailbox: ?*Mailbox = null,
+    /// The id the next file gets.
+    next_id: u32 = 1,
 
     pub const min_zoom = 1;
     pub const max_zoom = 4;
@@ -161,6 +177,7 @@ pub const Editor = struct {
             .config_arena = .init(allocator),
             .find = .{ .allocator = allocator },
             .project = .{ .allocator = allocator, .io = io },
+            .git = .{ .allocator = allocator, .io = io },
         };
         errdefer editor.deinit();
         editor.reloadConfig();
@@ -170,6 +187,7 @@ pub const Editor = struct {
 
     pub fn deinit(self: *Editor) void {
         self.project.deinit();
+        self.git.deinit();
         // Results that came too late.
         if (self.mailbox) |mailbox| while (mailbox.take()) |posted| self.drop(posted);
         self.find.deinit();
@@ -322,7 +340,8 @@ pub const Editor = struct {
         }
     }
 
-    /// The cursor line, the selection and the find matches, sorted by start.
+    /// The cursor line, the selection, the find matches and the marks of
+    /// the file, sorted by start.
     fn refreshDecorations(self: *Editor, item: *Tab) void {
         item.decorations.clearRetainingCapacity();
         const doc_ = &item.file.doc;
@@ -337,6 +356,11 @@ pub const Editor = struct {
         list.appendAssumeCapacity(.{ .range = .{ .start = start, .end = start }, .kind = .{ .line_background = .current_line } });
         if (cursor.selection().len() > 0) list.appendAssumeCapacity(.{ .range = cursor.selection(), .kind = .{ .text_background = .selection } });
         for (matches) |range| list.appendAssumeCapacity(.{ .range = range, .kind = .{ .text_background = .match } });
+        const tracking = &item.file.tracking;
+        list.appendSlice(self.allocator, item.file.marks.items) catch {};
+        list.appendSlice(self.allocator, tracking.markers.items) catch {};
+        // Blame of saved text only: edits move the lines.
+        if (self.git.blame and tracking.blame == .ready and !item.file.doc.history.isModified()) list.appendSlice(self.allocator, tracking.blame.ready.marks) catch {};
         std.mem.sort(Decoration, list.items, {}, byStart);
     }
 
@@ -382,9 +406,21 @@ pub const Editor = struct {
     fn newFile(self: *Editor) !*File {
         const created = try File.create(self.allocator);
         errdefer created.destroy();
-        try self.files.append(self.allocator, created);
-        self.applySettings(created);
+        try self.adopt(created);
         return created;
+    }
+
+    /// Makes `target` one of the open files.
+    fn adopt(self: *Editor, target: *File) !void {
+        try self.files.append(self.allocator, target);
+        target.id = self.next_id;
+        self.next_id +%= 1;
+        self.applySettings(target);
+    }
+
+    pub fn fileById(self: *const Editor, id: u32) ?*File {
+        for (self.files.items) |item| if (item.id == id) return item;
+        return null;
     }
 
     fn dropFile(self: *Editor, gone: *File) void {
@@ -440,26 +476,92 @@ pub const Editor = struct {
         return false;
     }
 
-    /// Opens `path` in a new tab, or shows it if it is open. A blank
-    /// untitled tab is replaced.
+    /// Opens `path` in a new tab, or shows it if it is open.
     pub fn open(self: *Editor, path: []const u8) void {
         if (self.findFile(path)) |found| if (self.show(found)) return;
-        const blank = self.file().isBlank() and tabCount(self.root, self.file()) == 1;
         const opened = File.open(self.allocator, self.io, path) catch |err| {
             self.notify("Could not open {s}: {t}", .{ std.fs.path.basename(path), err });
             return;
         };
-        self.files.append(self.allocator, opened) catch {
+        self.adopt(opened) catch {
             opened.destroy();
             return;
         };
-        self.applySettings(opened);
-        self.addTab(opened) catch |err| {
+        self.place(opened) catch |err| {
             self.dropFile(opened);
             self.notify("Could not open {s}: {t}", .{ std.fs.path.basename(path), err });
-            return;
         };
+    }
+
+    /// Adds a tab for a new open file. A blank untitled tab is replaced.
+    fn place(self: *Editor, target: *File) !void {
+        const blank = self.file().isBlank() and tabCount(self.root, self.file()) == 1;
+        try self.addTab(target);
         if (blank) self.removeTab(self.pane.pane().active - 1);
+    }
+
+    /// Opens a read-only tab with `text`, colored like the file `like`.
+    pub fn openView(self: *Editor, title_: []const u8, text: []const u8, like: ?[]const u8) ?*File {
+        const created = self.newFile() catch return null;
+        created.role = .diff;
+        created.title = self.allocator.dupe(u8, title_) catch null;
+        created.doc.load(text) catch {};
+        created.doc.read_only = true;
+        if (like) |path| if (language.detect(self.languages, path, "")) |rules| {
+            created.language = self.allocator.dupe(u8, rules.grammar.name) catch null;
+        };
+        self.applyLanguage(created);
+        self.place(created) catch {
+            self.dropFile(created);
+            return null;
+        };
+        self.focus = .editor;
+        return created;
+    }
+
+    fn commitMessage(self: *const Editor) ?*File {
+        for (self.files.items) |item| if (item.role == .commit) return item;
+        return null;
+    }
+
+    /// Shows the message of the next commit. Amending starts from `text`.
+    pub fn openCommitMessage(self: *Editor, text: []const u8, amend: bool) void {
+        const message = self.commitMessage() orelse blk: {
+            const created = self.newFile() catch return;
+            created.language = self.allocator.dupe(u8, "Git Commit") catch null;
+            self.applyLanguage(created);
+            self.place(created) catch return self.dropFile(created);
+            break :blk created;
+        };
+        message.role = .{ .commit = amend };
+        const title_ = self.allocator.dupe(u8, if (amend) "Amend commit" else "Commit message") catch return;
+        if (message.title) |old| self.allocator.free(old);
+        message.title = title_;
+        if (amend) {
+            message.doc.load(text) catch {};
+            message.doc.cursor = .{ .pos = message.doc.buffer.len() };
+        }
+        _ = self.show(message);
+        self.focus = .editor;
+        self.notify("Ctrl+Enter commits", .{});
+    }
+
+    /// Commits the open commit message, or opens one to write.
+    pub fn commit(self: *Editor) !void {
+        const active = self.file();
+        if (active.role != .commit) return self.openCommitMessage("", false);
+        const text = try self.allocator.alloc(u8, active.doc.buffer.len());
+        defer self.allocator.free(text);
+        _ = active.doc.buffer.copy(0, text);
+        self.git.commit(text, active.role.commit);
+    }
+
+    /// Closes every tab of the commit message after a commit.
+    pub fn closeCommitMessage(self: *Editor) void {
+        while (self.commitMessage()) |message| {
+            if (!self.show(message)) return self.dropFile(message);
+            self.closeActive();
+        }
     }
 
     /// Removes a tab of the active pane that is not the active one.
@@ -572,6 +674,8 @@ pub const Editor = struct {
             return null;
         };
         self.notify("Saved {s}", .{active.name()});
+        active.tracking.forgetBlame(self.allocator);
+        self.git.refresh();
         if (self.loader.dir) |dir| {
             const inside = path.len > dir.len and std.mem.startsWith(u8, path, dir) and std.fs.path.isSep(path[dir.len]);
             if (inside) self.reloadConfig();
@@ -620,6 +724,10 @@ pub const Editor = struct {
         switch (posted) {
             .found => |found| self.project.receive(found),
             .search_done => |done| self.project.done(done),
+            .git => |job| {
+                defer self.refreshVisible(self.root);
+                return self.git.receive(job);
+            },
             .cancelled => self.dropPending(),
             .dialog_failed => {
                 self.dropPending();
@@ -649,7 +757,8 @@ pub const Editor = struct {
         switch (posted) {
             .picked => |picked| self.allocator.free(picked.path),
             .found => |found| project_search.freeFound(self.allocator, found),
-            .cancelled, .dialog_failed, .search_done => {},
+            // `Git.deinit` already freed it.
+            .git, .cancelled, .dialog_failed, .search_done => {},
         }
     }
 
@@ -721,6 +830,7 @@ pub const Editor = struct {
         self.folder = copy_;
         self.folder_version +%= 1;
         self.sidebar.shown = true;
+        self.git.open(copy_);
     }
 
     // Focus and docks
@@ -731,6 +841,17 @@ pub const Editor = struct {
             .bottom => &self.bottom,
             .editor => unreachable,
         };
+    }
+
+    pub fn showSide(self: *Editor, panel: SidePanel) void {
+        self.side_panel = panel;
+        self.focusArea(.sidebar);
+        if (panel == .git) self.git.refresh();
+    }
+
+    pub fn showBottom(self: *Editor, panel: BottomPanel) void {
+        self.bottom_panel = panel;
+        self.focusArea(.bottom);
     }
 
     pub fn focusArea(self: *Editor, area: Area) void {
@@ -759,6 +880,8 @@ pub const Editor = struct {
         self.default_zoom = self.zoom;
         const entries = self.loader.load([]const keymap.Entry, arena, "keymap", &.{}, self);
         self.bindings = keymap.withUser(arena, entries, self) catch &keymap.default;
+        // The git setting may name a program that is there now.
+        self.git.available = true;
         self.config_version +%= 1;
     }
 
@@ -821,6 +944,89 @@ pub const Editor = struct {
         self.doc().cursor = .{ .pos = pair[1] };
     }
 
+    // Git
+
+    /// Asks git for what open files need, and makes their gutter markers
+    /// again once their text rests. The main loop calls it before drawing.
+    /// True when something on screen changed.
+    pub fn tick(self: *Editor) bool {
+        var changed = false;
+        for (self.files.items) |item| {
+            if (item.role != .text or item.path == null) continue;
+            const tracking = &item.tracking;
+            if (self.git.ready()) {
+                if (tracking.head == .unknown) self.git.fetchHead(item);
+                if (self.git.blame and tracking.blame == .unknown) self.git.fetchBlame(item);
+            }
+            if (tracking.tick(self.allocator, &item.doc, self.now_ms)) changed = true;
+        }
+        if (changed) self.refreshVisible(self.root);
+        return changed;
+    }
+
+    /// Milliseconds until the screen must change by itself, if ever.
+    pub fn timeLeft(self: *const Editor) ?u64 {
+        var left = self.messageTimeLeft();
+        for (self.files.items) |item| if (item.tracking.timeLeft(self.now_ms)) |ms| {
+            left = @min(ms, left orelse ms);
+        };
+        return left;
+    }
+
+    /// Moves to the start of the next or previous block of changed lines:
+    /// the git markers of a file, or the lines of a diff view.
+    pub fn jumpToChange(self: *Editor, forward: bool) void {
+        const active = self.file();
+        const buffer = &active.doc.buffer;
+        const line = buffer.lineOf(active.doc.cursor.pos);
+        const marks = if (active.role == .diff) active.marks.items else active.tracking.markers.items;
+        var target: ?usize = null;
+        var last: ?usize = null;
+        for (marks) |mark| {
+            const style = switch (mark.kind) {
+                .gutter_marker, .line_background => |style| style,
+                else => continue,
+            };
+            if (style == .diff_header) continue;
+            const first = buffer.lineOf(mark.range.start);
+            const starts = if (last) |end| first > end + 1 else true;
+            last = buffer.lineOf(mark.range.end);
+            if (!starts) continue;
+            if (forward and first > line) {
+                target = first;
+                break;
+            }
+            if (!forward and first < line) target = first;
+        }
+        const found = target orelse return self.notify("No more changes", .{});
+        active.doc.cursor = .{ .pos = buffer.lineStart(found) };
+    }
+
+    pub fn toggleBlame(self: *Editor) void {
+        if (!self.git.ready()) return self.notify("No git repository", .{});
+        self.git.blame = !self.git.blame;
+        self.notify("Blame {s}", .{if (self.git.blame) "on" else "off"});
+    }
+
+    /// A click in the gutter of the active tab: with blame shown, opens the
+    /// commit that last changed the line.
+    pub fn clickGutter(self: *Editor, line: usize) void {
+        if (!self.git.blame or self.doc().history.isModified()) return;
+        const lines = switch (self.file().tracking.blame) {
+            .ready => |lines| lines,
+            else => return,
+        };
+        self.git.showDiff(.{ .commit = lines.hashOf(line) orelse return });
+    }
+
+    /// The history of the active file, in the git panel.
+    pub fn fileHistory(self: *Editor) void {
+        const path = self.file().path orelse return self.notify("Save the file first", .{});
+        self.git.loadHistory(path);
+        self.git.page = .history;
+        self.showSide(.git);
+    }
+
     fn applyWrap(self: *Editor, node: *Node) void {
         switch (node.kind) {
             .pane => |pane| for (pane.tabs.items) |item| item.view.setWrap(self.settings.wrap),
@@ -877,6 +1083,7 @@ pub const Editor = struct {
             .column = doc_.columnOf(pos) + 1,
             .line_ending = doc_.line_ending.name(),
             .language = if (self.file().highlighter.rules) |rules| rules.grammar.name else plain_text,
+            .branch = if (self.git.ready()) self.git.status.branch else "",
             .message = self.currentMessage(),
         };
     }

@@ -165,6 +165,6 @@ test "find in project: results while it runs, Enter opens, Esc stops" {
 
     // A click on a title of the bottom bar switches the panel.
     _ = session.clickText("Messages");
-    try testing.expectEqual(app.ui.workbench.Bottom.messages, session.workbench.bottom);
+    try testing.expectEqual(app.editor.editor.BottomPanel.messages, session.editor.bottom_panel);
     try testing.expect(!session.shows("Stopped:"));
 }
