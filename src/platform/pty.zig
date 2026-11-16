@@ -252,7 +252,8 @@ const WindowsPty = struct {
     input: HANDLE = undefined,
     output: HANDLE = undefined,
     process: HANDLE = undefined,
-    attributes: []u8 = &.{},
+    /// The process thread attribute list, which must be pointer aligned.
+    attributes: []align(@alignOf(usize)) u8 = &.{},
     reader: std.Thread = undefined,
     waiter: std.Thread = undefined,
     stopping: std.atomic.Value(bool) = .init(false),
