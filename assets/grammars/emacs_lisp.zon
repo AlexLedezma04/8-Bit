@@ -1,0 +1,24 @@
+.{
+    .name = "Emacs Lisp",
+    .extensions = .{"el"},
+    .file_names = .{ ".emacs", "_emacs", ".spacemacs" },
+    .line_comments = .{";"},
+    .strings = .{.{ .start = "\"", .multiline = true }},
+    .keywords = .{
+        "defun",          "defmacro", "defvar",      "defcustom", "defconst", "defgroup",       "defface",
+        "defalias",       "lambda",   "let",         "let*",      "if",       "when",           "unless",
+        "cond",           "progn",    "while",       "dolist",    "dotimes",  "setq",           "setq-local",
+        "quote",          "function", "interactive", "require",   "provide",  "save-excursion", "with-current-buffer",
+        "condition-case", "catch",    "throw",
+    },
+    .constants = .{ "t", "nil" },
+    .builtins = .{
+        "car",   "cdr",    "cons",   "list",   "append",   "mapcar",         "format", "message", "funcall",
+        "apply", "length", "concat", "insert", "add-hook", "global-set-key",
+    },
+    .functions = false,
+    .operators = "'`,#",
+    .punctuation = "()[]",
+    .word_chars = "-*+!?<>=/&%$.:",
+    .prefixes = .{.{ .text = ":", .style = .constant }},
+}

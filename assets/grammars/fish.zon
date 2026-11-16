@@ -1,0 +1,20 @@
+.{
+    .name = "Fish",
+    .extensions = .{"fish"},
+    .shebangs = .{"fish"},
+    .line_comments = .{"#"},
+    .strings = .{ .{ .start = "\"" }, .{ .start = "'", .escape = false } },
+    .keywords = .{
+        "and",    "begin", "break",    "builtin", "case", "command", "continue", "else",   "end",
+        "exec",   "for",   "function", "if",      "in",   "not",     "or",       "return", "set",
+        "switch", "while",
+    },
+    .constants = .{ "true", "false" },
+    .builtins = .{
+        "echo",     "printf",   "read",      "cd",     "pwd",    "test", "string", "math", "abbr", "alias",
+        "argparse", "contains", "functions", "source", "status",
+    },
+    .operators = "=|&<>!;",
+    .punctuation = "()[]{}",
+    .prefixes = .{.{ .text = "$", .style = .builtin }},
+}

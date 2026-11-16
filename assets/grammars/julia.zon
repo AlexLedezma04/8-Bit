@@ -1,0 +1,23 @@
+.{
+    .name = "Julia",
+    .extensions = .{"jl"},
+    .shebangs = .{"julia"},
+    .line_comments = .{"#"},
+    .block_comment = .{ .start = "#=", .end = "=#" },
+    .strings = .{ .{ .start = "\"\"\"", .multiline = true }, .{ .start = "\"" } },
+    .keywords = .{
+        "abstract", "baremodule", "begin",  "break",   "catch", "const",    "continue", "do",        "else",
+        "elseif",   "end",        "export", "finally", "for",   "function", "global",   "if",        "import",
+        "in",       "isa",        "let",    "local",   "macro", "module",   "mutable",  "primitive", "quote",
+        "return",   "struct",     "try",    "type",    "using", "where",    "while",
+    },
+    .types = .{
+        "Any",    "Bool",   "Char",   "Float16", "Float32", "Float64", "Int",    "Int8",    "Int16",  "Int32",
+        "Int64",  "Int128", "UInt",   "UInt8",   "UInt16",  "UInt32",  "UInt64", "Nothing", "Number", "Real",
+        "String", "Symbol", "Vector", "Matrix",  "Array",   "Dict",    "Tuple",
+    },
+    .constants = .{ "true", "false", "nothing", "missing", "Inf", "NaN", "pi" },
+    .operators = "+-*/\\^%=<>!&|~:?$",
+    .word_chars = "!",
+    .prefixes = .{.{ .text = "@", .style = .builtin }},
+}

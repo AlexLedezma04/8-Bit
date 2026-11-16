@@ -36,8 +36,12 @@ pub fn build(b: *std.Build) void {
         .imports = &.{.{ .name = "8-bit", .module = sdl_free }},
     });
     const test_step = b.step("test", "Run SDL-free unit and integration tests");
-    for ([_]*std.Build.Module{ sdl_free, integration }) |mod|
-        test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = mod })).step);
+    for ([_]*std.Build.Module{ sdl_free, integration }) |mod| {
+        const run_tests = b.addRunArtifact(b.addTest(.{ .root_module = mod }));
+        // Tests read files like tests/samples, so they always run.
+        run_tests.has_side_effects = true;
+        test_step.dependOn(&run_tests.step);
+    }
 
     const size_check = b.addRunArtifact(b.addExecutable(.{
         .name = "size_check",

@@ -1,0 +1,20 @@
+.{
+    .name = "Carbon",
+    .extensions = .{"carbon"},
+    .line_comments = .{"//"},
+    .strings = .{ .{ .start = "'''", .multiline = true }, .{ .start = "\"" }, .{ .start = "'" } },
+    .keywords = .{
+        "abstract", "adapt",     "addr",   "alias",      "and",      "api",      "as",     "auto",     "base",      "break",
+        "case",     "choice",    "class",  "constraint", "continue", "default",  "else",   "extend",   "final",     "fn",
+        "for",      "forall",    "friend", "if",         "impl",     "impls",    "import", "in",       "interface", "let",
+        "library",  "like",      "match",  "namespace",  "not",      "observe",  "or",     "override", "package",   "partial",
+        "private",  "protected", "return", "returns",    "Self",     "template", "then",   "type",     "var",       "virtual",
+        "where",    "while",
+    },
+    .types = .{
+        "bool", "i8",  "i16",    "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "f16",
+        "f32",  "f64", "String",
+    },
+    .constants = .{ "true", "false" },
+    .operators = "+-*/%=<>!&|^~?:",
+}

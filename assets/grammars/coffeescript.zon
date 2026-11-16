@@ -1,0 +1,30 @@
+.{
+    .name = "CoffeeScript",
+    .extensions = .{ "coffee", "litcoffee" },
+    .file_names = .{"Cakefile"},
+    .shebangs = .{"coffee"},
+    .line_comments = .{"#"},
+    .block_comment = .{ .start = "###", .end = "###" },
+    .strings = .{
+        .{ .start = "\"\"\"", .multiline = true },
+        .{ .start = "'''", .multiline = true },
+        .{ .start = "\"" },
+        .{ .start = "'" },
+        .{ .start = "`" },
+    },
+    .keywords = .{
+        "and",     "break", "by",   "catch",  "class",      "continue", "delete", "do",    "else",  "extends",
+        "finally", "for",   "if",   "in",     "instanceof", "is",       "isnt",   "loop",  "new",   "not",
+        "of",      "or",    "own",  "return", "super",      "switch",   "then",   "throw", "try",   "typeof",
+        "unless",  "until", "when", "while",  "yield",      "import",   "export", "from",  "await",
+    },
+    .constants = .{ "true", "false", "null", "undefined", "yes", "no", "on", "off" },
+    .builtins = .{
+        "console", "window", "document", "globalThis", "Math",    "JSON",   "Object",  "Array",
+        "String",  "Number", "Boolean",  "Promise",    "Map",     "Set",    "WeakMap", "Symbol",
+        "Date",    "RegExp", "Error",    "BigInt",     "require", "module", "exports", "process",
+    },
+    .operators = "+-*/%=<>!&|^~?:",
+    .word_chars = "$",
+    .prefixes = .{.{ .text = "@", .style = .builtin }},
+}

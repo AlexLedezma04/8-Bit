@@ -14,7 +14,7 @@ test "every grammar loads and highlights its sample" {
     for (editor.log.items) |line| std.debug.print("{s}\n", .{line});
     try testing.expectEqual(@as(usize, 0), editor.log.items.len);
     const languages = editor.languages;
-    try testing.expectEqual(@as(usize, 35), languages.len);
+    try testing.expectEqual(@as(usize, 96), languages.len);
 
     const covered = try testing.allocator.alloc(bool, languages.len);
     defer testing.allocator.free(covered);
@@ -28,8 +28,11 @@ test "every grammar loads and highlights its sample" {
     while (try entries.next(testing.io)) |entry| {
         const text = try dir.readFileAlloc(testing.io, entry.name, testing.allocator, .unlimited);
         defer testing.allocator.free(text);
-        const first_line = text[0 .. std.mem.findScalar(u8, text, '\n') orelse text.len];
-        const rules = language.detect(languages, entry.name, first_line) orelse return error.NoLanguage;
+        const head = text[0..@min(text.len, language.head_size)];
+        const rules = language.detect(languages, entry.name, head) orelse {
+            std.debug.print("no language for {s}\n", .{entry.name});
+            return error.NoLanguage;
+        };
         covered[(@intFromPtr(rules) - @intFromPtr(languages.ptr)) / @sizeOf(@TypeOf(rules.*))] = true;
 
         var state: syntax.State = 0;
@@ -52,6 +55,24 @@ test "every grammar loads and highlights its sample" {
         if (!seen) std.debug.print("no sample for {s}\n", .{rules.grammar.name});
         try testing.expect(seen);
     }
+}
+
+test "no file name is claimed twice; a shared extension has one grammar without hints" {
+    var editor = try app.editor.editor.Editor.init(testing.allocator, testing.io);
+    defer editor.deinit();
+    const languages = editor.languages;
+    for (languages, 0..) |a, i| for (languages[i + 1 ..]) |b| {
+        for (a.grammar.file_names) |name| for (b.grammar.file_names) |other| {
+            if (std.ascii.eqlIgnoreCase(name, other)) std.debug.print("{s} and {s} both claim {s}\n", .{ a.grammar.name, b.grammar.name, name });
+            try testing.expect(!std.ascii.eqlIgnoreCase(name, other));
+        };
+        for (a.grammar.extensions) |ext| for (b.grammar.extensions) |other| {
+            if (!std.ascii.eqlIgnoreCase(ext, other)) continue;
+            const bare = a.grammar.hints.len == 0 and b.grammar.hints.len == 0;
+            if (bare) std.debug.print("{s} and {s} share .{s} without hints\n", .{ a.grammar.name, b.grammar.name, ext });
+            try testing.expect(!bare);
+        };
+    };
 }
 
 fn colorOf(session: *const Session, text: []const u8) app.ui.theme.Color {

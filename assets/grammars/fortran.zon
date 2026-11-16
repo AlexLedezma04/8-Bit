@@ -1,0 +1,25 @@
+.{
+    .name = "Fortran",
+    .extensions = .{ "f", "f90", "f95", "f03", "f08", "f77", "for", "ftn" },
+    .line_comments = .{"!"},
+    .strings = .{ .{ .start = "\"", .escape = false }, .{ .start = "'", .escape = false } },
+    .keywords = .{
+        "allocatable", "allocate",  "associate", "block",     "call",      "case",       "character", "class",
+        "complex",     "contains",  "continue",  "cycle",     "data",      "deallocate", "default",   "dimension",
+        "do",          "double",    "else",      "elseif",    "elsewhere", "end",        "enddo",     "endif",
+        "entry",       "enum",      "exit",      "external",  "forall",    "format",     "function",  "go",
+        "goto",        "if",        "implicit",  "in",        "inout",     "integer",    "intent",    "interface",
+        "intrinsic",   "logical",   "module",    "none",      "only",      "optional",   "out",       "parameter",
+        "pointer",     "precision", "private",   "procedure", "program",   "public",     "pure",      "read",
+        "real",        "recursive", "result",    "return",    "save",      "select",     "stop",      "subroutine",
+        "target",      "then",      "to",        "type",      "use",       "where",      "while",     "write",
+    },
+    .constants = .{ ".true.", ".false." },
+    .builtins = .{
+        "abs",  "allocated", "kind", "len", "max", "min", "mod", "print", "size", "sqrt", "sum",
+        "trim",
+    },
+    .ignore_case = true,
+    .operators = "+-*/=<>:%",
+    .word_chars = ".",
+}

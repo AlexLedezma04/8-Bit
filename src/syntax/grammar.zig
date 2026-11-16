@@ -15,6 +15,10 @@ pub const Grammar = struct {
     file_names: []const []const u8 = &.{},
     /// Programs named after `#!` on the first line, like `python`.
     shebangs: []const []const u8 = &.{},
+    /// When grammars share an extension, text near the start of a file that
+    /// picks this one, like `@interface` for Objective-C `.m` files. The one
+    /// without hints is picked when no hint is found.
+    hints: []const []const u8 = &.{},
     line_comments: []const []const u8 = &.{},
     block_comment: ?Pair = null,
     /// Tried in order, so put `"""` before `"`.

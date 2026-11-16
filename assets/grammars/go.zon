@@ -1,6 +1,7 @@
 .{
     .name = "Go",
     .extensions = .{"go"},
+    .file_names = .{ "go.mod", "go.work" },
     .line_comments = .{"//"},
     .block_comment = .{ .start = "/*", .end = "*/" },
     .strings = .{

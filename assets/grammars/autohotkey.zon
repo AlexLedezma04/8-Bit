@@ -1,0 +1,20 @@
+.{
+    .name = "AutoHotkey",
+    .extensions = .{ "ahk", "ahk2" },
+    .line_comments = .{";"},
+    .block_comment = .{ .start = "/*", .end = "*/" },
+    .strings = .{ .{ .start = "\"" }, .{ .start = "'" } },
+    .keywords = .{
+        "if",    "else",   "loop",   "while",   "for",     "in",  "break", "continue", "return", "global",
+        "local", "static", "class",  "extends", "new",     "try", "catch", "finally",  "throw",  "goto",
+        "gosub", "until",  "switch", "case",    "default",
+    },
+    .constants = .{ "true", "false" },
+    .builtins = .{
+        "MsgBox",    "Send",     "SendInput",  "Run",      "Sleep",  "WinActivate", "WinWait", "Click",
+        "MouseMove", "FileRead", "FileAppend", "InputBox", "Hotkey", "SetTimer",    "ExitApp", "Reload",
+    },
+    .ignore_case = true,
+    .operators = ":=+-*/<>!&|^~?.",
+    .prefixes = .{ .{ .text = "#", .style = .keyword }, .{ .text = "%", .style = .builtin } },
+}

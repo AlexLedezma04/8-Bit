@@ -1,0 +1,21 @@
+.{
+    .name = "Cadence",
+    .extensions = .{"cdc"},
+    .line_comments = .{"//"},
+    .block_comment = .{ .start = "/*", .end = "*/" },
+    .strings = .{.{ .start = "\"" }},
+    .keywords = .{
+        "access", "account",  "all",     "as",   "auth",   "break",       "case",        "contract", "continue",
+        "create", "default",  "destroy", "else", "emit",   "entitlement", "enum",        "event",    "execute",
+        "fun",    "if",       "import",  "in",   "init",   "let",         "pre",         "post",     "prepare",
+        "pub",    "resource", "return",  "self", "struct", "switch",      "transaction", "var",      "view",
+        "while",
+    },
+    .types = .{
+        "Address", "Bool",  "Character", "Int",  "Int8",      "Int64",       "Int256", "String", "UFix64",
+        "UInt",    "UInt8", "UInt64",    "Void", "AnyStruct", "AnyResource",
+    },
+    .constants = .{ "true", "false", "nil" },
+    .operators = "+-*/%=<>!&|^~?:",
+    .prefixes = .{.{ .text = "@", .style = .builtin }},
+}

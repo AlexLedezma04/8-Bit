@@ -1,0 +1,23 @@
+.{
+    .name = "Modula-2",
+    .extensions = .{ "mod", "def", "mi", "m2", "ob", "ob2", "obn" },
+    .block_comment = .{ .start = "(*", .end = "*)" },
+    .strings = .{ .{ .start = "\"", .escape = false }, .{ .start = "'", .escape = false } },
+    .keywords = .{
+        "AND",       "ARRAY",  "BEGIN",  "BY",     "CASE",   "CONST",   "DEFINITION", "DIV",  "DO",      "ELSE",
+        "ELSIF",     "END",    "EXCEPT", "EXIT",   "EXPORT", "FINALLY", "FOR",        "FROM", "IF",      "IMPLEMENTATION",
+        "IMPORT",    "IN",     "LOOP",   "MOD",    "MODULE", "NOT",     "OF",         "OR",   "POINTER", "PROCEDURE",
+        "QUALIFIED", "RECORD", "REPEAT", "RETURN", "SET",    "THEN",    "TO",         "TYPE", "UNTIL",   "VAR",
+        "WHILE",     "WITH",   "IS",
+    },
+    .types = .{
+        "BOOLEAN", "CARDINAL", "CHAR", "INTEGER", "LONGINT", "LONGREAL", "REAL", "BITSET",
+        "PROC",
+    },
+    .constants = .{ "TRUE", "FALSE", "NIL" },
+    .builtins = .{
+        "ABS", "CAP", "CHR",  "DEC", "EXCL", "HALT", "HIGH", "INC", "INCL", "MAX", "MIN", "NEW",
+        "ODD", "ORD", "SIZE",
+    },
+    .operators = "+-*/=<>#&:^~",
+}

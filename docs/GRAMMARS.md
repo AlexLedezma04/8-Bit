@@ -3,7 +3,7 @@
 A language is one ZON file in `assets/grammars/` (built in) or in the
 `grammars` folder of the config folder (yours; a file with the same name
 replaces the built-in one). No code changes and no regex: the build embeds
-every file of `assets/grammars/` by itself.
+every file of `assets/grammars/` by itself, without spaces and comments.
 
 ## Example
 
@@ -36,6 +36,7 @@ Only `.name` is needed.
 | `extensions` | Without the dot. Case is ignored. | none |
 | `file_names` | Whole names, like `Makefile` or `.bashrc`. Checked first. | none |
 | `shebangs` | Programs after `#!` on the first line. `python` matches `python3`. Checked last. | none |
+| `hints` | For grammars that share an extension: text near the start of a file (first 1 KB) that picks this one, like `@interface` for Objective-C `.m` files. The grammar without hints is picked when no hint is found. | none |
 | `line_comments` | Each starts a comment to the end of the line. The first one is used by Ctrl+/. | none |
 | `block_comment` | `.{ .start, .end }`. Can span lines. Used by Ctrl+/ when there is no line comment. | none |
 | `strings` | Tried in order, so put `"""` before `"`. Each has `.start`, and maybe `.end` (else the same as start), `.escape = false` (no backslash escapes), `.multiline = true` (can span lines), `.style`. | none |
@@ -64,6 +65,8 @@ strings carry over to the next line. A line is read up to 10,000 bytes.
 ## Adding a language
 
 1. Add `assets/grammars/<name>.zon`.
-2. Add a small sample to `tests/samples/` that is found by its name,
+2. If another grammar has the same extension, give one of them `hints`.
+3. Add a small sample to `tests/samples/` that is found by its name,
    extension or shebang. `zig build test` checks that every grammar loads,
-   has a sample, and closes every string and comment it opens.
+   has a sample, closes every string and comment it opens, and that no two
+   grammars claim the same file name or an extension without hints.

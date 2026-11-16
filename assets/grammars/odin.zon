@@ -1,0 +1,25 @@
+.{
+    .name = "Odin",
+    .extensions = .{"odin"},
+    .line_comments = .{"//"},
+    .block_comment = .{ .start = "/*", .end = "*/" },
+    .strings = .{ .{ .start = "\"" }, .{ .start = "'" }, .{ .start = "`", .escape = false } },
+    .keywords = .{
+        "bit_set", "break",     "case",   "cast",        "context",   "continue", "defer", "distinct", "do",
+        "dynamic", "else",      "enum",   "fallthrough", "for",       "foreign",  "if",    "import",   "in",
+        "map",     "matrix",    "not_in", "or_else",     "or_return", "package",  "proc",  "return",   "struct",
+        "switch",  "transmute", "typeid", "union",       "using",     "when",     "where",
+    },
+    .types = .{
+        "bool",   "b8",      "b16",    "b32", "b64",  "int",     "i8",  "i16", "i32", "i64",       "i128",       "uint",
+        "u8",     "u16",     "u32",    "u64", "u128", "uintptr", "f16", "f32", "f64", "complex64", "complex128", "rune",
+        "string", "cstring", "rawptr", "any",
+    },
+    .constants = .{ "true", "false", "nil" },
+    .builtins = .{
+        "len",    "cap",    "size_of", "align_of", "offset_of", "type_of", "make", "new", "free",
+        "delete", "append",
+    },
+    .operators = "+-*/%=<>!&|^~?:",
+    .prefixes = .{ .{ .text = "#", .style = .keyword }, .{ .text = "@", .style = .builtin } },
+}

@@ -133,6 +133,8 @@ third_party/      vendored C dependencies (SDL3)
   are found again when needed. It also finds matching brackets, skipping
   strings and comments.
 - `language.zig` picks a grammar by file name, extension, then shebang.
+  Grammars that share an extension (`.m`, `.pl`, `.v`, `.fs`) are told
+  apart by hints found in the first 1 KB of the file.
 - Grammars load with the settings into the config arena. `tools/embed_dir.zig`
   embeds every file of `assets/grammars/` at build time.
 - The editor view draws each run of one style in its theme color.

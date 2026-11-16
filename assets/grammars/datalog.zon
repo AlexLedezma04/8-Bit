@@ -1,0 +1,20 @@
+.{
+    .name = "Datalog",
+    .extensions = .{ "dl", "dlog", "datalog" },
+    .line_comments = .{"//"},
+    .block_comment = .{ .start = "/*", .end = "*/" },
+    .strings = .{.{ .start = "\"" }},
+    .keywords = .{
+        "decl",          "input", "output", "type", "functor", "comp", "init", "pragma", "plan",
+        "choice-domain",
+    },
+    .types = .{ "number", "symbol", "unsigned", "float" },
+    .constants = .{ "true", "false", "nil" },
+    .builtins = .{
+        "count",     "sum", "min", "max", "mean", "cat", "strlen", "substr", "to_string",
+        "to_number",
+    },
+    .operators = ":-=<>!+*/%",
+    .word_chars = "-",
+    .prefixes = .{.{ .text = ".", .style = .keyword }},
+}

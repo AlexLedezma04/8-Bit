@@ -1,0 +1,20 @@
+.{
+    .name = "ReScript",
+    .extensions = .{ "res", "resi" },
+    .line_comments = .{"//"},
+    .block_comment = .{ .start = "/*", .end = "*/" },
+    .strings = .{ .{ .start = "`", .multiline = true }, .{ .start = "\"" } },
+    .keywords = .{
+        "and",  "as",      "assert", "async",   "await", "constraint", "else",   "exception", "external",
+        "for",  "if",      "in",     "include", "lazy",  "let",        "module", "mutable",   "of",
+        "open", "private", "rec",    "switch",  "to",    "try",        "type",   "when",      "while",
+    },
+    .types = .{
+        "array",  "bool", "char", "float", "int", "list", "option", "promise", "result",
+        "string", "unit",
+    },
+    .constants = .{ "true", "false", "None", "Some", "Ok", "Error" },
+    .operators = "+-*/=<>!&|^~?:.",
+    .word_chars = "'",
+    .prefixes = .{ .{ .text = "@", .style = .builtin }, .{ .text = "#", .style = .constant } },
+}

@@ -1,17 +1,29 @@
 //! Picks a file's grammar from the loaded ones: by file name (`Makefile`),
-//! then extension, then the program after `#!` on the first line.
+//! then extension, then the program after `#!` on the first line. Grammars
+//! that share an extension are told apart by their hints.
 const std = @import("std");
 const Rules = @import("grammar.zig").Rules;
 
-pub fn detect(languages: []const Rules, path: []const u8, first_line: []const u8) ?*const Rules {
+/// Bytes at the start of a file that hints are looked for in.
+pub const head_size = 1024;
+
+/// `head` is the start of the file, up to `head_size` bytes.
+pub fn detect(languages: []const Rules, path: []const u8, head: []const u8) ?*const Rules {
     const name = std.fs.path.basename(path);
     for (languages) |*rules| {
         if (anyEql(rules.grammar.file_names, name)) return rules;
     }
     const dot = std.mem.findScalarLast(u8, name, '.') orelse name.len;
-    if (dot > 0 and dot + 1 < name.len) for (languages) |*rules| {
-        if (anyEql(rules.grammar.extensions, name[dot + 1 ..])) return rules;
-    };
+    if (dot > 0 and dot + 1 < name.len) {
+        var fallback: ?*const Rules = null;
+        for (languages) |*rules| {
+            if (!anyEql(rules.grammar.extensions, name[dot + 1 ..])) continue;
+            if (rules.grammar.hints.len == 0) fallback = fallback orelse rules;
+            for (rules.grammar.hints) |hint| if (std.mem.find(u8, head, hint) != null) return rules;
+        }
+        if (fallback) |rules| return rules;
+    }
+    const first_line = head[0 .. std.mem.findScalar(u8, head, '\n') orelse head.len];
     const program = shebang(first_line) orelse return null;
     for (languages) |*rules| for (rules.grammar.shebangs) |word| {
         if (std.mem.startsWith(u8, program, word)) return rules;
@@ -49,7 +61,12 @@ test "file name, then extension, then shebang" {
         try Rules.init(a, .{ .name = "Makefile", .file_names = &.{ "Makefile", "GNUmakefile" }, .extensions = &.{"mk"} }),
         try Rules.init(a, .{ .name = "Python", .extensions = &.{ "py", "pyw" }, .shebangs = &.{"python"} }),
         try Rules.init(a, .{ .name = "Shell", .extensions = &.{"sh"}, .shebangs = &.{ "sh", "bash" } }),
+        try Rules.init(a, .{ .name = "Perl", .extensions = &.{"pl"} }),
+        try Rules.init(a, .{ .name = "Prolog", .extensions = &.{"pl"}, .hints = &.{":-"} }),
     };
+    // A shared extension: the hint picks, else the grammar without hints.
+    try testing.expectEqualStrings("Prolog", detect(&languages, "a.pl", "x.\nfoo :- bar.").?.grammar.name);
+    try testing.expectEqualStrings("Perl", detect(&languages, "a.pl", "my $x = 1;").?.grammar.name);
     try testing.expectEqualStrings("Makefile", detect(&languages, "src/makefile", "").?.grammar.name);
     try testing.expectEqualStrings("Makefile", detect(&languages, "rules.MK", "").?.grammar.name);
     try testing.expectEqualStrings("Python", detect(&languages, "/a.b/tool.py", "#!/bin/sh").?.grammar.name);

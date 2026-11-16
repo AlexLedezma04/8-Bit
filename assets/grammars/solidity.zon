@@ -1,0 +1,24 @@
+.{
+    .name = "Solidity",
+    .extensions = .{"sol"},
+    .line_comments = .{"//"},
+    .block_comment = .{ .start = "/*", .end = "*/" },
+    .strings = .{ .{ .start = "\"" }, .{ .start = "'" } },
+    .keywords = .{
+        "abstract",    "anonymous", "assembly", "break",    "calldata",  "catch",    "constant",
+        "constructor", "continue",  "contract", "delete",   "do",        "else",     "emit",
+        "enum",        "error",     "event",    "external", "fallback",  "for",      "function",
+        "if",          "immutable", "import",   "indexed",  "interface", "internal", "is",
+        "library",     "mapping",   "memory",   "modifier", "new",       "override", "payable",
+        "pragma",      "private",   "public",   "pure",     "receive",   "return",   "returns",
+        "revert",      "storage",   "struct",   "throw",    "try",       "type",     "unchecked",
+        "using",       "view",      "virtual",  "while",
+    },
+    .types = .{
+        "address", "bool",  "bytes",   "bytes4", "bytes32", "int", "int8", "int256", "string",
+        "uint",    "uint8", "uint256",
+    },
+    .constants = .{ "true", "false", "wei", "gwei", "ether", "seconds", "minutes", "hours", "days" },
+    .builtins = .{ "msg", "block", "tx", "require", "assert", "keccak256", "abi", "this" },
+    .operators = "+-*/%=<>!&|^~?:",
+}

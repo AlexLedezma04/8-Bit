@@ -1,6 +1,6 @@
 .{
     .name = "GLSL",
-    .extensions = .{ "glsl", "vert", "frag", "geom", "comp", "tesc", "tese", "vs", "fs" },
+    .extensions = .{ "glsl", "vert", "frag", "geom", "comp", "tesc", "tese" },
     .line_comments = .{"//"},
     .block_comment = .{ .start = "/*", .end = "*/" },
     .strings = .{.{ .start = "\"" }},

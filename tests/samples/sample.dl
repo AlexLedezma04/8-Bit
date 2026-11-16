@@ -1,0 +1,9 @@
+// Reachability.
+.decl edge(x: number, y: number)
+.decl path(x: number, y: number)
+.output path
+
+edge(1, 2). edge(2, 3).
+/* transitive */
+path(x, y) :- edge(x, y).
+path(x, z) :- path(x, y), edge(y, z).

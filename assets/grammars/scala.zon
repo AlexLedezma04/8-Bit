@@ -1,0 +1,27 @@
+.{
+    .name = "Scala",
+    .extensions = .{ "scala", "sc", "sbt" },
+    .shebangs = .{"scala"},
+    .line_comments = .{"//"},
+    .block_comment = .{ .start = "/*", .end = "*/" },
+    .strings = .{
+        .{ .start = "\"\"\"", .escape = false, .multiline = true },
+        .{ .start = "\"" },
+        .{ .start = "'" },
+    },
+    .keywords = .{
+        "abstract", "case",      "catch", "class",   "def",      "derives", "do",      "else",      "enum",     "export",
+        "extends",  "extension", "final", "finally", "for",      "forSome", "given",   "if",        "implicit", "import",
+        "lazy",     "match",     "new",   "object",  "override", "package", "private", "protected", "return",   "sealed",
+        "super",    "then",      "this",  "throw",   "trait",    "try",     "type",    "using",     "val",      "var",
+        "while",    "with",      "yield",
+    },
+    .types = .{
+        "Any",     "AnyRef", "AnyVal", "Boolean", "Byte", "Char", "Double", "Float", "Int", "Long",
+        "Nothing", "Short",  "String", "Unit",    "List", "Map",  "Option", "Seq",   "Set", "Vector",
+        "Future",
+    },
+    .constants = .{ "true", "false", "null", "None", "Some", "Nil" },
+    .operators = "+-*/%=<>!&|^~?:",
+    .prefixes = .{.{ .text = "@", .style = .builtin }},
+}

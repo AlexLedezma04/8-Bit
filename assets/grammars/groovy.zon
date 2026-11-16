@@ -1,0 +1,28 @@
+.{
+    .name = "Groovy",
+    .extensions = .{ "groovy", "gvy", "gradle" },
+    .file_names = .{"Jenkinsfile"},
+    .shebangs = .{"groovy"},
+    .line_comments = .{"//"},
+    .block_comment = .{ .start = "/*", .end = "*/" },
+    .strings = .{
+        .{ .start = "'''", .multiline = true },
+        .{ .start = "\"\"\"", .multiline = true },
+        .{ .start = "\"" },
+        .{ .start = "'" },
+    },
+    .keywords = .{
+        "abstract", "as",      "assert",     "break",  "case",      "catch",      "class",     "const",   "continue",
+        "def",      "default", "do",         "else",   "enum",      "extends",    "final",     "finally", "for",
+        "goto",     "if",      "implements", "import", "in",        "instanceof", "interface", "native",  "new",
+        "package",  "private", "protected",  "public", "return",    "static",     "super",     "switch",  "synchronized",
+        "this",     "throw",   "throws",     "trait",  "transient", "try",        "var",       "while",
+    },
+    .types = .{
+        "boolean", "byte", "char", "short", "int", "long", "float", "double", "void", "String",
+        "Object",  "List", "Map",
+    },
+    .constants = .{ "true", "false", "null" },
+    .operators = "+-*/%=<>!&|^~?:",
+    .prefixes = .{ .{ .text = "@", .style = .builtin }, .{ .text = "$", .style = .builtin } },
+}

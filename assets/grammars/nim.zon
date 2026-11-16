@@ -1,0 +1,26 @@
+.{
+    .name = "Nim",
+    .extensions = .{ "nim", "nims", "nimble" },
+    .shebangs = .{"nim"},
+    .line_comments = .{"#"},
+    .block_comment = .{ .start = "#[", .end = "]#" },
+    .strings = .{ .{ .start = "\"\"\"", .multiline = true }, .{ .start = "\"" }, .{ .start = "'" } },
+    .keywords = .{
+        "addr",  "and",      "as",        "asm",    "bind",    "block",    "break",    "case",  "cast",   "concept",
+        "const", "continue", "converter", "defer",  "discard", "distinct", "div",      "do",    "elif",   "else",
+        "end",   "enum",     "except",    "export", "finally", "for",      "from",     "func",  "if",     "import",
+        "in",    "include",  "interface", "is",     "isnot",   "iterator", "let",      "macro", "method", "mixin",
+        "mod",   "nil",      "not",       "notin",  "object",  "of",       "or",       "out",   "proc",   "ptr",
+        "raise", "ref",      "return",    "shl",    "shr",     "static",   "template", "try",   "tuple",  "type",
+        "using", "var",      "when",      "while",  "xor",     "yield",
+    },
+    .types = .{
+        "int",   "int8",    "int16",   "int32", "int64", "uint",   "uint8", "uint16", "uint32", "uint64",
+        "float", "float32", "float64", "bool",  "char",  "string", "seq",   "array",  "set",    "openArray",
+        "void",  "auto",
+    },
+    .constants = .{ "true", "false", "nil" },
+    .builtins = .{ "echo", "len", "high", "low", "inc", "dec", "add", "assert", "newSeq" },
+    .operators = "+-*/=<>!&|^~@$%:.",
+    .prefixes = .{.{ .text = "{.", .style = .builtin }},
+}

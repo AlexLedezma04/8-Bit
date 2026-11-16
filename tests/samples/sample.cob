@@ -1,0 +1,9 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. HELLO.
+      *> A greeting.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 WS-NAME PIC X(10) VALUE "WORLD".
+       PROCEDURE DIVISION.
+           DISPLAY "HELLO, " WS-NAME.
+           STOP RUN.

@@ -793,10 +793,8 @@ pub const Editor = struct {
     fn applyLanguage(self: *const Editor, target: *File) void {
         if (target.language) |chosen| return target.highlighter.setRules(language.byName(self.languages, chosen));
         const path = target.path orelse return target.highlighter.setRules(null);
-        var head: [128]u8 = undefined;
-        const start = target.doc.buffer.copy(0, &head);
-        const first_line = start[0 .. std.mem.findScalar(u8, start, '\n') orelse start.len];
-        target.highlighter.setRules(language.detect(self.languages, path, first_line));
+        var head: [language.head_size]u8 = undefined;
+        target.highlighter.setRules(language.detect(self.languages, path, target.doc.buffer.copy(0, &head)));
     }
 
     /// The language of the active file, chosen by hand.

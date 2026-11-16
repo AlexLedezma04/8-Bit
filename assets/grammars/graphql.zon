@@ -1,0 +1,21 @@
+.{
+    .name = "GraphQL",
+    .extensions = .{ "graphql", "gql", "graphqls" },
+    .line_comments = .{"#"},
+    .strings = .{ .{ .start = "\"\"\"", .multiline = true }, .{ .start = "\"" } },
+    .keywords = .{
+        "directive", "enum",  "extend", "fragment",   "implements", "input",  "interface",
+        "mutation",  "on",    "query",  "repeatable", "scalar",     "schema", "subscription",
+        "type",      "union",
+    },
+    .types = .{ "Int", "Float", "String", "Boolean", "ID" },
+    .constants = .{ "true", "false", "null" },
+    .functions = false,
+    .key_before = ":",
+    .operators = "=!|&:",
+    .prefixes = .{
+        .{ .text = "$", .style = .builtin },
+        .{ .text = "@", .style = .builtin },
+        .{ .text = "...", .style = .keyword },
+    },
+}

@@ -1,0 +1,10 @@
+.{
+    .name = "APL",
+    .extensions = .{ "apl", "aplf", "apln", "aplc", "dyalog" },
+    .line_comments = .{"⍝"},
+    .strings = .{ .{ .start = "'", .escape = false }, .{ .start = "\"", .escape = false } },
+    .functions = false,
+    .operators = "+-*=<>|!?",
+    .punctuation = "()[];",
+    .prefixes = .{ .{ .text = ":", .style = .keyword }, .{ .text = "⎕", .style = .builtin } },
+}

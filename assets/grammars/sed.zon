@@ -1,0 +1,11 @@
+.{
+    .name = "Sed",
+    .extensions = .{"sed"},
+    .shebangs = .{"sed"},
+    .line_comments = .{"#"},
+    .strings = .{ .{ .start = "\"" }, .{ .start = "'", .escape = false } },
+    .functions = false,
+    .operators = "/!;",
+    .punctuation = "{}",
+    .prefixes = .{ .{ .text = "s/", .style = .keyword }, .{ .text = "y/", .style = .keyword } },
+}

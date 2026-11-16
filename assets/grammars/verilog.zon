@@ -1,0 +1,23 @@
+.{
+    .name = "Verilog",
+    .extensions = .{ "v", "vh", "sv", "svh" },
+    .line_comments = .{"//"},
+    .block_comment = .{ .start = "/*", .end = "*/" },
+    .strings = .{.{ .start = "\"" }},
+    .keywords = .{
+        "always",  "always_comb", "always_ff",   "always_latch", "assign",       "automatic", "begin",
+        "case",    "casex",       "casez",       "class",        "default",      "else",      "end",
+        "endcase", "endclass",    "endfunction", "endgenerate",  "endinterface", "endmodule", "endpackage",
+        "endtask", "for",         "forever",     "function",     "generate",     "if",        "import",
+        "initial", "inout",       "input",       "interface",    "localparam",   "module",    "negedge",
+        "output",  "package",     "parameter",   "posedge",      "repeat",       "return",    "task",
+        "typedef", "while",
+    },
+    .types = .{
+        "bit",    "byte", "int", "integer",  "logic", "real", "reg", "shortint", "longint",
+        "signed", "time", "tri", "unsigned", "wire",
+    },
+    .functions = true,
+    .operators = "+-*/%=<>!&|^~?:",
+    .prefixes = .{ .{ .text = "`", .style = .keyword }, .{ .text = "$", .style = .builtin } },
+}

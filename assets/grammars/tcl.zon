@@ -1,0 +1,19 @@
+.{
+    .name = "Tcl",
+    .extensions = .{ "tcl", "tk", "itcl", "tm" },
+    .shebangs = .{ "tclsh", "wish" },
+    .line_comments = .{"#"},
+    .strings = .{.{ .start = "\"" }},
+    .keywords = .{
+        "after",  "append",  "array",  "break",  "catch",   "continue", "default", "else",      "elseif",
+        "eval",   "exec",    "expr",   "for",    "foreach", "format",   "global",  "if",        "incr",
+        "info",   "lappend", "lindex", "list",   "llength", "lsearch",  "lsort",   "namespace", "proc",
+        "puts",   "regexp",  "regsub", "rename", "return",  "set",      "source",  "split",     "string",
+        "switch", "then",    "try",    "unset",  "upvar",   "variable", "while",
+    },
+    .constants = .{ "true", "false", "yes", "no" },
+    .functions = false,
+    .operators = "=<>!&|+-*/",
+    .punctuation = "[]{};",
+    .prefixes = .{.{ .text = "$", .style = .builtin }},
+}
