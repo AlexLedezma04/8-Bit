@@ -21,6 +21,20 @@ pub const Cursor = struct {
         self.* = .{ .anchor = 0, .pos = len };
     }
 
+    /// Keeps the cursor on the same text after `old` became `new_len` bytes.
+    /// A position inside the removed text goes to its start.
+    pub fn shift(self: *Cursor, old: Range, new_len: usize) void {
+        self.pos = shiftPos(self.pos, old, new_len);
+        if (self.anchor) |anchor| self.anchor = shiftPos(anchor, old, new_len);
+        self.goal_col = null;
+    }
+
+    fn shiftPos(pos: usize, old: Range, new_len: usize) usize {
+        if (pos <= old.start) return pos;
+        if (pos >= old.end) return pos - old.len() + new_len;
+        return old.start;
+    }
+
     /// `extend` keeps the anchor, or drops one at the old position.
     pub fn moveTo(self: *Cursor, pos: usize, extend: bool) void {
         const anchor = if (extend) self.anchor orelse self.pos else null;
@@ -48,6 +62,16 @@ test "a plain move and clearSelection drop the selection" {
     c.moveTo(6, true);
     c.moveTo(3, false);
     try testing.expectEqual(Cursor{ .pos = 3 }, c);
+}
+
+test "shift keeps a cursor on the same text" {
+    var c: Cursor = .{ .pos = 10, .anchor = 2 };
+    c.shift(.{ .start = 4, .end = 6 }, 5);
+    try testing.expectEqual(Cursor{ .pos = 13, .anchor = 2 }, c);
+    c.shift(.{ .start = 1, .end = 3 }, 0);
+    try testing.expectEqual(Cursor{ .pos = 11, .anchor = 1 }, c);
+    c.shift(.{ .start = 11, .end = 11 }, 4);
+    try testing.expectEqual(@as(usize, 11), c.pos);
 }
 
 test "selectAll" {

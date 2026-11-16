@@ -12,4 +12,6 @@
     .line_numbers = true,
     // Memory for undo steps, in MiB.
     .undo_limit_mb = 8,
+    // Folders that find in project skips, by name. `.git` is always skipped.
+    .search_exclude = .{ "zig-out", ".zig-cache", "node_modules" },
 }

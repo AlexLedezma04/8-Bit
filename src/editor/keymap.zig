@@ -16,6 +16,7 @@ const ctrl: Mods = .{ .ctrl = true };
 const shift: Mods = .{ .shift = true };
 const alt: Mods = .{ .alt = true };
 const ctrl_shift: Mods = .{ .ctrl = true, .shift = true };
+const alt_shift: Mods = .{ .alt = true, .shift = true };
 
 /// Cursor moves. Each one also gets a Shift binding that selects.
 const moves = [_]Binding{
@@ -63,6 +64,31 @@ const others = [_]Binding{
     .{ .key = .char('0'), .mods = ctrl, .command = .zoom_reset },
     .{ .key = .char(','), .mods = ctrl, .command = .open_settings },
     .{ .key = .char('t'), .mods = alt, .command = .next_theme },
+    .{ .key = .char('n'), .mods = ctrl, .command = .new_file },
+    .{ .key = .char('w'), .mods = ctrl, .command = .close_tab },
+    .{ .key = .tab, .mods = ctrl, .command = .next_tab },
+    .{ .key = .tab, .mods = ctrl_shift, .command = .prev_tab },
+    .{ .key = .char('\\'), .mods = ctrl, .command = .split_right },
+    .{ .key = .char('\\'), .mods = ctrl_shift, .command = .split_down },
+    .{ .key = .right, .mods = alt_shift, .command = .split_right },
+    .{ .key = .down, .mods = alt_shift, .command = .split_down },
+    .{ .key = .f6, .command = .next_pane },
+    .{ .key = .f6, .mods = shift, .command = .prev_pane },
+    .{ .key = .char('b'), .mods = ctrl, .command = .toggle_sidebar },
+    .{ .key = .char('j'), .mods = ctrl, .command = .toggle_bottom },
+    .{ .key = .char('1'), .mods = alt, .command = .focus_sidebar },
+    .{ .key = .char('e'), .mods = ctrl_shift, .command = .focus_sidebar },
+    .{ .key = .escape, .command = .focus_editor },
+    .{ .key = .char('0'), .mods = alt, .command = .focus_bottom },
+    .{ .key = .char('g'), .mods = ctrl, .command = .goto_line },
+    .{ .key = .char('f'), .mods = ctrl, .command = .find },
+    .{ .key = .f3, .command = .find_next },
+    .{ .key = .f3, .mods = shift, .command = .find_prev },
+    .{ .key = .char('h'), .mods = ctrl, .command = .replace },
+    .{ .key = .char('a'), .mods = alt, .command = .replace_all },
+    .{ .key = .char('c'), .mods = alt, .command = .toggle_match_case },
+    .{ .key = .char('w'), .mods = alt, .command = .toggle_whole_word },
+    .{ .key = .char('f'), .mods = ctrl_shift, .command = .find_in_project },
 };
 
 pub const default = moves ++ selecting(moves) ++ others;

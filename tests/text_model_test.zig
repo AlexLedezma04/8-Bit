@@ -7,9 +7,9 @@ const testing = std.testing;
 const expectText = app.core.buffer.expectText;
 
 test "type, move, select, delete, undo and redo a file" {
-    var ed = app.editor.editor.Editor.init(testing.allocator, testing.io);
+    var ed = try app.editor.editor.Editor.init(testing.allocator, testing.io);
     defer ed.deinit();
-    const doc = &ed.doc;
+    const doc = ed.doc();
 
     try doc.buffer.load("fn main() void {\r\n}\r\n");
     try testing.expectEqual(@as(usize, 3), doc.buffer.lineCount());

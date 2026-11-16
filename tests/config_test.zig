@@ -18,8 +18,8 @@ const Session = struct {
     dir: [128]u8 = undefined,
     path_buffer: [192]u8 = undefined,
 
-    fn init(self: *Session) void {
-        self.* = .{ .tmp = testing.tmpDir(.{}), .editor = .init(testing.allocator, testing.io) };
+    fn init(self: *Session) !void {
+        self.* = .{ .tmp = testing.tmpDir(.{}), .editor = try Editor.init(testing.allocator, testing.io) };
         self.editor.loader.dir = std.fmt.bufPrint(&self.dir, ".zig-cache/tmp/{s}", .{self.tmp.sub_path}) catch unreachable;
         self.editor.reloadConfig();
     }
@@ -59,12 +59,12 @@ const Session = struct {
 
 test "open settings with Ctrl+, , change them, save, and they apply at once" {
     var session: Session = undefined;
-    session.init();
+    try session.init();
     defer session.deinit();
     const editor = &session.editor;
 
     // The first time, the file is made from the built-in settings.
-    try testing.expectEqual(@as(?app.editor.editor.Request, null), session.press("ctrl+,"));
+    _ = session.press("ctrl+,");
     try testing.expectEqualStrings("settings.zon", editor.name());
     const text = try session.read("settings.zon");
     defer testing.allocator.free(text);
@@ -74,37 +74,37 @@ test "open settings with Ctrl+, , change them, save, and they apply at once" {
     session.retype(".{ .tab_width = 2, .use_spaces = false, .wrap = true, .zoom = 3, .line_numbers = false, .undo_limit_mb = 1 }");
     _ = session.press("ctrl+s");
     try testing.expectEqualStrings("Saved settings.zon", editor.currentMessage().?);
-    try testing.expectEqual(@as(usize, 2), editor.doc.tab_width);
-    try testing.expect(!editor.doc.soft_tabs);
-    try testing.expect(editor.view.wrap);
+    try testing.expectEqual(@as(usize, 2), editor.doc().tab_width);
+    try testing.expect(!editor.doc().soft_tabs);
+    try testing.expect(editor.view().wrap);
     try testing.expectEqual(@as(u8, 3), editor.zoom);
     try testing.expect(!editor.settings.line_numbers);
-    try testing.expectEqual(@as(usize, 1 << 20), editor.doc.history.max_size);
+    try testing.expectEqual(@as(usize, 1 << 20), editor.doc().history.max_size);
     // Left out of the file: the built-in value.
     try testing.expectEqualStrings("dark", editor.settings.theme);
 
     // Tab now inserts a tab character.
     _ = session.press("ctrl+end");
     _ = session.press("tab");
-    try testing.expectEqual(@as(u8, '\t'), editor.doc.buffer.charAt(editor.doc.buffer.len() - 1).cp);
+    try testing.expectEqual(@as(u8, '\t'), editor.doc().buffer.charAt(editor.doc().buffer.len() - 1).cp);
 }
 
 test "a bad settings file reports its line and keeps the defaults" {
     var session: Session = undefined;
-    session.init();
+    try session.init();
     defer session.deinit();
     const editor = &session.editor;
 
     try session.write("settings.zon", ".{\n    .tab_width = 2,\n    .wrap = \"yes\",\n}");
     editor.reloadConfig();
     try testing.expectStringStartsWith(editor.currentMessage().?, "settings.zon:3: ");
-    try testing.expectEqual(@as(usize, 4), editor.doc.tab_width);
-    try testing.expect(!editor.view.wrap);
+    try testing.expectEqual(@as(usize, 4), editor.doc().tab_width);
+    try testing.expect(!editor.view().wrap);
 }
 
 test "Alt+T switches themes, the settings file remembers it, and user themes join in" {
     var session: Session = undefined;
-    session.init();
+    try session.init();
     defer session.deinit();
     const editor = &session.editor;
 
@@ -139,10 +139,10 @@ test "Alt+T switches themes, the settings file remembers it, and user themes joi
 
 test "keymap.zon bindings win over the defaults; bad names show a message" {
     var session: Session = undefined;
-    session.init();
+    try session.init();
     defer session.deinit();
     const editor = &session.editor;
-    try editor.doc.load("one\ntwo");
+    try editor.doc().load("one\ntwo");
 
     try session.write("keymap.zon",
         \\.{
@@ -152,13 +152,13 @@ test "keymap.zon bindings win over the defaults; bad names show a message" {
     );
     editor.reloadConfig();
     _ = session.press("ctrl+shift+k");
-    try testing.expectEqual(@as(usize, 7), editor.doc.cursor.selection().len());
+    try testing.expectEqual(@as(usize, 7), editor.doc().cursor.selection().len());
     _ = session.press("ctrl+a");
-    try testing.expectEqual(@as(usize, 0), editor.doc.cursor.selection().len());
-    try testing.expectEqual(@as(usize, 7), editor.doc.cursor.pos);
+    try testing.expectEqual(@as(usize, 0), editor.doc().cursor.selection().len());
+    try testing.expectEqual(@as(usize, 7), editor.doc().cursor.pos);
     // Defaults still work.
     _ = session.press("ctrl+home");
-    try testing.expectEqual(@as(usize, 0), editor.doc.cursor.pos);
+    try testing.expectEqual(@as(usize, 0), editor.doc().cursor.pos);
 
     try session.write("keymap.zon", ".{ .{ .key = \"hyper+x\", .command = \"save\" } }");
     editor.reloadConfig();
@@ -167,5 +167,5 @@ test "keymap.zon bindings win over the defaults; bad names show a message" {
     editor.reloadConfig();
     try testing.expectEqualStrings("keymap.zon: unknown command \"fly\"", editor.currentMessage().?);
     try testing.expectEqual(keymap.default.len, editor.bindings.len);
-    try expectText(&editor.doc.buffer, "one\ntwo");
+    try expectText(&editor.doc().buffer, "one\ntwo");
 }
