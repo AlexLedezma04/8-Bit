@@ -167,12 +167,17 @@ const Painter = struct {
     decorations: []const Decoration,
 
     fn drawLine(self: Painter, visible: VisibleLine) void {
-        // Line backgrounds first, so marks on the text stay on top.
+        // Line backgrounds first and the selection last, so it stays on top.
         for (self.decorations) |item| if (item.kind == .line_background) self.drawDecoration(item, visible);
-        for (self.decorations) |item| if (item.kind != .line_background) self.drawDecoration(item, visible);
+        for (self.decorations) |item| if (item.kind != .line_background and !isSelection(item)) self.drawDecoration(item, visible);
+        for (self.decorations) |item| if (isSelection(item)) self.drawDecoration(item, visible);
         if (visible.first_wrap == 0 and self.layout.number_cols > 0) self.drawLineNumber(visible);
         self.drawText(visible);
         if (self.show_cursor) self.drawCursor(visible);
+    }
+
+    fn isSelection(item: Decoration) bool {
+        return item.kind == .text_background and item.kind.text_background == .selection;
     }
 
     fn drawDecoration(self: Painter, item: Decoration, visible: VisibleLine) void {

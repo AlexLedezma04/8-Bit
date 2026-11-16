@@ -80,6 +80,15 @@ const others = [_]Binding{
     .{ .key = .char('e'), .mods = ctrl_shift, .command = .focus_sidebar },
     .{ .key = .escape, .command = .focus_editor },
     .{ .key = .char('0'), .mods = alt, .command = .focus_bottom },
+    .{ .key = .char('g'), .mods = ctrl, .command = .goto_line },
+    .{ .key = .char('f'), .mods = ctrl, .command = .find },
+    .{ .key = .f3, .command = .find_next },
+    .{ .key = .f3, .mods = shift, .command = .find_prev },
+    .{ .key = .char('h'), .mods = ctrl, .command = .replace },
+    .{ .key = .char('a'), .mods = alt, .command = .replace_all },
+    .{ .key = .char('c'), .mods = alt, .command = .toggle_match_case },
+    .{ .key = .char('w'), .mods = alt, .command = .toggle_whole_word },
+    .{ .key = .char('f'), .mods = ctrl_shift, .command = .find_in_project },
 };
 
 pub const default = moves ++ selecting(moves) ++ others;

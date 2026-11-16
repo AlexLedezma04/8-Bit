@@ -14,6 +14,9 @@ const Node = panes.Node;
 const fs = @import("../platform/fs.zig");
 const config = @import("config.zig");
 const keymap = @import("keymap.zig");
+const Find = @import("find.zig").Find;
+const project_search = @import("project_search.zig");
+const ProjectSearch = project_search.ProjectSearch;
 
 pub const Pick = enum { open_file, save_file, open_folder };
 
@@ -25,6 +28,9 @@ pub const Question = enum {
     /// Delete / Cancel.
     delete,
 };
+
+/// What the prompt asks for.
+pub const PromptKind = enum { new_file, new_folder, rename, find, replace, goto_line, find_in_project };
 
 /// `yes` is the first button of a question, `no` the second.
 pub const Answer = enum { yes, no, cancel };
@@ -39,6 +45,8 @@ pub const Request = union(enum) {
     pick: Pick,
     /// Show a message box about `name`, then call `answer`.
     ask: struct { question: Question, name: []const u8 },
+    /// Open the prompt. The workbench does this itself.
+    prompt: PromptKind,
 };
 
 /// Result of background work, sent to the main loop through a mailbox.
@@ -49,7 +57,11 @@ pub const Posted = union(enum) {
     cancelled,
     /// No native dialog could be shown.
     dialog_failed,
+    found: project_search.Found,
+    search_done: project_search.Done,
 };
+
+pub const Mailbox = @import("../platform/mailbox.zig").Mailbox(Posted);
 
 /// What the status bar shows.
 pub const Status = struct {
@@ -107,6 +119,10 @@ pub const Editor = struct {
     /// Waits for an answer, or for a file name, before it can go on.
     pending: ?Pending = null,
     clipboard: std.ArrayList(u8) = .empty,
+    find: Find,
+    project: ProjectSearch,
+    /// Where background work posts results. Needed for find in project.
+    mailbox: ?*Mailbox = null,
 
     pub const min_zoom = 1;
     pub const max_zoom = 4;
@@ -132,6 +148,8 @@ pub const Editor = struct {
             .pane = root,
             .loader = .{ .io = io, .gpa = allocator },
             .config_arena = .init(allocator),
+            .find = .{ .allocator = allocator },
+            .project = .{ .allocator = allocator, .io = io },
         };
         errdefer editor.deinit();
         editor.reloadConfig();
@@ -140,6 +158,10 @@ pub const Editor = struct {
     }
 
     pub fn deinit(self: *Editor) void {
+        self.project.deinit();
+        // Results that came too late.
+        if (self.mailbox) |mailbox| while (mailbox.take()) |posted| self.drop(posted);
+        self.find.deinit();
         self.destroyTabs(self.root);
         self.root.destroy(self.allocator);
         for (self.files.items) |item| item.destroy();
@@ -273,6 +295,7 @@ pub const Editor = struct {
 
     /// Call after anything that moved the cursor or changed the text.
     pub fn afterEdit(self: *Editor) void {
+        if (self.find.shown) self.find.refresh(self.doc());
         self.view().scrollToCursor(self.doc());
         self.refreshVisible(self.root);
     }
@@ -288,20 +311,23 @@ pub const Editor = struct {
         }
     }
 
-    /// The cursor line, and the selection, sorted by start.
+    /// The cursor line, the selection and the find matches, sorted by start.
     fn refreshDecorations(self: *Editor, item: *Tab) void {
         item.decorations.clearRetainingCapacity();
         const doc_ = &item.file.doc;
         const cursor = self.cursorOf(item);
         const start = doc_.buffer.lineStart(doc_.buffer.lineOf(@min(cursor.pos, doc_.buffer.len())));
-        const selection = cursor.selection();
-        const marks = [_]Decoration{
-            .{ .range = selection, .kind = .{ .text_background = .selection } },
-            .{ .range = .{ .start = start, .end = start }, .kind = .{ .line_background = .current_line } },
-        };
-        const swapped = [_]Decoration{ marks[1], marks[0] };
-        const order: []const Decoration = if (selection.len() == 0) marks[1..] else if (selection.start < start) &marks else &swapped;
-        item.decorations.appendSlice(self.allocator, order) catch {};
+        const list = &item.decorations;
+        const matches = if (self.find.shown and item.file == self.file()) self.find.matches.items else &.{};
+        list.ensureUnusedCapacity(self.allocator, matches.len + 2) catch return;
+        list.appendAssumeCapacity(.{ .range = .{ .start = start, .end = start }, .kind = .{ .line_background = .current_line } });
+        if (cursor.selection().len() > 0) list.appendAssumeCapacity(.{ .range = cursor.selection(), .kind = .{ .text_background = .selection } });
+        for (matches) |range| list.appendAssumeCapacity(.{ .range = range, .kind = .{ .text_background = .match } });
+        std.mem.sort(Decoration, list.items, {}, byStart);
+    }
+
+    fn byStart(_: void, a: Decoration, b: Decoration) bool {
+        return a.range.start < b.range.start;
     }
 
     // Clipboard
@@ -578,6 +604,8 @@ pub const Editor = struct {
     /// Takes a result from the mailbox and frees it.
     pub fn receive(self: *Editor, posted: Posted) ?Request {
         switch (posted) {
+            .found => |found| self.project.receive(found),
+            .search_done => |done| self.project.done(done),
             .cancelled => self.dropPending(),
             .dialog_failed => {
                 self.dropPending();
@@ -599,6 +627,15 @@ pub const Editor = struct {
             },
         }
         return null;
+    }
+
+    /// Frees a result without using it.
+    fn drop(self: *Editor, posted: Posted) void {
+        switch (posted) {
+            .picked => |picked| self.allocator.free(picked.path),
+            .found => |found| project_search.freeFound(self.allocator, found),
+            .cancelled, .dialog_failed, .search_done => {},
+        }
     }
 
     /// Reloads files that changed on disk. A file with unsaved changes is
@@ -627,6 +664,39 @@ pub const Editor = struct {
             defer self.allocator.free(moved);
             item.setPath(moved) catch {};
         }
+    }
+
+    /// Moves to `line` or `line:column`, both one-based.
+    pub fn gotoLine(self: *Editor, text: []const u8) void {
+        var parts = std.mem.splitScalar(u8, std.mem.trim(u8, text, " "), ':');
+        const line = std.fmt.parseInt(usize, parts.first(), 10) catch 0;
+        const column = if (parts.next()) |part| std.fmt.parseInt(usize, part, 10) catch 0 else 1;
+        if (line == 0 or column == 0 or parts.next() != null) return self.notify("Not a line: {s}", .{text});
+        const doc_ = self.doc();
+        const target = @min(line, doc_.buffer.lineCount()) - 1;
+        doc_.cursor.moveTo(doc_.posAtColumn(target, column - 1), false);
+        self.afterEdit();
+    }
+
+    /// Opens the file of a search hit and selects the match.
+    pub fn openHit(self: *Editor, hit: project_search.Hit) void {
+        self.open(hit.path);
+        const active = self.file();
+        if (active.path == null or !std.mem.eql(u8, active.path.?, hit.path)) return;
+        const buffer = &active.doc.buffer;
+        const start = @min(buffer.lineStart(@min(hit.line, buffer.lineCount() - 1)) + hit.column, buffer.len());
+        active.doc.cursor = .{ .anchor = start, .pos = @min(start + hit.len, buffer.len()) };
+        self.focus = .editor;
+        self.afterEdit();
+    }
+
+    /// Searches every file of the open folder for `needle`, on a thread.
+    pub fn findInProject(self: *Editor, needle: []const u8) void {
+        const folder = self.folder orelse return self.notify("Open a folder first", .{});
+        const mailbox = self.mailbox orelse return;
+        if (needle.len == 0) return;
+        const query: @import("../core/search.zig").Query = .{ .needle = needle, .options = self.find.options };
+        self.project.start(mailbox, folder, query, self.settings.search_exclude) catch |err| self.notify("Could not search: {t}", .{err});
     }
 
     pub fn openFolder(self: *Editor, path: []const u8) void {

@@ -96,7 +96,10 @@ third_party/      vendored C dependencies (SDL3)
   Features add entries; only the editor view draws them.
 - **Background work.** A thread hands a result to the main loop with
   `Mailbox.post` (`platform/mailbox.zig`), which wakes the event wait. The
-  main thread takes the item and `Editor.receive` frees it. Dialogs use it.
+  main thread takes the item and `Editor.receive` frees it. Dialogs and
+  find in project use it.
+- **Prompts.** A command that needs typed text returns `Request.prompt`;
+  the workbench opens the prompt and sends the text back to the editor.
 - **Files.** `platform/fs.zig` reads whole files and saves through a
   temporary file and a rename. The buffer keeps the bytes as they are, so
   line endings and the final newline survive a save.
@@ -107,6 +110,16 @@ third_party/      vendored C dependencies (SDL3)
   shows the message for a few seconds and the messages panel keeps it.
 - **Sizes.** `ui/layout.zig` derives every size from the cell size, which is
   the 8x16 font times the zoom (1x to 4x).
+
+## Search
+
+- `core/search.zig` is the one matcher: plain text, match case, whole word.
+  It reads the two halves of the gap buffer, so nothing is copied.
+- `editor/find.zig` keeps the needle, the options and the matches of the
+  active file. While the find or replace prompt is open, the matches are
+  found again after every change and drawn as decorations.
+- `editor/project_search.zig` walks the open folder on a thread and posts
+  the hits of each file. A new search drops the late hits of the old one.
 
 ## Config (`editor/config.zig`)
 

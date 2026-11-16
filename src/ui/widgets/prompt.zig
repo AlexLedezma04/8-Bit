@@ -1,7 +1,8 @@
 //! A one-line input shown above the editor area. Enter confirms, Esc
-//! cancels. The text is a `Document`, so editing keys work as in the editor.
-//! Each kind of prompt keeps its own history; entries that contain the text
-//! are suggested in a list, picked with Up and Down.
+//! cancels; find and replace stay open on Enter. The text is a `Document`,
+//! so editing keys work as in the editor. Each kind of prompt keeps its own
+//! history; entries that contain the text are suggested in a list, picked
+//! with Up and Down.
 const std = @import("std");
 const Document = @import("../../core/edit.zig").Document;
 const Canvas = @import("../canvas.zig").Canvas;
@@ -11,8 +12,13 @@ const list_zig = @import("list.zig");
 const List = list_zig.List;
 const KeyPress = @import("../../platform/event.zig").KeyPress;
 const keymap = @import("../../editor/keymap.zig");
+const Color = @import("../theme.zig").Color;
+const utf8 = @import("../../core/utf8.zig");
 
-pub const Kind = enum { new_file, new_folder, rename };
+pub const Kind = @import("../../editor/editor.zig").PromptKind;
+
+/// A short text at the right end of the box, like "3 of 12".
+pub const Note = struct { text: []const u8, color: Color };
 
 pub const Outcome = union(enum) {
     /// Still open.
@@ -66,6 +72,10 @@ pub const Prompt = struct {
 
     pub fn close(self: *Prompt) void {
         self.kind = null;
+    }
+
+    fn staysOpen(kind: Kind) bool {
+        return kind == .find or kind == .replace;
     }
 
     pub fn text(self: *Prompt) []const u8 {
@@ -145,7 +155,13 @@ pub const Prompt = struct {
             self.result.appendSlice(self.allocator, chosen) catch return .cancel;
         }
         self.remember(kind, self.result.items);
-        self.close();
+        if (!staysOpen(kind)) {
+            self.close();
+        } else if (self.picked) {
+            self.doc.load(self.result.items) catch {};
+            self.doc.move(.line_end, false);
+            self.refresh();
+        }
         return .{ .submit = self.result.items };
     }
 
@@ -181,16 +197,16 @@ pub const Prompt = struct {
     /// The suggestions, as list rows.
     const Rows = struct {
         matches: []const []const u8,
-        color: @import("../theme.zig").Color,
+        color: Color,
 
         pub fn row(self: Rows, index: usize) list_zig.Row {
             return .{ .text = self.matches[index], .color = self.color };
         }
     };
 
-    /// A box at the top middle of `area`, below the tab bar, with the
-    /// suggestions under it.
-    pub fn draw(self: *Prompt, canvas: Canvas, look: Look, area: Rect) void {
+    /// A box at the top middle of `area`, below the tab bar, with `notes`
+    /// at its right end and the suggestions under it.
+    pub fn draw(self: *Prompt, canvas: Canvas, look: Look, area: Rect, notes: []const Note) void {
         if (self.kind == null) return;
         const theme = look.theme;
         const metrics = look.metrics;
@@ -211,17 +227,24 @@ pub const Prompt = struct {
         const label_x = box.x + metrics.cell;
         canvas.drawText(label_x, y, self.label, theme.line_number_current);
         const text_x = label_x + @as(f32, @floatFromInt(self.label.len + 1)) * metrics.cell;
-        const visible = metrics.cols(box.x + box.w - text_x) -| 1;
+        var notes_x = box.x + box.w;
+        var i = notes.len;
+        while (i > 0) {
+            i -= 1;
+            notes_x -= @as(f32, @floatFromInt(notes[i].text.len + 1)) * metrics.cell;
+            canvas.drawText(notes_x, y, notes[i].text, notes[i].color);
+        }
+        const visible = metrics.cols(notes_x - text_x) -| 1;
         const doc = &self.doc;
         const first = (doc.columnOf(doc.cursor.pos) + 1) -| visible;
         const selection = doc.cursor.selection();
         if (selection.len() > 0) {
             const from = doc.columnOf(selection.start) -| first;
-            const to = doc.columnOf(selection.end) -| first;
+            const to = @min(doc.columnOf(selection.end) -| first, visible + 1);
             canvas.fillRect(.{ .x = text_x + @as(f32, @floatFromInt(from)) * metrics.cell, .y = y, .w = @as(f32, @floatFromInt(to - from)) * metrics.cell, .h = metrics.row }, theme.selection);
         }
         const typed = self.text();
-        canvas.drawText(text_x, y, typed[@min(doc.posAtColumn(0, first), typed.len)..], theme.text);
+        canvas.drawText(text_x, y, utf8.prefix(typed[@min(doc.posAtColumn(0, first), typed.len)..], visible + 1), theme.text);
         const cursor_x = text_x + @as(f32, @floatFromInt(doc.columnOf(doc.cursor.pos) - first)) * metrics.cell;
         canvas.fillRect(.{ .x = cursor_x, .y = y, .w = @max(1, @floor(metrics.cell / 8)), .h = metrics.row }, theme.cursor);
 

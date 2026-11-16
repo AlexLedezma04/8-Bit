@@ -52,6 +52,15 @@ pub const Command = enum {
     save_as,
     quit,
     goto_line,
+    find,
+    find_next,
+    find_prev,
+    replace,
+    replace_next,
+    replace_all,
+    toggle_match_case,
+    toggle_whole_word,
+    find_in_project,
     toggle_wrap,
     zoom_in,
     zoom_out,
@@ -133,7 +142,18 @@ fn execute(editor: *Editor, command: Command) !?Request {
         .save => return editor.save(),
         .save_as => return .{ .pick = .save_file },
         .quit => return editor.quit(),
-        .goto_line => editor.notify("Go to line is not available yet", .{}),
+        .goto_line => return .{ .prompt = .goto_line },
+        .find => return .{ .prompt = .find },
+        .replace => return .{ .prompt = .replace },
+        .find_in_project => return .{ .prompt = .find_in_project },
+        .find_next, .find_prev => {
+            if (editor.find.needle.items.len == 0) return .{ .prompt = .find };
+            if (!editor.find.step(doc, if (command == .find_next) .forward else .back)) editor.notify("Not found: {s}", .{editor.find.needle.items});
+        },
+        .replace_next => if (!try editor.find.replaceNext(doc)) editor.notify("Not found: {s}", .{editor.find.needle.items}),
+        .replace_all => editor.notify("Replaced {d}", .{try editor.find.replaceAll(doc)}),
+        .toggle_match_case => editor.notify("Match case {s}", .{if (editor.find.toggle(.match_case)) "on" else "off"}),
+        .toggle_whole_word => editor.notify("Whole word {s}", .{if (editor.find.toggle(.whole_word)) "on" else "off"}),
         .toggle_wrap => {
             view.setWrap(!view.wrap);
             editor.notify("Line wrap {s}", .{if (view.wrap) "on" else "off"});

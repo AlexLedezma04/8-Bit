@@ -13,12 +13,9 @@ const Look = panel.Look;
 const Handled = panel.Handled;
 const list_zig = @import("../widgets/list.zig");
 const List = list_zig.List;
-const prompt_zig = @import("../widgets/prompt.zig");
-const Prompt = prompt_zig.Prompt;
+const Prompt = @import("../widgets/prompt.zig").Prompt;
 const Theme = @import("../theme.zig").Theme;
 const Event = @import("../../platform/event.zig").Event;
-
-const hidden = [_][]const u8{".git"};
 
 pub const FileTree = struct {
     editor: *Editor,
@@ -29,6 +26,10 @@ pub const FileTree = struct {
     version: ?u32 = null,
     /// The folder a new file goes in, or the path being renamed or deleted.
     target: ?[]u8 = null,
+    /// What the prompt asks a name for.
+    naming: Naming = .new_file,
+
+    const Naming = enum { new_file, new_folder, rename };
 
     const Entry = struct { path: []u8, depth: usize, is_dir: bool, open: bool = false };
 
@@ -116,7 +117,7 @@ pub const FileTree = struct {
     }
 
     fn isHidden(name: []const u8) bool {
-        for (hidden) |skip| if (std.mem.eql(u8, name, skip)) return true;
+        for (fs.hidden) |skip| if (std.mem.eql(u8, name, skip)) return true;
         return false;
     }
 
@@ -168,23 +169,29 @@ pub const FileTree = struct {
         return if (entry.is_dir) entry.path else std.fs.path.dirname(entry.path) orelse self.editor.folder;
     }
 
-    fn ask(self: *FileTree, kind: prompt_zig.Kind) void {
-        const target = switch (kind) {
+    fn ask(self: *FileTree, naming: Naming) void {
+        const target = switch (naming) {
             .new_file, .new_folder => self.selectedFolder(),
             .rename => if (self.selectedEntry()) |entry| entry.path else null,
         } orelse return;
         self.setTarget(target);
-        const label = switch (kind) {
+        self.naming = naming;
+        const label = switch (naming) {
             .new_file => "New file:",
             .new_folder => "New folder:",
             .rename => "Rename to:",
         };
-        const initial = if (kind == .rename) std.fs.path.basename(target) else "";
-        self.prompt.open(kind, label, initial) catch {};
+        const initial = if (naming == .rename) std.fs.path.basename(target) else "";
+        self.prompt.open(switch (naming) {
+            .new_file => .new_file,
+            .new_folder => .new_folder,
+            .rename => .rename,
+        }, label, initial) catch {};
     }
 
     /// The name typed in the prompt.
-    pub fn submit(self: *FileTree, kind: prompt_zig.Kind, name: []const u8) void {
+    pub fn submit(self: *FileTree, name: []const u8) void {
+        const kind = self.naming;
         const target = self.target orelse return;
         const editor = self.editor;
         if (name.len == 0 or std.mem.indexOfAny(u8, name, "/\\") != null) {
@@ -205,7 +212,7 @@ pub const FileTree = struct {
         if (kind == .new_file) editor.open(path);
     }
 
-    fn verb(kind: prompt_zig.Kind) []const u8 {
+    fn verb(kind: Naming) []const u8 {
         return switch (kind) {
             .new_file => "create",
             .new_folder => "create",

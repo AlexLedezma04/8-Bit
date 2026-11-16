@@ -17,6 +17,7 @@ pub const Settings = struct {
     theme: []const u8,
     line_numbers: bool,
     undo_limit_mb: u16,
+    search_exclude: []const []const u8,
 };
 
 pub const Loader = struct {

@@ -16,7 +16,7 @@ const App = struct {
     renderer: Renderer,
     editor: Editor,
     workbench: Workbench,
-    mailbox: dialog.Mailbox,
+    mailbox: editor_zig.Mailbox,
     quit: bool = false,
 
     fn draw(self: *App) void {
@@ -64,6 +64,7 @@ const App = struct {
                 dialog.show(pick, &self.window);
                 break :blk null;
             },
+            .prompt => unreachable, // opened by the workbench
             .ask => |question| self.workbench.answer(question.question, dialog.ask(&self.window, question.question, question.name) orelse blk: {
                 self.editor.notify("Could not show a message box", .{});
                 break :blk .cancel;
@@ -87,11 +88,12 @@ pub fn main(init: std.process.Init) !void {
         .workbench = undefined,
         .mailbox = .{ .allocator = init.gpa, .io = init.io, .wake = input.wake },
     };
-    defer app.editor.deinit();
     defer app.mailbox.deinit();
+    defer app.editor.deinit();
     app.workbench.init(&app.editor);
     defer app.workbench.deinit();
     dialog.init(&app.mailbox);
+    app.editor.mailbox = &app.mailbox;
 
     // A high-DPI screen starts at a matching zoom.
     app.editor.screen_zoom = @intFromFloat(std.math.clamp(@round(app.window.displayScale()), Editor.min_zoom, Editor.max_zoom));

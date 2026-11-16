@@ -7,7 +7,7 @@ const editor = @import("../editor/editor.zig");
 const Pick = editor.Pick;
 const Posted = editor.Posted;
 
-pub const Mailbox = @import("mailbox.zig").Mailbox(Posted);
+const Mailbox = editor.Mailbox;
 
 /// Where dialog results go. Set once, before the first `show`.
 var results: *Mailbox = undefined;

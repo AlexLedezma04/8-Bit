@@ -12,6 +12,7 @@ pub const tabs = @import("widgets/tabs.zig");
 pub const editor_view = @import("panels/editor_view.zig");
 pub const file_tree = @import("panels/file_tree.zig");
 pub const messages = @import("panels/messages.zig");
+pub const search = @import("panels/search.zig");
 pub const status_bar = @import("panels/status_bar.zig");
 
 test {

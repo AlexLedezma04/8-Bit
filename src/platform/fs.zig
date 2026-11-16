@@ -5,9 +5,17 @@ const std = @import("std");
 const builtin = @import("builtin");
 const Io = std.Io;
 
+/// Names the file tree never shows and find in project never reads.
+pub const hidden = [_][]const u8{".git"};
+
 /// The bytes end with a 0 that is not part of the file.
 pub fn read(io: Io, allocator: std.mem.Allocator, path: []const u8) ![:0]u8 {
     return Io.Dir.cwd().readFileAllocOptions(io, path, allocator, .unlimited, .of(u8), 0);
+}
+
+/// Like `read`, but fails with `error.StreamTooLong` past `max` bytes.
+pub fn readAtMost(io: Io, allocator: std.mem.Allocator, path: []const u8, max: usize) ![]u8 {
+    return Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(max));
 }
 
 /// Writes `parts` one after another to a temporary file next to `path`, then
