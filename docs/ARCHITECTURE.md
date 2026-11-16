@@ -31,6 +31,19 @@ third_party/      vendored C dependencies (SDL3)
 - `editor/` owns state and depends on the feature modules.
 - `ui/` renders `editor/` state through `platform/renderer.zig`.
 
+## Text model (`core/`)
+
+- `buffer.zig` stores the text as a **gap buffer**: one array with an empty
+  gap at the edit position, so typing is cheap. It is the simplest structure
+  that is fast for normal editing. Move to a piece table only if the gap
+  buffer is measured to be too slow.
+- The buffer keeps the start of every line and updates it on each edit.
+  Only `\n` ends a line, so LF and CRLF files both work.
+- `edit.zig` has `Document`: a buffer, one cursor and the undo history. Every
+  text change goes through `Document.apply`, which returns the changed range.
+- `undo.zig` only stores changes; `Document` replays them through `apply`.
+- One character is one codepoint and one cell. A bad byte is one character.
+
 ## Tests
 
 - `zig build test` runs unit tests and the integration tests in `tests/`.

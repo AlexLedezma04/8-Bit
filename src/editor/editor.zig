@@ -1,8 +1,6 @@
-//! Top-level editor state (open buffers, mode). No SDL types here.
-const Buffer = @import("../core/buffer.zig").Buffer;
-const Cursor = @import("../core/cursor.zig").Cursor;
+//! Top-level editor state (open documents, mode). No SDL types here.
+const Document = @import("../core/edit.zig").Document;
 
 pub const Editor = struct {
-    buffer: Buffer,
-    cursor: Cursor = .{},
+    doc: Document,
 };

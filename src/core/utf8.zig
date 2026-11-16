@@ -1,13 +1,68 @@
-//! UTF-8 helpers.
+//! UTF-8 helpers. One character is one codepoint; a bad byte is one character.
 const std = @import("std");
 
-/// Length in bytes of the codepoint starting with `first`, or null if invalid.
-pub fn seqLen(first: u8) ?u3 {
-    return std.unicode.utf8ByteSequenceLength(first) catch null;
+pub const replacement: u21 = 0xFFFD;
+
+pub const Char = struct { cp: u21, len: u3 };
+
+/// Decodes the character at the start of `text`, which must not be empty.
+pub fn decode(text: []const u8) Char {
+    const bad: Char = .{ .cp = replacement, .len = 1 };
+    const len = std.unicode.utf8ByteSequenceLength(text[0]) catch return bad;
+    if (len > text.len) return bad;
+    const cp = std.unicode.utf8Decode(text[0..len]) catch return bad;
+    return .{ .cp = cp, .len = len };
 }
 
-test "seqLen" {
-    try std.testing.expectEqual(@as(?u3, 1), seqLen('a'));
-    try std.testing.expectEqual(@as(?u3, 3), seqLen(0xE2));
-    try std.testing.expectEqual(@as(?u3, null), seqLen(0xFF));
+/// Boundary after the character at `pos`.
+pub fn next(text: []const u8, pos: usize) usize {
+    return if (pos < text.len) pos + decode(text[pos..]).len else text.len;
+}
+
+/// Boundary before the character that ends at `pos`.
+pub fn prev(text: []const u8, pos: usize) usize {
+    var back: usize = @min(4, pos);
+    while (back > 1) : (back -= 1) {
+        if (decode(text[pos - back .. pos]).len == back) break;
+    }
+    return pos - back;
+}
+
+/// Non-ASCII characters count as word characters.
+pub fn isWord(cp: u21) bool {
+    return cp == '_' or cp >= 0x80 or std.ascii.isAlphanumeric(@intCast(cp));
+}
+
+const testing = std.testing;
+
+test "decode ASCII, 2-, 3- and 4-byte characters" {
+    try testing.expectEqual(Char{ .cp = 'a', .len = 1 }, decode("a"));
+    try testing.expectEqual(Char{ .cp = 0xE9, .len = 2 }, decode("é"));
+    try testing.expectEqual(Char{ .cp = 0x20AC, .len = 3 }, decode("€"));
+    try testing.expectEqual(Char{ .cp = 0x1F600, .len = 4 }, decode("😀"));
+}
+
+test "a bad byte is one replacement character" {
+    const bad: Char = .{ .cp = replacement, .len = 1 };
+    try testing.expectEqual(bad, decode("\xFF"));
+    try testing.expectEqual(bad, decode("\xA9"));
+    try testing.expectEqual(bad, decode("\xE2\x82"));
+    try testing.expectEqual(bad, decode("\xC0\x80"));
+}
+
+test "next and prev walk character boundaries" {
+    const text = "a\u{E9}\u{20AC}\u{1F600}\xFF\xA9z";
+    const bounds = [_]usize{ 0, 1, 3, 6, 10, 11, 12, 13 };
+    for (bounds[0 .. bounds.len - 1], bounds[1..]) |a, b| {
+        try testing.expectEqual(b, next(text, a));
+        try testing.expectEqual(a, prev(text, b));
+    }
+    try testing.expectEqual(text.len, next(text, text.len));
+    try testing.expectEqual(@as(usize, 0), prev(text, 0));
+}
+
+test "isWord" {
+    for ("azAZ09_") |c| try testing.expect(isWord(c));
+    for (" .-\n\t(") |c| try testing.expect(!isWord(c));
+    try testing.expect(isWord(0xE9));
 }
