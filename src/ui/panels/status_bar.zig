@@ -1,5 +1,5 @@
 //! The bottom line: file name with an unsaved dot, or a message, on the
-//! left; cursor position and line ending on the right.
+//! left; git branch, cursor position, line ending and language on the right.
 const std = @import("std");
 const Status = @import("../../editor/editor.zig").Status;
 const Canvas = @import("../canvas.zig").Canvas;
@@ -13,8 +13,11 @@ pub fn draw(canvas: Canvas, look: Look, status: Status, bar: Rect) void {
     canvas.fillRect(bar, theme.status_bar);
     canvas.fillRect(.{ .x = bar.x, .y = bar.y, .w = bar.w, .h = 1 }, theme.border);
 
-    var buffer: [64]u8 = undefined;
-    const right = std.fmt.bufPrint(&buffer, "Ln {d}, Col {d}  {s}  {s}", .{ status.line, status.column, status.line_ending, status.language }) catch "";
+    var buffer: [128]u8 = undefined;
+    const branch = utf8.prefix(status.branch, 30);
+    const right = std.fmt.bufPrint(&buffer, "{s}{s}Ln {d}, Col {d}  {s}  {s}", .{
+        branch, if (branch.len > 0) "  " else "", status.line, status.column, status.line_ending, status.language,
+    }) catch "";
     const total_cols = look.metrics.cols(bar.w);
     // One cell of space at each edge and two between the sides.
     const left_cols = total_cols -| (right.len + 4);

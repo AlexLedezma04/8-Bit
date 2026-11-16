@@ -4,7 +4,20 @@ const std = @import("std");
 const Range = @import("../core/buffer.zig").Range;
 
 /// What a decoration means. The theme decides its color.
-pub const Style = enum { selection, current_line, match, bracket, added, changed, removed };
+pub const Style = enum {
+    selection,
+    current_line,
+    match,
+    bracket,
+    /// Gutter markers of git changes.
+    added,
+    changed,
+    removed,
+    /// Lines of a diff view.
+    diff_added,
+    diff_removed,
+    diff_header,
+};
 
 pub const Decoration = struct {
     /// Text positions. Line decorations apply to every line the range touches.

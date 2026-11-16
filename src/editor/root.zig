@@ -7,9 +7,11 @@ pub const decoration = @import("decoration.zig");
 pub const editor = @import("editor.zig");
 pub const file = @import("file.zig");
 pub const find = @import("find.zig");
+pub const git = @import("git.zig");
 pub const keymap = @import("keymap.zig");
 pub const panes = @import("panes.zig");
 pub const project_search = @import("project_search.zig");
+pub const tracking = @import("tracking.zig");
 pub const view = @import("view.zig");
 
 test {

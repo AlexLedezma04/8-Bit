@@ -76,8 +76,7 @@ pub const EditorView = struct {
             tabs.draw(canvas, look, item.rect.splitTop(look.metrics.bar())[0], self.tabItems(pane), pane.active, focused and active);
             const tab = pane.tab();
             const text = self.textLayout(item.rect, look.metrics, tab);
-            tab.view.cols = text.cols;
-            tab.view.rows = text.rows;
+            tab.view.setSize(&tab.file.doc, self.editor.cursorOf(tab).pos, text.cols, text.rows);
             canvas.setClip(.{ .x = text.gutter.x, .y = text.gutter.y, .w = text.gutter.w + text.text.w, .h = text.text.h });
             drawTab(canvas, look, self.editor, tab, &text, focused and active, &self.spans);
             canvas.setClip(null);
@@ -111,6 +110,7 @@ pub const EditorView = struct {
                 if (item.node != editor.pane) editor.switchTo(item.node, pane.active);
                 const cell = self.textLayout(item.rect, metrics, pane.tab()).cellAt(mouse.x, mouse.y);
                 editor.mouseDown(cell.x, cell.y, mouse.clicks, mouse.mods.shift);
+                if (cell.x < 0) editor.clickGutter(editor.doc().buffer.lineOf(editor.doc().cursor.pos));
                 self.drag = .select;
             },
             .mouse_move => |mouse| switch (self.drag) {
@@ -336,6 +336,9 @@ const Painter = struct {
             .added => theme.git_added,
             .changed => theme.git_changed,
             .removed => theme.git_removed,
+            .diff_added => theme.diff_added,
+            .diff_removed => theme.diff_removed,
+            .diff_header => theme.tab,
         };
     }
 };

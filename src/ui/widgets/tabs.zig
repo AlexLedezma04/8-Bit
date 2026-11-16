@@ -1,7 +1,7 @@
 //! A bar of tabs. Each tab has a title and, after it, a close button, or a
 //! dot while it has unsaved changes. When the tabs do not fit, the bar
-//! scrolls so the active one is in view. Used by editor panes, later by the
-//! sidebar switch and the terminal.
+//! scrolls so the active one is in view. Used by editor panes, the dock
+//! bars, the pages of the git panel and the terminal.
 const std = @import("std");
 const Canvas = @import("../canvas.zig").Canvas;
 const layout = @import("../layout.zig");
@@ -9,13 +9,18 @@ const Rect = layout.Rect;
 const Metrics = layout.Metrics;
 const Look = @import("../panel.zig").Look;
 
-pub const Item = struct { title: []const u8, modified: bool = false };
+pub const Item = struct {
+    title: []const u8,
+    modified: bool = false,
+    /// Has a close button.
+    closable: bool = true,
+};
 
 pub const Hit = struct { index: usize, close: bool };
 
 /// A space, the title, a space, the close button, a space.
 fn cols(item: Item) usize {
-    return (std.unicode.utf8CountCodepoints(item.title) catch item.title.len) + 4;
+    return (std.unicode.utf8CountCodepoints(item.title) catch item.title.len) + @as(usize, if (item.closable) 4 else 2);
 }
 
 /// One tab and the cells it takes.
@@ -55,7 +60,7 @@ pub fn hit(rect: Rect, metrics: Metrics, items: []const Item, active: usize, x: 
     var places = Places.init(items, active, metrics.cols(rect.w));
     while (places.next()) |place| {
         if (cell >= place.x + place.cols) continue;
-        return .{ .index = place.index, .close = cell + 2 == place.x + place.cols };
+        return .{ .index = place.index, .close = items[place.index].closable and cell + 2 == place.x + place.cols };
     }
     return null;
 }
@@ -82,6 +87,7 @@ pub fn draw(canvas: Canvas, look: Look, rect: Rect, items: []const Item, active:
         }
         canvas.drawText(x + metrics.cell, text_y, item.title, if (is_active) theme.tab_active_text else theme.tab_text);
         const mark_x = x + w - 2 * metrics.cell;
+        if (!item.closable) continue;
         if (item.modified) {
             const dot = @floor(metrics.cell / 2);
             canvas.fillRect(.{ .x = mark_x + (metrics.cell - dot) / 2, .y = text_y + (metrics.row - dot) / 2, .w = dot, .h = dot }, theme.unsaved);
@@ -103,6 +109,15 @@ test "clicks find the tab and its close button" {
     try testing.expectEqual(Hit{ .index = 1, .close = false }, hit(rect, metrics, &items, 0, 100 + 9 * 8, 5).?);
     try testing.expectEqual(@as(?Hit, null), hit(rect, metrics, &items, 0, 100 + 30 * 8, 5));
     try testing.expectEqual(@as(?Hit, null), hit(rect, metrics, &items, 0, 50, 5));
+}
+
+test "a tab without a close button is narrower" {
+    const metrics = Metrics.init(1);
+    const items = [_]Item{ .{ .title = "Files", .closable = false }, .{ .title = "Git", .closable = false } };
+    const rect: Rect = .{ .w = 400, .h = 24 };
+    // "Files" takes 7 cells: 0..6.
+    try testing.expectEqual(Hit{ .index = 0, .close = false }, hit(rect, metrics, &items, 0, 5 * 8, 5).?);
+    try testing.expectEqual(Hit{ .index = 1, .close = false }, hit(rect, metrics, &items, 0, 7 * 8, 5).?);
 }
 
 test "too many tabs scroll so the active one is in view" {

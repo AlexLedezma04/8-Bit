@@ -107,10 +107,11 @@ pub fn main(init: std.process.Init) !void {
 
     // Sleep until an event comes, handle all waiting events, then draw one
     // frame only if something changed. Nothing runs while the user does
-    // nothing; a status message only sets a timeout so it can disappear.
+    // nothing; a status message or a pending git diff only sets a timeout.
     var dirty = true;
     while (!app.quit) {
         app.editor.now_ms = input.now();
+        if (app.editor.tick()) dirty = true;
         if (dirty) app.draw();
 
         var next = input.wait(app.workbench.timeLeft());

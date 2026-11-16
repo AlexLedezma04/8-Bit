@@ -73,6 +73,10 @@ pub const Document = struct {
     followers: std.ArrayList(*Cursor) = .empty,
     /// The first line changed since the highlighter last looked.
     changed_from: ?usize = 0,
+    /// Goes up on every change of the text.
+    revision: u64 = 0,
+    /// `apply` refuses to change the text.
+    read_only: bool = false,
 
     pub const max_tab_width = 16;
 
@@ -99,6 +103,7 @@ pub const Document = struct {
     pub fn load(self: *Document, text: []const u8) !void {
         try self.buffer.load(text);
         self.changed_from = 0;
+        self.revision +%= 1;
         self.cursor = .{};
         self.history.clear();
         self.line_ending = .detect(&self.buffer);
@@ -107,9 +112,11 @@ pub const Document = struct {
     /// Replaces `range` with `text` and returns the range the new text takes.
     /// Not recorded for undo. Leaves the buffer unchanged on failure.
     pub fn apply(self: *Document, range: Range, text: []const u8) !Range {
+        if (self.read_only) return error.ReadOnly;
         const line = self.buffer.lineOf(range.start);
         try self.buffer.insert(range.end, text);
         self.changed_from = @min(line, self.changed_from orelse line);
+        self.revision +%= 1;
         self.buffer.delete(range.start, range.len());
         for (self.followers.items) |cursor| cursor.shift(range, text.len);
         return .{ .start = range.start, .end = range.start + text.len };
@@ -768,4 +775,18 @@ test "load resets the cursor and the history and detects the line ending" {
     try testing.expect(!doc.history.isModified());
     try testing.expect(!try doc.undo());
     try testing.expectEqual(LineEnding.crlf, doc.line_ending);
+}
+
+test "every change raises the revision; a read-only text cannot change" {
+    var doc = try testDocument("abc");
+    defer doc.deinit();
+    const loaded = doc.revision;
+    try doc.insert("x");
+    try testing.expect(doc.revision != loaded);
+    const typed = doc.revision;
+    doc.read_only = true;
+    try testing.expectError(error.ReadOnly, doc.insert("y"));
+    try testing.expectError(error.ReadOnly, doc.undo());
+    try expectText(&doc.buffer, "xabc");
+    try testing.expectEqual(typed, doc.revision);
 }

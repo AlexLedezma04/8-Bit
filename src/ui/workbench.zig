@@ -1,7 +1,8 @@
 //! The whole window: places the panels, draws them, and routes input. A key
 //! goes to the prompt if it is open, else to the focused panel, else to the
-//! key bindings. A click gives its panel focus. Dock edges can be dragged.
-//! Prompts that commands ask for are opened here.
+//! key bindings. A click gives its panel focus. Each dock has a tab bar of
+//! its panels, and its edge can be dragged. Prompts that commands ask for
+//! are opened here.
 const std = @import("std");
 const editor_zig = @import("../editor/editor.zig");
 const Editor = editor_zig.Editor;
@@ -24,19 +25,20 @@ const EditorView = @import("panels/editor_view.zig").EditorView;
 const FileTree = @import("panels/file_tree.zig").FileTree;
 const Messages = @import("panels/messages.zig").Messages;
 const Search = @import("panels/search.zig").Search;
+const GitPanel = @import("panels/git.zig").GitPanel;
+const tabs = @import("widgets/tabs.zig");
 const status_bar = @import("panels/status_bar.zig");
 const event = @import("../platform/event.zig");
 const Event = event.Event;
 const Area = editor_zig.Area;
+const SidePanel = editor_zig.SidePanel;
+const BottomPanel = editor_zig.BottomPanel;
 
 pub const Outcome = struct {
     request: ?Request = null,
     /// False when nothing on screen can have changed.
     redraw: bool = true,
 };
-
-/// The panels of the bottom dock, one title each in its bar.
-pub const Bottom = enum { messages, search };
 
 pub const Workbench = struct {
     editor: *Editor,
@@ -48,7 +50,7 @@ pub const Workbench = struct {
     files: FileTree,
     messages: Messages,
     search: Search,
-    bottom: Bottom = .messages,
+    git: GitPanel,
     /// The find prompt asks what to replace; Enter then asks for the replacement.
     replacing: bool = false,
     /// Window size in pixels, and pixels per unit of mouse position.
@@ -71,10 +73,12 @@ pub const Workbench = struct {
             .files = .{ .editor = editor, .prompt = &self.prompt },
             .messages = .{ .editor = editor },
             .search = .{ .editor = editor },
+            .git = .{ .editor = editor, .prompt = &self.prompt },
         };
     }
 
     pub fn deinit(self: *Workbench) void {
+        self.git.deinit();
         self.files.deinit();
         self.view.deinit();
         self.prompt.deinit();
@@ -97,36 +101,51 @@ pub const Workbench = struct {
 
     fn panelOf(self: *Workbench, area: Area) Panel {
         return switch (area) {
-            .sidebar => .of(FileTree, &self.files),
+            .sidebar => self.sidePanel(self.editor.side_panel),
             .editor => .of(EditorView, &self.view),
-            .bottom => self.bottomPanel(self.bottom),
+            .bottom => self.bottomPanel(self.editor.bottom_panel),
         };
     }
 
-    fn bottomPanel(self: *Workbench, which: Bottom) Panel {
+    fn sidePanel(self: *Workbench, which: SidePanel) Panel {
+        return switch (which) {
+            .files => .of(FileTree, &self.files),
+            .git => .of(GitPanel, &self.git),
+        };
+    }
+
+    fn bottomPanel(self: *Workbench, which: BottomPanel) Panel {
         return switch (which) {
             .messages => .of(Messages, &self.messages),
             .search => .of(Search, &self.search),
         };
     }
 
-    /// The cell where a title of the bottom bar starts.
-    fn titleCell(self: *Workbench, which: Bottom) usize {
-        var cell: usize = 1;
-        for (std.enums.values(Bottom)) |other| {
-            if (other == which) break;
-            cell += self.bottomPanel(other).title().len + 2;
+    const max_dock_panels = 4;
+
+    /// One tab per panel of a dock, and the index of the one shown.
+    fn dockTabs(self: *Workbench, area: Area, items: *[max_dock_panels]tabs.Item) struct { []const tabs.Item, usize } {
+        switch (area) {
+            inline .sidebar, .bottom => |dock| {
+                const Which = if (dock == .sidebar) SidePanel else BottomPanel;
+                const values = comptime std.enums.values(Which);
+                inline for (values, 0..) |which, i| {
+                    const shown = if (dock == .sidebar) self.sidePanel(which) else self.bottomPanel(which);
+                    items[i] = .{ .title = shown.title(), .closable = false };
+                }
+                const active = if (dock == .sidebar) self.editor.side_panel else self.editor.bottom_panel;
+                return .{ items[0..values.len], @backingInt(active) };
+            },
+            .editor => unreachable,
         }
-        return cell;
     }
 
-    fn titleAt(self: *Workbench, bar: Rect, x: f32) ?Bottom {
-        const cell = self.metrics().cols(x - bar.x);
-        for (std.enums.values(Bottom)) |which| {
-            const start = self.titleCell(which);
-            if (cell + 1 >= start and cell < start + self.bottomPanel(which).title().len + 1) return which;
+    fn selectDock(self: *Workbench, area: Area, index: usize) void {
+        switch (area) {
+            .sidebar => self.editor.showSide(@fromBackingInt(@intCast(index))),
+            .bottom => self.editor.showBottom(@fromBackingInt(@intCast(index))),
+            .editor => unreachable,
         }
-        return null;
     }
 
     fn rectOf(target: Frame, area: Area) ?Rect {
@@ -164,15 +183,9 @@ pub const Workbench = struct {
             const content = self.contentOf(target, area).?;
             const item = self.panelOf(area);
             if (area != .editor) {
-                const bar = rect.splitTop(style.metrics.bar())[0];
-                canvas.fillRect(bar, theme.status_bar);
-                const active = if (focused) theme.tab_active_text else theme.tab_text;
-                const y = style.metrics.barText(bar.y);
-                if (area == .sidebar) canvas.drawText(bar.x + style.metrics.cell, y, item.title(), active);
-                if (area == .bottom) for (std.enums.values(Bottom)) |which| {
-                    const x = bar.x + @as(f32, @floatFromInt(self.titleCell(which))) * style.metrics.cell;
-                    canvas.drawText(x, y, self.bottomPanel(which).title(), if (which == self.bottom) active else theme.line_number);
-                };
+                var items: [max_dock_panels]tabs.Item = undefined;
+                const shown, const active = self.dockTabs(area, &items);
+                tabs.draw(canvas, style, rect.splitTop(style.metrics.bar())[0], shown, active, focused);
             }
             canvas.setClip(content);
             item.draw(canvas, style, content, focused);
@@ -191,6 +204,7 @@ pub const Workbench = struct {
             .redraw, .wake => {},
             .focus => |gained| if (gained) {
                 self.files.refresh();
+                editor.git.refresh();
                 return .{ .request = editor.checkDisk() };
             },
             .key => |press| return self.onKey(press),
@@ -312,7 +326,7 @@ pub const Workbench = struct {
                 break :blk .{ "Find in folder:", project.items };
             },
             .language => .{ "Language:", "" },
-            .new_file, .new_folder, .rename => unreachable,
+            .new_file, .new_folder, .rename, .branch => unreachable,
         };
         const choices = if (kind == .language) editor.language_names else &.{};
         self.prompt.open(if (self.replacing) .find else kind, label, initial, choices) catch {};
@@ -342,12 +356,10 @@ pub const Workbench = struct {
             .replace => return self.run(.replace_next),
             .goto_line => editor.gotoLine(text),
             .language => editor.setLanguage(text),
+            .branch => editor.git.createBranch(text),
             .find_in_project => {
                 editor.findInProject(text);
-                if (editor.project.running) {
-                    self.bottom = .search;
-                    editor.focusArea(.bottom);
-                }
+                if (editor.project.running) editor.showBottom(.search);
             },
         }
         return .{};
@@ -397,10 +409,15 @@ pub const Workbench = struct {
             self.dragging = edge;
             return .{};
         }
-        if (target.bottom) |rect| if (rect.splitTop(self.metrics().bar())[0].contains(scaled.x, scaled.y)) {
-            self.bottom = self.titleAt(rect, scaled.x) orelse self.bottom;
-            self.editor.focus = .bottom;
-            return .{};
+        inline for (.{ Area.sidebar, Area.bottom }) |area| if (rectOf(target, area)) |rect| {
+            const bar = rect.splitTop(self.metrics().bar())[0];
+            if (bar.contains(scaled.x, scaled.y)) {
+                var items: [max_dock_panels]tabs.Item = undefined;
+                const shown, const active = self.dockTabs(area, &items);
+                const hit = tabs.hit(bar, self.metrics(), shown, active, scaled.x, scaled.y);
+                if (hit) |found| self.selectDock(area, found.index) else self.editor.focus = area;
+                return .{};
+            }
         };
         const area = self.areaAt(scaled.x, scaled.y) orelse return .{ .redraw = false };
         self.editor.focus = area;
@@ -426,11 +443,12 @@ pub const Workbench = struct {
 
     /// The answer to an `ask` request.
     pub fn answer(self: *Workbench, question: editor_zig.Question, choice: editor_zig.Answer) ?Request {
-        if (question == .delete) {
-            self.files.confirmDelete(choice == .yes);
-            return null;
+        switch (question) {
+            .delete => self.files.confirmDelete(choice == .yes),
+            .discard => self.git.confirmDiscard(choice == .yes),
+            .save, .reload => return self.editor.answer(choice),
         }
-        return self.editor.answer(choice);
+        return null;
     }
 
     /// Clipboard text after a `paste` request.
@@ -443,6 +461,6 @@ pub const Workbench = struct {
 
     /// Milliseconds until the screen must change by itself, if ever.
     pub fn timeLeft(self: *const Workbench) ?u64 {
-        return self.editor.messageTimeLeft();
+        return self.editor.timeLeft();
     }
 };
