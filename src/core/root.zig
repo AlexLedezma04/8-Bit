@@ -4,6 +4,7 @@
 pub const buffer = @import("buffer.zig");
 pub const cursor = @import("cursor.zig");
 pub const edit = @import("edit.zig");
+pub const newline = @import("newline.zig");
 pub const search = @import("search.zig");
 pub const undo = @import("undo.zig");
 pub const utf8 = @import("utf8.zig");

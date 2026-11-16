@@ -7,8 +7,8 @@ const testing = std.testing;
 const expectText = app.core.buffer.expectText;
 
 test "type, move, select, delete, undo and redo a file" {
-    var ed: app.editor.editor.Editor = .{ .doc = .init(testing.allocator) };
-    defer ed.doc.deinit();
+    var ed = app.editor.editor.Editor.init(testing.allocator, testing.io);
+    defer ed.deinit();
     const doc = &ed.doc;
 
     try doc.buffer.load("fn main() void {\r\n}\r\n");

@@ -60,6 +60,11 @@ pub const History = struct {
     /// Oldest entries are dropped when `size` passes this many bytes.
     max_size: usize = 8 * 1024 * 1024,
     group: enum { none, first, rest } = .none,
+    /// Value of `done` when the text was last saved; null once that state
+    /// cannot be reached by undo or redo any more.
+    saved: ?usize = 0,
+    /// The next entry starts a new step, so undo can stop at the saved state.
+    sealed: bool = false,
 
     pub fn init(allocator: std.mem.Allocator) History {
         return .{ .allocator = allocator };
@@ -69,6 +74,23 @@ pub const History = struct {
         self.done = 0;
         self.dropRedo();
         self.entries.deinit(self.allocator);
+    }
+
+    /// Forgets everything, for a newly loaded text.
+    pub fn clear(self: *History) void {
+        self.done = 0;
+        self.dropRedo();
+        self.markSaved();
+    }
+
+    pub fn markSaved(self: *History) void {
+        self.saved = self.done;
+        self.sealed = true;
+    }
+
+    /// True when the text differs from the last saved state.
+    pub fn isModified(self: *const History) bool {
+        return self.saved != self.done;
     }
 
     /// Changes pushed until `endGroup` form one step.
@@ -98,11 +120,12 @@ pub const History = struct {
         self.dropRedo();
         var entry = captured;
         switch (self.group) {
-            .none => entry.chained = self.done > 0 and entry.continues(self.entries.items[self.done - 1]),
+            .none => entry.chained = !self.sealed and self.done > 0 and entry.continues(self.entries.items[self.done - 1]),
             .first => self.group = .rest,
             .rest => entry.chained = true,
         }
         if (self.group != .none) entry.kind = .other;
+        self.sealed = false;
         self.entries.appendAssumeCapacity(entry);
         self.done += 1;
         self.size += entry.size();
@@ -135,6 +158,9 @@ pub const History = struct {
     fn dropRedo(self: *History) void {
         self.release(self.entries.items[self.done..]);
         self.entries.shrinkRetainingCapacity(self.done);
+        if (self.saved) |saved| if (saved > self.done) {
+            self.saved = null;
+        };
     }
 
     fn dropOldest(self: *History) void {
@@ -145,6 +171,7 @@ pub const History = struct {
         self.release(items[0..count]);
         self.entries.replaceRangeAssumeCapacity(0, count, &.{});
         self.done -= count;
+        if (self.saved) |saved| self.saved = if (saved < count) null else saved - count;
     }
 };
 
@@ -239,4 +266,51 @@ test "the oldest entries are dropped past the size limit" {
     try pushInsert(&history, &buffer, 5, &too_big, .other);
     try testing.expectEqual(@as(usize, 0), history.entries.items.len);
     try testing.expectEqual(@as(usize, 0), history.size);
+}
+
+test "modified follows undo and redo back to the saved state" {
+    var buffer = Buffer.init(testing.allocator);
+    defer buffer.deinit();
+    try buffer.load("0123456789abcdef");
+    var history = History.init(testing.allocator);
+    defer history.deinit();
+    try testing.expect(!history.isModified());
+
+    try pushInsert(&history, &buffer, 0, "a", .insert);
+    try testing.expect(history.isModified());
+    history.markSaved();
+    try testing.expect(!history.isModified());
+
+    // Typing after a save starts a new step.
+    try pushInsert(&history, &buffer, 1, "b", .insert);
+    try testing.expect(!history.peek(.back).?.chained);
+    try testing.expect(history.isModified());
+    history.step(.back);
+    try testing.expect(!history.isModified());
+    history.step(.back);
+    try testing.expect(history.isModified());
+
+    // A new change drops the redo entries, and the saved state with them.
+    try pushInsert(&history, &buffer, 0, "c", .other);
+    history.step(.back);
+    try testing.expect(history.isModified());
+
+    history.clear();
+    try testing.expect(!history.isModified());
+    try testing.expectEqual(@as(usize, 0), history.entries.items.len);
+}
+
+test "dropping old entries can drop the saved state" {
+    var buffer = Buffer.init(testing.allocator);
+    defer buffer.deinit();
+    try buffer.load("0123456789abcdef");
+    var history = History.init(testing.allocator);
+    defer history.deinit();
+    history.max_size = 2 * (@sizeOf(Entry) + 1);
+
+    for ("abc", 0..) |*char, pos| try pushInsert(&history, &buffer, pos, char[0..1], .other);
+    try testing.expectEqual(@as(?usize, null), history.saved);
+    history.markSaved();
+    try pushInsert(&history, &buffer, 3, "d", .other);
+    try testing.expectEqual(@as(?usize, 1), history.saved);
 }

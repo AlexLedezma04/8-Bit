@@ -148,7 +148,9 @@
 #define SDL_SENSOR_DISABLED 1
 #define SDL_GPU_DISABLED 1
 #define SDL_POWER_DISABLED 1
-#define SDL_DIALOG_DISABLED 1
+
+/* Selects the Windows 8.1 API level, which the file dialogs and DPI support need. */
+#define HAVE_SHELLSCALINGAPI_H 1
 
 #define SDL_PROCESS_DUMMY 1
 #define SDL_TRAY_DUMMY 1

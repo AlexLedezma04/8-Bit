@@ -37,6 +37,7 @@
 #include "SDL_x11video.h"
 #include "SDL_x11xfixes.h"
 #include "SDL_x11xinput2.h"
+#include "SDL_x11messagebox.h"
 #include "SDL_x11shape.h"
 #include "SDL_x11xsync.h"
 #include "SDL_x11xtest.h"
@@ -278,7 +279,7 @@ static SDL_VideoDevice *X11_CreateDevice(void)
 VideoBootStrap X11_bootstrap = {
     "x11", "SDL X11 video driver",
     X11_CreateDevice,
-    NULL, // no message box
+    X11_ShowMessageBox,
     false
 };
 

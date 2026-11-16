@@ -3,9 +3,8 @@ const std = @import("std");
 const c = @import("sdl.zig").c;
 const Window = @import("window.zig").Window;
 const Color = @import("../ui/theme.zig").Color;
+const Rect = @import("../ui/layout.zig").Rect;
 const bitmap_font = @import("../font/bitmap_font.zig");
-
-pub const Rect = struct { x: f32, y: f32, w: f32, h: f32 };
 
 /// Glyphs sent to SDL in one call.
 const batch_size = 128;
@@ -42,6 +41,14 @@ pub const Renderer = struct {
     /// Width and height of one character on screen.
     pub fn cellSize(self: *const Renderer) f32 {
         return bitmap_font.cell * self.scale;
+    }
+
+    /// Size of the drawing area in pixels.
+    pub fn outputSize(self: *const Renderer) struct { w: f32, h: f32 } {
+        var w: c_int = 0;
+        var h: c_int = 0;
+        _ = c.SDL_GetRenderOutputSize(self.handle, &w, &h);
+        return .{ .w = @floatFromInt(w), .h = @floatFromInt(h) };
     }
 
     /// Draws one line of text with its top-left corner at `x`, `y`.
