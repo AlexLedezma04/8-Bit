@@ -1,6 +1,7 @@
 //! Text of one file as a gap buffer, plus an index of line starts.
 const std = @import("std");
 const assert = std.debug.assert;
+const utf8 = @import("utf8.zig");
 
 /// Half-open range of buffer positions.
 pub const Range = struct {
@@ -79,6 +80,17 @@ pub const Buffer = struct {
 
     pub fn byteAt(self: *const Buffer, pos: usize) u8 {
         return self.data[self.raw(pos)];
+    }
+
+    /// The character that starts at `pos`, which must be before the end.
+    pub fn charAt(self: *const Buffer, pos: usize) utf8.Char {
+        var window: [4]u8 = undefined;
+        return utf8.decode(self.copy(pos, &window));
+    }
+
+    /// The whole text as the part before the gap and the part after it.
+    pub fn halves(self: *const Buffer) [2][]const u8 {
+        return .{ self.data[0..self.gap_start], self.data[self.gap_end..] };
     }
 
     /// Copies text starting at `pos` into `dest` and returns the filled part,
@@ -222,6 +234,17 @@ test "copy a range across the gap, and byteAt" {
     try testing.expectEqualStrings("", b.copy(11, &out));
     try testing.expectEqual(@as(u8, '-'), b.byteAt(5));
     try testing.expectEqual(@as(u8, '9'), b.byteAt(10));
+}
+
+test "charAt and halves see through the gap" {
+    var b = Buffer.init(testing.allocator);
+    defer b.deinit();
+    try b.load("a\u{E9}z");
+    try b.insert(1, "-");
+    try testing.expectEqual(utf8.Char{ .cp = 0xE9, .len = 2 }, b.charAt(2));
+    const halves = b.halves();
+    try testing.expectEqualStrings("a-", halves[0]);
+    try testing.expectEqualStrings("\u{E9}z", halves[1]);
 }
 
 test "load replaces the text" {

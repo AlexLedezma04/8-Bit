@@ -28,6 +28,16 @@ pub fn prev(text: []const u8, pos: usize) usize {
     return pos - back;
 }
 
+/// The first `max_chars` characters of `text`, or all of it if it is shorter.
+pub fn prefix(text: []const u8, max_chars: usize) []const u8 {
+    var end: usize = 0;
+    for (0..max_chars) |_| {
+        if (end == text.len) break;
+        end = next(text, end);
+    }
+    return text[0..end];
+}
+
 /// Non-ASCII characters count as word characters.
 pub fn isWord(cp: u21) bool {
     return cp == '_' or cp >= 0x80 or std.ascii.isAlphanumeric(@intCast(cp));
@@ -59,6 +69,12 @@ test "next and prev walk character boundaries" {
     }
     try testing.expectEqual(text.len, next(text, text.len));
     try testing.expectEqual(@as(usize, 0), prev(text, 0));
+}
+
+test "prefix cuts between characters" {
+    try testing.expectEqualStrings("h\u{E9}", prefix("h\u{E9}llo", 2));
+    try testing.expectEqualStrings("", prefix("abc", 0));
+    try testing.expectEqualStrings("abc", prefix("abc", 9));
 }
 
 test "isWord" {

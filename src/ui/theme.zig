@@ -20,6 +20,7 @@ pub const Theme = struct {
     text: Color = rgb(0xd0d0d0),
     cursor: Color = rgb(0xf0c040),
     selection: Color = rgb(0x2c3a5c),
+    search_match: Color = rgb(0x5c4a1c),
 
     gutter: Color = rgb(0x14141e),
     line_number: Color = rgb(0x5a5a70),
@@ -27,6 +28,8 @@ pub const Theme = struct {
 
     status_bar: Color = rgb(0x20202e),
     status_bar_text: Color = rgb(0xa0a0b4),
+    status_bar_message: Color = rgb(0xf0f0f0),
+    unsaved: Color = rgb(0xf0c040),
 
     tab: Color = rgb(0x181824),
     tab_active: Color = rgb(0x101018),
