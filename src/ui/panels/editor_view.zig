@@ -30,7 +30,7 @@ const Painter = struct {
 
     fn drawLine(self: Painter, visible: VisibleLine) void {
         for (self.decorations) |item| self.drawDecoration(item, visible);
-        if (visible.first_wrap == 0) self.drawLineNumber(visible);
+        if (visible.first_wrap == 0 and self.layout.number_cols > 0) self.drawLineNumber(visible);
         self.drawText(visible);
         self.drawCursor(visible);
     }

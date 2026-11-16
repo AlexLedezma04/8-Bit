@@ -11,12 +11,14 @@ src/
   terminal/       VT parser + screen grid; pty comes from platform/
   editor/         app state, commands, keymap, view, decoration, config
   ui/
-    theme.zig     colours; theme files live in assets/themes
+    theme.zig     the color struct; theme files live in assets/themes
     layout.zig    where the parts of the window are; all sizes come from the cell
     widgets/      reusable controls (prompt, lists, tabs, ...)
     panels/       one view per feature (editor_view, status_bar, file_tree, git, terminal)
   font/           bitmap font
-assets/
+assets/           built-in ZON files, embedded in the exe (assets.zig lists them)
+  settings.zon    default settings
+  keymap.zon      user key bindings (empty: the defaults are in keymap.zig)
   themes/         theme data files
   grammars/       one grammar file per language
 tests/            integration tests (unit tests stay next to the code)
@@ -55,7 +57,7 @@ third_party/      vendored C dependencies (SDL3)
   atlas pixels and places the glyphs of a line. Both are SDL-free.
 - `platform/renderer.zig` uploads the atlas once and draws all text through
   `drawText`, in batches, tinted with the text color.
-- `ui/theme.zig` is the only file with color values.
+- Color values live only in theme files; `ui/theme.zig` defines the struct.
 - The main loop sleeps until an event comes, handles all waiting events, and
   draws one frame only if something changed.
 
@@ -86,6 +88,27 @@ third_party/      vendored C dependencies (SDL3)
   shows the message for a few seconds.
 - **Sizes.** `ui/layout.zig` derives every size from the cell size, which is
   the 8x8 font times the zoom (1x to 8x).
+
+## Config (`editor/config.zig`)
+
+- **One loader.** `Loader.load(T, name, base)` reads `name.zon` from the
+  user config folder (`platform/fs.zig` `configDir`), else the built-in file
+  from `assets/`, and parses it with `std.zon` over `base`: fields the file
+  leaves out keep their value. A bad file is reported with `notify` and its
+  line, and `base` is kept. `builtin(T, name)` parses a built-in file, which
+  must set every field. Feature modules get parsed values, never files.
+- A type with `fromZon` is written as that function's argument, so a theme
+  color is a hex number.
+- **Settings.** `Editor.reloadConfig` loads `settings.zon` and `keymap.zon`
+  into one arena and applies them. It runs at start and whenever a file in
+  the config folder is saved. `open_settings` opens the user's file, made
+  from the built-in one the first time.
+- **Themes.** `ui/theme.zig` `load` fills the chosen theme over the built-in
+  dark theme. `next_theme` cycles built-in and user themes and writes the
+  name into `settings.zon` with `setField`, which keeps the rest of the file.
+  The UI loads the theme again when `Editor.config_version` changes.
+- **Keys.** `keymap.zon` is a list of `.{ .key = "ctrl+shift+k", .command = "..." }`.
+  `keymap.withUser` puts these before the defaults, so they win.
 
 ## Tests
 

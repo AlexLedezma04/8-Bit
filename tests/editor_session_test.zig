@@ -194,9 +194,10 @@ test "errors are reported with notify" {
     _ = editor.receive(.dialog_failed);
     try testing.expectEqualStrings("No file dialog: install zenity", editor.currentMessage().?);
 
-    // Saving into a folder that does not exist fails and keeps the changes.
+    // Saving under a file, as if it were a folder, fails and keeps the changes.
+    try session.write("plain.txt", "");
     editor.typeText("x");
-    _ = try session.pick(.save_file, "missing-folder/file.txt");
+    _ = try session.pick(.save_file, "plain.txt/file.txt");
     try testing.expect(std.mem.startsWith(u8, editor.currentMessage().?, "Could not save"));
     try testing.expect(editor.isModified());
 }

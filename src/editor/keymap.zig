@@ -1,11 +1,16 @@
-//! Default key bindings: a table from key combos to commands.
+//! Key bindings: the default table from key combos to commands, and the
+//! user's bindings from `keymap.zon`, which win over the defaults.
 const std = @import("std");
 const event = @import("../platform/event.zig");
 const Key = event.Key;
 const Mods = event.Mods;
+const KeyPress = event.KeyPress;
 const Command = @import("commands.zig").Command;
 
 pub const Binding = struct { key: Key, mods: Mods = .{}, command: Command };
+
+/// One binding of `keymap.zon`, by name: `.{ .key = "ctrl+shift+k", .command = "save" }`.
+pub const Entry = struct { key: []const u8, command: []const u8 };
 
 const ctrl: Mods = .{ .ctrl = true };
 const shift: Mods = .{ .shift = true };
@@ -56,6 +61,8 @@ const others = [_]Binding{
     .{ .key = .char('='), .mods = ctrl_shift, .command = .zoom_in },
     .{ .key = .char('-'), .mods = ctrl, .command = .zoom_out },
     .{ .key = .char('0'), .mods = ctrl, .command = .zoom_reset },
+    .{ .key = .char(','), .mods = ctrl, .command = .open_settings },
+    .{ .key = .char('t'), .mods = alt, .command = .next_theme },
 };
 
 pub const default = moves ++ selecting(moves) ++ others;
@@ -69,6 +76,46 @@ fn selecting(comptime bindings: [moves.len]Binding) [moves.len]Binding {
         binding.command = @field(Command, "select_" ++ direction);
     }
     return result;
+}
+
+/// The user's bindings, then the defaults, so the first match is the user's.
+/// A bad key or command name is reported and skipped.
+pub fn withUser(arena: std.mem.Allocator, entries: []const Entry, notifier: anytype) ![]const Binding {
+    var list: std.ArrayList(Binding) = try .initCapacity(arena, entries.len + default.len);
+    for (entries) |entry| {
+        const press = parseKey(entry.key) orelse {
+            notifier.notify("keymap.zon: unknown key \"{s}\"", .{entry.key});
+            continue;
+        };
+        const command = Command.fromName(entry.command) orelse {
+            notifier.notify("keymap.zon: unknown command \"{s}\"", .{entry.command});
+            continue;
+        };
+        list.appendAssumeCapacity(.{ .key = press.key, .mods = press.mods, .command = command });
+    }
+    list.appendSliceAssumeCapacity(&default);
+    return list.items;
+}
+
+/// Reads a combo like "ctrl+shift+k", "alt+f4" or "ctrl++". Keys are one
+/// character or a name of `Key`.
+pub fn parseKey(text: []const u8) ?KeyPress {
+    var rest = text;
+    var mods: Mods = .{};
+    while (true) {
+        inline for (.{ "ctrl", "shift", "alt" }) |name| {
+            if (rest.len > name.len + 1 and std.mem.startsWith(u8, rest, name ++ "+")) {
+                @field(mods, name) = true;
+                rest = rest[name.len + 1 ..];
+                break;
+            }
+        } else break;
+    }
+    const key: Key = if (rest.len == 1 and std.ascii.isPrint(rest[0]))
+        .char(std.ascii.toLower(rest[0]))
+    else
+        std.meta.stringToEnum(Key, rest) orelse return null;
+    return .{ .key = key, .mods = mods };
 }
 
 pub fn lookup(bindings: []const Binding, key: Key, mods: Mods) ?Command {
@@ -122,6 +169,31 @@ test "unbound combos and plain letters give nothing" {
     try expectBinding(null, .char('z'), .{});
     try expectBinding(null, .char('q'), alt);
     try expectBinding(null, .f5, ctrl);
+}
+
+test "parseKey reads mods and key names" {
+    try testing.expectEqual(KeyPress{ .key = .char('k'), .mods = ctrl_shift }, parseKey("ctrl+shift+K").?);
+    try testing.expectEqual(KeyPress{ .key = .f4, .mods = alt }, parseKey("alt+f4").?);
+    try testing.expectEqual(KeyPress{ .key = .char('+'), .mods = ctrl }, parseKey("ctrl++").?);
+    try testing.expectEqual(KeyPress{ .key = .page_down }, parseKey("page_down").?);
+    try testing.expectEqual(@as(?KeyPress, null), parseKey("ctrl+nope"));
+    try testing.expectEqual(@as(?KeyPress, null), parseKey("ctrl+"));
+}
+
+test "user bindings win, bad names are reported and skipped" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var notifier: @import("config.zig").TestNotifier = .{};
+    const bindings = try withUser(arena.allocator(), &.{
+        .{ .key = "ctrl+s", .command = "quit" },
+        .{ .key = "ctrl+nope", .command = "save" },
+        .{ .key = "f5", .command = "no_such_command" },
+    }, &notifier);
+    try testing.expectEqual(@as(?Command, .quit), lookup(bindings, .char('s'), ctrl));
+    try testing.expectEqual(@as(?Command, .save_as), lookup(bindings, .char('s'), ctrl_shift));
+    try testing.expectEqual(@as(?Command, null), lookup(bindings, .f5, .{}));
+    try testing.expectEqualStrings("keymap.zon: unknown command \"no_such_command\"", notifier.message);
+    try testing.expectEqual(default.len + 1, bindings.len);
 }
 
 test "no combo is bound twice" {
