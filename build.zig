@@ -26,6 +26,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/tests.zig"),
         .target = target,
         .optimize = optimize,
+        .imports = &.{.{ .name = "assets", .module = addAssets(b) }},
     });
     const integration = b.createModule(.{
         .root_source_file = b.path("tests/root.zig"),
@@ -68,11 +69,19 @@ fn addEditor(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.buil
             .target = target,
             .optimize = optimize,
             .link_libc = true,
-            .imports = &.{.{ .name = "sdl", .module = sdl_c.createModule() }},
+            .imports = &.{
+                .{ .name = "sdl", .module = sdl_c.createModule() },
+                .{ .name = "assets", .module = addAssets(b) },
+            },
         }),
     });
     exe.root_module.linkLibrary(buildSdl(b, target, optimize));
     return exe;
+}
+
+/// The built-in data files of assets/, embedded in the exe.
+fn addAssets(b: *std.Build) *std.Build.Module {
+    return b.createModule(.{ .root_source_file = b.path("assets/assets.zig") });
 }
 
 fn buildSdl(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
@@ -105,8 +114,8 @@ fn buildSdl(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.built
         .windows => {
             mod.addCSourceFiles(.{ .root = root, .files = &windows_sources, .flags = flags });
             for ([_][]const u8{
-                "user32",  "gdi32",   "shell32", "ole32",   "oleaut32", "advapi32",
-                "winmm",   "imm32",   "version", "setupapi", "cfgmgr32", "kernel32",
+                "user32", "gdi32", "shell32", "ole32",    "oleaut32", "advapi32",
+                "winmm",  "imm32", "version", "setupapi", "cfgmgr32", "kernel32",
             }) |name| mod.linkSystemLibrary(name, .{});
         },
         .linux => {

@@ -41,8 +41,9 @@ pub const Layout = struct {
 
     const min_number_cols = 2;
 
-    pub fn init(width: f32, height: f32, metrics: Metrics, line_count: usize, gutter_text_cols: usize) Layout {
-        const number_cols = @max(min_number_cols, std.math.log10_int(line_count) + 1);
+    /// Without a `line_count`, there are no line numbers.
+    pub fn init(width: f32, height: f32, metrics: Metrics, line_count: ?usize, gutter_text_cols: usize) Layout {
+        const number_cols = if (line_count) |count| @max(min_number_cols, std.math.log10_int(count) + 1) else 0;
         const gutter_cols: f32 = @floatFromInt(1 + gutter_text_cols + number_cols + 1);
         const gutter_w = @min(gutter_cols * metrics.cell, width);
         const status_h = @min(metrics.row, height);
@@ -102,6 +103,7 @@ test "the gutter fits the largest line number and the gutter text" {
     try testing.expectEqual(@as(usize, 3), Layout.init(800, 600, .init(1), 100, 0).number_cols);
     try testing.expectEqual(@as(usize, 7), Layout.init(800, 600, .init(1), 1_000_000, 0).number_cols);
     try testing.expectEqual(@as(f32, 8 * 12), Layout.init(800, 600, .init(1), 1, 8).gutter.w);
+    try testing.expectEqual(@as(f32, 8 * 2), Layout.init(800, 600, .init(1), null, 0).gutter.w);
 }
 
 test "a tiny window gives no cells instead of negative sizes" {

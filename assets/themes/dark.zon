@@ -1,0 +1,39 @@
+.{
+    .background = 0x101018,
+    .text = 0xd0d0d0,
+    .cursor = 0xf0c040,
+    .selection = 0x2c3a5c,
+    .search_match = 0x5c4a1c,
+
+    .gutter = 0x14141e,
+    .line_number = 0x5a5a70,
+    .line_number_current = 0xd0d0d0,
+
+    .status_bar = 0x20202e,
+    .status_bar_text = 0xa0a0b4,
+    .status_bar_message = 0xf0f0f0,
+    .unsaved = 0xf0c040,
+
+    .tab = 0x181824,
+    .tab_active = 0x101018,
+    .tab_text = 0x8080a0,
+    .tab_active_text = 0xd0d0d0,
+
+    .list_selection = 0x2a2a40,
+
+    .git_added = 0x60c060,
+    .git_changed = 0x60a0e0,
+    .git_removed = 0xe06060,
+
+    .syntax = .{
+        .comment = 0x6a7a6a,
+        .keyword = 0xd080d0,
+        .string = 0x90c070,
+        .number = 0xe0a060,
+        .constant = 0xe0a060,
+        .type = 0x60c0c0,
+        .function = 0x70a0f0,
+        .operator = 0xb0b0c0,
+        .punctuation = 0x9090a0,
+    },
+}

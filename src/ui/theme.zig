@@ -1,6 +1,7 @@
-//! Every color the UI uses, with the default dark theme as field defaults.
-//! No other file holds color values; themes only fill in this struct.
+//! The colors the UI uses. Their values live in theme files (assets/themes
+//! and the user's themes folder); a file is written as hex numbers.
 const std = @import("std");
+const config = @import("../editor/config.zig");
 
 pub const Color = struct {
     r: u8,
@@ -11,52 +12,97 @@ pub const Color = struct {
     pub fn rgb(hex: u24) Color {
         return .{ .r = @truncate(hex >> 16), .g = @truncate(hex >> 8), .b = @truncate(hex) };
     }
+
+    pub const fromZon = rgb;
 };
 
-const rgb = Color.rgb;
-
 pub const Theme = struct {
-    background: Color = rgb(0x101018),
-    text: Color = rgb(0xd0d0d0),
-    cursor: Color = rgb(0xf0c040),
-    selection: Color = rgb(0x2c3a5c),
-    search_match: Color = rgb(0x5c4a1c),
+    background: Color,
+    text: Color,
+    cursor: Color,
+    selection: Color,
+    search_match: Color,
 
-    gutter: Color = rgb(0x14141e),
-    line_number: Color = rgb(0x5a5a70),
-    line_number_current: Color = rgb(0xd0d0d0),
+    gutter: Color,
+    line_number: Color,
+    line_number_current: Color,
 
-    status_bar: Color = rgb(0x20202e),
-    status_bar_text: Color = rgb(0xa0a0b4),
-    status_bar_message: Color = rgb(0xf0f0f0),
-    unsaved: Color = rgb(0xf0c040),
+    status_bar: Color,
+    status_bar_text: Color,
+    status_bar_message: Color,
+    unsaved: Color,
 
-    tab: Color = rgb(0x181824),
-    tab_active: Color = rgb(0x101018),
-    tab_text: Color = rgb(0x8080a0),
-    tab_active_text: Color = rgb(0xd0d0d0),
+    tab: Color,
+    tab_active: Color,
+    tab_text: Color,
+    tab_active_text: Color,
 
-    list_selection: Color = rgb(0x2a2a40),
+    list_selection: Color,
 
-    git_added: Color = rgb(0x60c060),
-    git_changed: Color = rgb(0x60a0e0),
-    git_removed: Color = rgb(0xe06060),
+    git_added: Color,
+    git_changed: Color,
+    git_removed: Color,
 
-    syntax: Syntax = .{},
+    syntax: Syntax,
 };
 
 pub const Syntax = struct {
-    comment: Color = rgb(0x6a7a6a),
-    keyword: Color = rgb(0xd080d0),
-    string: Color = rgb(0x90c070),
-    number: Color = rgb(0xe0a060),
-    constant: Color = rgb(0xe0a060),
-    type: Color = rgb(0x60c0c0),
-    function: Color = rgb(0x70a0f0),
-    operator: Color = rgb(0xb0b0c0),
-    punctuation: Color = rgb(0x9090a0),
+    comment: Color,
+    keyword: Color,
+    string: Color,
+    number: Color,
+    constant: Color,
+    type: Color,
+    function: Color,
+    operator: Color,
+    punctuation: Color,
 };
 
+const folder = config.theme_folder;
+
+/// The theme `name`. Colors it leaves out come from the dark theme.
+pub fn load(loader: config.Loader, arena: std.mem.Allocator, name: []const u8, notifier: anytype) Theme {
+    const base = config.builtin(Theme, loader.gpa, arena, folder ++ "/dark");
+    const file = std.fmt.allocPrint(arena, folder ++ "/{s}", .{name}) catch return base;
+    return loader.load(Theme, arena, file, base, notifier);
+}
+
+const testing = std.testing;
+
 test "rgb splits a hex color" {
-    try std.testing.expectEqual(Color{ .r = 0x12, .g = 0x34, .b = 0x56, .a = 255 }, rgb(0x123456));
+    try testing.expectEqual(Color{ .r = 0x12, .g = 0x34, .b = 0x56, .a = 255 }, Color.rgb(0x123456));
+}
+
+test "built-in themes set every color" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const dark = config.builtin(Theme, testing.allocator, arena.allocator(), "themes/dark");
+    const light = config.builtin(Theme, testing.allocator, arena.allocator(), "themes/light");
+    try testing.expectEqual(Color.rgb(0x101018), dark.background);
+    try testing.expectEqual(Color.rgb(0xf8f8f4), light.background);
+}
+
+test "a theme that leaves colors out gets them from the default theme" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.createDirPath(testing.io, folder);
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "themes/mine.zon", .data = ".{ .text = 0xff0000, .syntax = .{ .keyword = 0x00ff00 } }" });
+    const loader: config.Loader = .{
+        .io = testing.io,
+        .gpa = testing.allocator,
+        .dir = try std.fmt.allocPrint(arena.allocator(), ".zig-cache/tmp/{s}", .{tmp.sub_path}),
+    };
+
+    var notifier: config.TestNotifier = .{};
+    const mine = load(loader, arena.allocator(), "mine", &notifier);
+    try testing.expectEqual(Color.rgb(0xff0000), mine.text);
+    try testing.expectEqual(Color.rgb(0x00ff00), mine.syntax.keyword);
+    try testing.expectEqual(Color.rgb(0x101018), mine.background);
+    try testing.expectEqual(Color.rgb(0x6a7a6a), mine.syntax.comment);
+
+    const light = load(loader, arena.allocator(), "light", &notifier);
+    try testing.expectEqual(Color.rgb(0xf8f8f4), light.background);
+    try testing.expectEqualStrings("", notifier.message);
 }

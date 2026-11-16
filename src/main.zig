@@ -12,7 +12,9 @@ const Request = editor_zig.Request;
 const commands = @import("editor/commands.zig");
 const keymap = @import("editor/keymap.zig");
 const decoration = @import("editor/decoration.zig");
-const Theme = @import("ui/theme.zig").Theme;
+const theme_zig = @import("ui/theme.zig");
+const Theme = theme_zig.Theme;
+const fs = @import("platform/fs.zig");
 const layout_zig = @import("ui/layout.zig");
 const Layout = layout_zig.Layout;
 const editor_view = @import("ui/panels/editor_view.zig");
@@ -26,21 +28,27 @@ const App = struct {
     renderer: Renderer,
     editor: Editor,
     mailbox: dialog.Mailbox,
-    theme: Theme = .{},
+    theme: Theme = undefined,
+    /// The `config_version` of the editor that `theme` was loaded for.
+    theme_version: ?u32 = null,
     layout: Layout = undefined,
     /// A key press ran a command, so the text it also types is dropped.
     swallow_text: bool = false,
     quit: bool = false,
 
-    /// Lays out the window for the current size, zoom and document.
+    /// Lays out the window for the current size, zoom, settings and document.
     fn updateLayout(self: *App) void {
+        if (self.theme_version != self.editor.config_version) {
+            self.theme = theme_zig.load(self.editor.loader, self.editor.config_arena.allocator(), self.editor.settings.theme, &self.editor);
+            self.theme_version = self.editor.config_version;
+        }
         const size = self.renderer.outputSize();
         self.renderer.scale = @floatFromInt(self.editor.zoom);
         self.layout = .init(
             size.w,
             size.h,
             .init(self.editor.zoom),
-            self.editor.doc.buffer.lineCount(),
+            if (self.editor.settings.line_numbers) self.editor.doc.buffer.lineCount() else null,
             decoration.gutterTextWidth(self.editor.decorations.items),
         );
         self.editor.view.cols = self.layout.cols;
@@ -63,7 +71,7 @@ const App = struct {
             .redraw, .focus => {},
             .mouse_up => return false,
             .key => |press| {
-                const command = keymap.lookup(&keymap.default, press.key, press.mods);
+                const command = keymap.lookup(self.editor.bindings, press.key, press.mods);
                 self.swallow_text = command != null;
                 if (command) |found| self.fulfil(commands.run(&self.editor, found));
             },
@@ -150,8 +158,11 @@ pub fn main(init: std.process.Init) !void {
     dialog.init(&app.mailbox);
 
     // A high-DPI screen starts at a matching zoom.
-    app.editor.default_zoom = @intFromFloat(std.math.clamp(@round(2 * app.window.displayScale()), Editor.min_zoom, Editor.max_zoom));
-    app.editor.zoom = app.editor.default_zoom;
+    app.editor.screen_zoom = @intFromFloat(std.math.clamp(@round(2 * app.window.displayScale()), Editor.min_zoom, Editor.max_zoom));
+    const config_dir = fs.configDir(init.gpa, init.environ_map);
+    defer if (config_dir) |dir| init.gpa.free(dir);
+    app.editor.loader.dir = config_dir;
+    app.editor.reloadConfig();
     app.updateLayout();
     if (args.len > 1) app.fulfil(app.editor.open(args[1]));
 

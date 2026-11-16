@@ -1,0 +1,15 @@
+.{
+    // Columns between tab stops, 1 to 16.
+    .tab_width = 4,
+    // The Tab key inserts spaces instead of a tab character.
+    .use_spaces = true,
+    // Long lines continue on the next row.
+    .wrap = false,
+    // Screen pixels per font pixel, 1 to 8. 0 matches the screen.
+    .zoom = 0,
+    // A file in assets/themes or in the themes folder of the config folder.
+    .theme = "dark",
+    .line_numbers = true,
+    // Memory for undo steps, in MiB.
+    .undo_limit_mb = 8,
+}

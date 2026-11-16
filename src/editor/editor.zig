@@ -7,6 +7,8 @@ const Range = @import("../core/buffer.zig").Range;
 const View = @import("view.zig").View;
 const Decoration = @import("decoration.zig").Decoration;
 const fs = @import("../platform/fs.zig");
+const config = @import("config.zig");
+const keymap = @import("keymap.zig");
 
 pub const Pick = enum { open_file, save_file, open_folder };
 
@@ -56,6 +58,15 @@ pub const Editor = struct {
     /// Screen pixels per font pixel.
     zoom: u8 = 2,
     default_zoom: u8 = 2,
+    /// The zoom that matches the screen, used when the setting is 0.
+    screen_zoom: u8 = 2,
+    loader: config.Loader,
+    settings: config.Settings = undefined,
+    bindings: []const keymap.Binding = &keymap.default,
+    /// Holds the settings and bindings until the next `reloadConfig`.
+    config_arena: std.heap.ArenaAllocator,
+    /// Goes up on every `reloadConfig`, so the UI knows to load the theme again.
+    config_version: u32 = 0,
     /// Current time. The main loop sets it before it passes on input.
     now_ms: u64 = 0,
     message: [160]u8 = undefined,
@@ -74,8 +85,18 @@ pub const Editor = struct {
 
     const Pending = union(enum) { quit, open: []u8 };
 
+    /// Starts with the built-in settings. Set `loader.dir` and call
+    /// `reloadConfig` to use the user's files.
     pub fn init(allocator: std.mem.Allocator, io: std.Io) Editor {
-        return .{ .allocator = allocator, .io = io, .doc = .init(allocator) };
+        var editor: Editor = .{
+            .allocator = allocator,
+            .io = io,
+            .doc = .init(allocator),
+            .loader = .{ .io = io, .gpa = allocator },
+            .config_arena = .init(allocator),
+        };
+        editor.reloadConfig();
+        return editor;
     }
 
     pub fn deinit(self: *Editor) void {
@@ -85,6 +106,7 @@ pub const Editor = struct {
         self.decorations.deinit(self.allocator);
         self.clipboard.deinit(self.allocator);
         self.doc.deinit();
+        self.config_arena.deinit();
     }
 
     // Messages
@@ -215,6 +237,10 @@ pub const Editor = struct {
         };
         self.doc.history.markSaved();
         self.notify("Saved {s}", .{self.name()});
+        if (self.loader.dir) |dir| {
+            const inside = path.len > dir.len and std.mem.startsWith(u8, path, dir) and std.fs.path.isSep(path[dir.len]);
+            if (inside) self.reloadConfig();
+        }
         const action = self.pending orelse return null;
         self.pending = null;
         return self.perform(action);
@@ -295,7 +321,7 @@ pub const Editor = struct {
     /// exist yet opens as an empty document that will be saved there.
     fn load(self: *Editor, path: []u8) void {
         const text = fs.read(self.io, self.allocator, path) catch |err| switch (err) {
-            error.FileNotFound => self.allocator.alloc(u8, 0) catch unreachable,
+            error.FileNotFound => self.allocator.dupeSentinel(u8, "", 0) catch return,
             else => {
                 self.notify("Could not open {s}: {t}", .{ std.fs.path.basename(path), err });
                 self.allocator.free(path);
@@ -312,6 +338,61 @@ pub const Editor = struct {
         self.view.top = .{};
         self.view.left = 0;
         self.afterEdit();
+    }
+
+    // Config
+
+    /// Loads the settings and key bindings again and applies them.
+    pub fn reloadConfig(self: *Editor) void {
+        _ = self.config_arena.reset(.retain_capacity);
+        const arena = self.config_arena.allocator();
+        const base = config.builtin(config.Settings, self.allocator, arena, "settings");
+        const settings = self.loader.load(config.Settings, arena, "settings", base, self);
+        self.settings = settings;
+        self.doc.tab_width = std.math.clamp(settings.tab_width, 1, Document.max_tab_width);
+        self.doc.soft_tabs = settings.use_spaces;
+        self.doc.history.max_size = @as(usize, settings.undo_limit_mb) << 20;
+        self.view.setWrap(settings.wrap);
+        self.setZoom(if (settings.zoom == 0) self.screen_zoom else settings.zoom);
+        self.default_zoom = self.zoom;
+        const entries = self.loader.load([]const keymap.Entry, arena, "keymap", &.{}, self);
+        self.bindings = keymap.withUser(arena, entries, self) catch &keymap.default;
+        self.config_version +%= 1;
+    }
+
+    /// Opens the user's settings file, made from the built-in one if missing.
+    pub fn openSettings(self: *Editor) !?Request {
+        var buffer: [std.fs.max_path_bytes]u8 = undefined;
+        const path = self.loader.path(&buffer, "settings") orelse {
+            self.notify("No config folder", .{});
+            return null;
+        };
+        if (fs.read(self.io, self.allocator, path)) |text| self.allocator.free(text) else |err| switch (err) {
+            error.FileNotFound => try fs.write(self.io, path, &.{self.loader.source(self.allocator, "settings", self).?}),
+            else => return err,
+        }
+        return self.open(path);
+    }
+
+    /// Switches to the next theme and remembers it in the settings file.
+    pub fn nextTheme(self: *Editor) !void {
+        const arena = self.config_arena.allocator();
+        const names = try self.loader.names(arena, config.theme_folder);
+        var next: usize = 0;
+        for (names, 1..) |theme, after| {
+            if (std.mem.eql(u8, theme, self.settings.theme)) next = after % names.len;
+        }
+        self.notify("Theme: {s}", .{names[next]});
+        var buffer: [std.fs.max_path_bytes]u8 = undefined;
+        const path = self.loader.path(&buffer, "settings") orelse {
+            self.settings.theme = names[next];
+            self.config_version +%= 1;
+            return;
+        };
+        const value = try std.fmt.allocPrint(arena, "\"{s}\"", .{names[next]});
+        const text = try config.setField(arena, self.loader.source(arena, "settings", self).?, "theme", value);
+        try fs.write(self.io, path, &.{text});
+        self.reloadConfig();
     }
 
     // Display

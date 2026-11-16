@@ -55,6 +55,8 @@ pub const Command = enum {
     zoom_in,
     zoom_out,
     zoom_reset,
+    open_settings,
+    next_theme,
 
     pub fn fromName(name: []const u8) ?Command {
         return std.meta.stringToEnum(Command, name);
@@ -125,6 +127,8 @@ fn execute(editor: *Editor, command: Command) !?Request {
         .zoom_in => editor.setZoom(@as(i32, editor.zoom) + 1),
         .zoom_out => editor.setZoom(@as(i32, editor.zoom) - 1),
         .zoom_reset => editor.setZoom(editor.default_zoom),
+        .open_settings => return try editor.openSettings(),
+        .next_theme => try editor.nextTheme(),
     }
     return null;
 }
