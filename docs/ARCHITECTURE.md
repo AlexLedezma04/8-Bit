@@ -44,6 +44,17 @@ third_party/      vendored C dependencies (SDL3)
 - `undo.zig` only stores changes; `Document` replays them through `apply`.
 - One character is one codepoint and one cell. A bad byte is one character.
 
+## Drawing text
+
+- `font/font8x8.zig` holds the glyph bits (ASCII, Latin-1, box drawing; a
+  missing character is a small box). `font/bitmap_font.zig` turns them into
+  atlas pixels and places the glyphs of a line. Both are SDL-free.
+- `platform/renderer.zig` uploads the atlas once and draws all text through
+  `drawText`, in batches, tinted with the text color.
+- `ui/theme.zig` is the only file with color values.
+- The main loop sleeps until an event comes, handles all waiting events, and
+  draws one frame only if something changed.
+
 ## Tests
 
 - `zig build test` runs unit tests and the integration tests in `tests/`.
