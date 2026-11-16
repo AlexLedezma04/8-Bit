@@ -17,6 +17,9 @@ const keymap = @import("keymap.zig");
 const Find = @import("find.zig").Find;
 const project_search = @import("project_search.zig");
 const ProjectSearch = project_search.ProjectSearch;
+const Rules = @import("../syntax/grammar.zig").Rules;
+const language = @import("../syntax/language.zig");
+const comment = @import("../core/comment.zig");
 
 pub const Pick = enum { open_file, save_file, open_folder };
 
@@ -30,7 +33,10 @@ pub const Question = enum {
 };
 
 /// What the prompt asks for.
-pub const PromptKind = enum { new_file, new_folder, rename, find, replace, goto_line, find_in_project };
+pub const PromptKind = enum { new_file, new_folder, rename, find, replace, goto_line, find_in_project, language };
+
+/// The language of a file without a grammar.
+pub const plain_text = "Plain Text";
 
 /// `yes` is the first button of a question, `no` the second.
 pub const Answer = enum { yes, no, cancel };
@@ -71,6 +77,7 @@ pub const Status = struct {
     line: usize,
     column: usize,
     line_ending: []const u8,
+    language: []const u8,
     message: ?[]const u8,
 };
 
@@ -105,6 +112,10 @@ pub const Editor = struct {
     loader: config.Loader,
     settings: config.Settings = undefined,
     bindings: []const keymap.Binding = &keymap.default,
+    /// Every grammar, built-in and the user's.
+    languages: []const Rules = &.{},
+    /// "Plain Text" and the name of each grammar, for picking one.
+    language_names: []const []const u8 = &.{},
     /// Holds the settings and bindings until the next `reloadConfig`.
     config_arena: std.heap.ArenaAllocator,
     /// Goes up on every `reloadConfig`, so the UI knows to load the theme again.
@@ -319,7 +330,10 @@ pub const Editor = struct {
         const start = doc_.buffer.lineStart(doc_.buffer.lineOf(@min(cursor.pos, doc_.buffer.len())));
         const list = &item.decorations;
         const matches = if (self.find.shown and item.file == self.file()) self.find.matches.items else &.{};
-        list.ensureUnusedCapacity(self.allocator, matches.len + 2) catch return;
+        list.ensureUnusedCapacity(self.allocator, matches.len + 4) catch return;
+        if (item.file.highlighter.matchBracket(doc_, cursor.pos)) |pair| for (pair) |at| {
+            list.appendAssumeCapacity(.{ .range = .{ .start = at, .end = at + 1 }, .kind = .{ .text_background = .bracket } });
+        };
         list.appendAssumeCapacity(.{ .range = .{ .start = start, .end = start }, .kind = .{ .line_background = .current_line } });
         if (cursor.selection().len() > 0) list.appendAssumeCapacity(.{ .range = cursor.selection(), .kind = .{ .text_background = .selection } });
         for (matches) |range| list.appendAssumeCapacity(.{ .range = range, .kind = .{ .text_background = .match } });
@@ -620,6 +634,7 @@ pub const Editor = struct {
                             self.notify("Could not save: {t}", .{err});
                             return null;
                         };
+                        self.applyLanguage(self.file());
                         return self.save();
                     },
                     .open_folder => self.openFolder(picked.path),
@@ -663,6 +678,7 @@ pub const Editor = struct {
             const moved = std.mem.concat(self.allocator, u8, &.{ new, path[old.len..] }) catch continue;
             defer self.allocator.free(moved);
             item.setPath(moved) catch {};
+            self.applyLanguage(item);
         }
     }
 
@@ -736,6 +752,7 @@ pub const Editor = struct {
         const arena = self.config_arena.allocator();
         const base = config.builtin(config.Settings, self.allocator, arena, "settings");
         self.settings = self.loader.load(config.Settings, arena, "settings", base, self);
+        self.loadLanguages(arena);
         for (self.files.items) |item| self.applySettings(item);
         self.applyWrap(self.root);
         self.setZoom(if (self.settings.zoom == 0) self.screen_zoom else self.settings.zoom);
@@ -749,6 +766,61 @@ pub const Editor = struct {
         target.doc.tab_width = std.math.clamp(self.settings.tab_width, 1, Document.max_tab_width);
         target.doc.soft_tabs = self.settings.use_spaces;
         target.doc.history.max_size = @as(usize, self.settings.undo_limit_mb) << 20;
+        self.applyLanguage(target);
+    }
+
+    fn loadLanguages(self: *Editor, arena: std.mem.Allocator) void {
+        var rules: std.ArrayList(Rules) = .empty;
+        var names: std.ArrayList([]const u8) = .empty;
+        names.append(arena, plain_text) catch {};
+        const files_ = self.loader.names(arena, config.grammar_folder) catch &.{};
+        for (files_) |file_| {
+            const path = std.fmt.allocPrint(arena, config.grammar_folder ++ "/{s}", .{file_}) catch continue;
+            const grammar = self.loader.load(@import("../syntax/grammar.zig").Grammar, arena, path, .{ .name = "" }, self);
+            if (grammar.name.len == 0) {
+                self.notify("{s}.zon: no .name", .{path});
+                continue;
+            }
+            rules.append(arena, Rules.init(arena, grammar) catch continue) catch continue;
+            names.append(arena, grammar.name) catch {};
+        }
+        self.languages = rules.items;
+        self.language_names = names.items;
+    }
+
+    /// Picks the grammar of a file: the one chosen by hand, else by its
+    /// name or first line.
+    fn applyLanguage(self: *const Editor, target: *File) void {
+        if (target.language) |chosen| return target.highlighter.setRules(language.byName(self.languages, chosen));
+        const path = target.path orelse return target.highlighter.setRules(null);
+        var head: [128]u8 = undefined;
+        const start = target.doc.buffer.copy(0, &head);
+        const first_line = start[0 .. std.mem.findScalar(u8, start, '\n') orelse start.len];
+        target.highlighter.setRules(language.detect(self.languages, path, first_line));
+    }
+
+    /// The language of the active file, chosen by hand.
+    pub fn setLanguage(self: *Editor, chosen: []const u8) void {
+        const found = language.byName(self.languages, chosen);
+        if (found == null and !std.ascii.eqlIgnoreCase(chosen, plain_text)) return self.notify("No language named {s}", .{chosen});
+        const target = self.file();
+        const copy_ = self.allocator.dupe(u8, if (found) |rules| rules.grammar.name else plain_text) catch return;
+        if (target.language) |old| self.allocator.free(old);
+        target.language = copy_;
+        self.applyLanguage(target);
+    }
+
+    /// Comments or uncomments the selected lines.
+    pub fn toggleComment(self: *Editor) !void {
+        const rules = self.file().highlighter.rules orelse return self.notify("No comments in {s}", .{plain_text});
+        const markers = rules.commentMarkers() orelse return self.notify("No comments in {s}", .{rules.grammar.name});
+        try comment.toggle(self.doc(), markers.start, markers.end);
+    }
+
+    /// Moves to the bracket that matches the one at the cursor.
+    pub fn gotoBracket(self: *Editor) void {
+        const pair = self.file().highlighter.matchBracket(self.doc(), self.doc().cursor.pos) orelse return;
+        self.doc().cursor = .{ .pos = pair[1] };
     }
 
     fn applyWrap(self: *Editor, node: *Node) void {
@@ -806,6 +878,7 @@ pub const Editor = struct {
             .line = doc_.buffer.lineOf(pos) + 1,
             .column = doc_.columnOf(pos) + 1,
             .line_ending = doc_.line_ending.name(),
+            .language = if (self.file().highlighter.rules) |rules| rules.grammar.name else plain_text,
             .message = self.currentMessage(),
         };
     }

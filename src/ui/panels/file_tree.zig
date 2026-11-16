@@ -186,7 +186,7 @@ pub const FileTree = struct {
             .new_file => .new_file,
             .new_folder => .new_folder,
             .rename => .rename,
-        }, label, initial) catch {};
+        }, label, initial, &.{}) catch {};
     }
 
     /// The name typed in the prompt.

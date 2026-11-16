@@ -1,0 +1,34 @@
+.{
+    .name = "PowerShell",
+    .extensions = .{ "ps1", "psm1", "psd1" },
+    .shebangs = .{"pwsh"},
+    .line_comments = .{"#"},
+    .block_comment = .{ .start = "<#", .end = "#>" },
+    .strings = .{
+        .{ .start = "@\"", .end = "\"@", .escape = false, .multiline = true },
+        .{ .start = "@'", .end = "'@", .escape = false, .multiline = true },
+        .{ .start = "\"", .escape = false },
+        .{ .start = "'", .escape = false },
+    },
+    .keywords = .{
+        "begin",  "break", "catch", "class",   "continue", "data",    "do",     "dynamicparam", "else",
+        "elseif", "end",   "enum",  "exit",    "filter",   "finally", "for",    "foreach",      "function",
+        "if",     "in",    "param", "process", "return",   "static",  "switch", "throw",        "trap",
+        "try",    "until", "using", "while",
+    },
+    .types = .{
+        "array",  "bool",   "byte", "char", "datetime", "double", "hashtable", "int", "long",
+        "object", "string", "void",
+    },
+    .builtins = .{
+        "Copy-Item",    "Foreach-Object", "Get-ChildItem",  "Get-Content",       "Get-Item",
+        "Get-Location", "Import-Module",  "Invoke-Command", "Invoke-WebRequest", "Move-Item",
+        "New-Item",     "Out-File",       "Out-Null",       "Remove-Item",       "Select-Object",
+        "Set-Content",  "Set-Location",   "Sort-Object",    "Start-Process",     "Test-Path",
+        "Where-Object", "Write-Error",    "Write-Host",     "Write-Output",
+    },
+    .ignore_case = true,
+    .operators = "=+*/%!<>|",
+    .word_chars = "-",
+    .prefixes = .{ .{ .text = "$", .style = .builtin }, .{ .text = "-", .style = .keyword } },
+}

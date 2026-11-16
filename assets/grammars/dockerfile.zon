@@ -1,0 +1,15 @@
+.{
+    .name = "Dockerfile",
+    .extensions = .{ "dockerfile", "containerfile" },
+    .file_names = .{ "Dockerfile", "Containerfile" },
+    .line_comments = .{"#"},
+    .strings = .{ .{ .start = "\"" }, .{ .start = "'", .escape = false } },
+    .keywords = .{
+        "add",   "arg",        "as",      "cmd", "copy",  "entrypoint", "env",  "expose", "from",    "healthcheck",
+        "label", "maintainer", "onbuild", "run", "shell", "stopsignal", "user", "volume", "workdir",
+    },
+    .ignore_case = true,
+    .functions = false,
+    .operators = "=&|\\",
+    .prefixes = .{.{ .text = "$", .style = .builtin }},
+}

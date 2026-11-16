@@ -2,6 +2,7 @@
 //! Import every file of this folder here, so `zig build test` runs its tests.
 
 pub const buffer = @import("buffer.zig");
+pub const comment = @import("comment.zig");
 pub const cursor = @import("cursor.zig");
 pub const edit = @import("edit.zig");
 pub const newline = @import("newline.zig");

@@ -1,0 +1,21 @@
+.{
+    .name = "CSS",
+    .extensions = .{ "css", "scss", "less" },
+    .block_comment = .{ .start = "/*", .end = "*/" },
+    .strings = .{ .{ .start = "\"" }, .{ .start = "'" } },
+    .constants = .{
+        "absolute", "auto",    "block",   "bold",   "bottom",       "center",      "fixed", "flex",    "grid",
+        "hidden",   "inherit", "initial", "inline", "inline-block", "left",        "none",  "normal",  "relative",
+        "right",    "solid",   "dashed",  "sticky", "top",          "transparent", "unset", "visible",
+    },
+    .key_before = ":",
+    .operators = ">+~*=",
+    .word_chars = "-",
+    .prefixes = .{
+        .{ .text = "@", .style = .keyword },
+        .{ .text = "#", .style = .constant },
+        .{ .text = ".", .style = .type },
+        .{ .text = "!", .style = .keyword },
+        .{ .text = "$", .style = .builtin },
+    },
+}

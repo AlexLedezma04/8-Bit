@@ -1,0 +1,31 @@
+.{
+    .name = "TypeScript",
+    .extensions = .{ "ts", "tsx", "mts", "cts" },
+    .shebangs = .{ "ts-node", "deno" },
+    .line_comments = .{"//"},
+    .block_comment = .{ .start = "/*", .end = "*/" },
+    .strings = .{ .{ .start = "`", .multiline = true }, .{ .start = "\"" }, .{ .start = "'" } },
+    .keywords = .{
+        "async",    "await",      "break",  "case",      "catch",     "class",      "const",   "continue",  "debugger",
+        "default",  "delete",     "do",     "else",      "export",    "extends",    "finally", "for",       "from",
+        "function", "get",        "if",     "import",    "in",        "instanceof", "let",     "new",       "of",
+        "return",   "set",        "static", "super",     "switch",    "this",       "throw",   "try",       "typeof",
+        "var",      "void",       "while",  "with",      "yield",     "abstract",   "as",      "asserts",   "declare",
+        "enum",     "implements", "infer",  "interface", "is",        "keyof",      "module",  "namespace", "override",
+        "private",  "protected",  "public", "readonly",  "satisfies", "type",       "unique",
+    },
+    .types = .{
+        "any",  "bigint", "boolean", "never",    "number", "object",  "string", "symbol", "unknown",
+        "void", "Record", "Partial", "Readonly", "Array",  "Promise",
+    },
+    .constants = .{ "true", "false", "null", "undefined", "NaN", "Infinity" },
+    .builtins = .{
+        "console", "window", "document", "globalThis", "Math",    "JSON",   "Object",  "Array",
+        "String",  "Number", "Boolean",  "Promise",    "Map",     "Set",    "WeakMap", "Symbol",
+        "Date",    "RegExp", "Error",    "BigInt",     "require", "module", "exports", "process",
+    },
+    .operators = "+-*/%=<>!&|^~?:",
+    .word_chars = "$",
+    .prefixes = .{.{ .text = "@", .style = .builtin }},
+    .line_starts = .{.{ .text = "#!", .style = .comment }},
+}

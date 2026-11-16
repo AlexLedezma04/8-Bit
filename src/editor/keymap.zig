@@ -89,6 +89,11 @@ const others = [_]Binding{
     .{ .key = .char('c'), .mods = alt, .command = .toggle_match_case },
     .{ .key = .char('w'), .mods = alt, .command = .toggle_whole_word },
     .{ .key = .char('f'), .mods = ctrl_shift, .command = .find_in_project },
+    .{ .key = .char('/'), .mods = ctrl, .command = .toggle_comment },
+    // Where `/` is Shift+7, as on Latin American, Spanish and German keyboards.
+    .{ .key = .char('7'), .mods = ctrl_shift, .command = .toggle_comment },
+    .{ .key = .char('m'), .mods = ctrl_shift, .command = .goto_bracket },
+    .{ .key = .char('l'), .mods = alt, .command = .set_language },
 };
 
 pub const default = moves ++ selecting(moves) ++ others;

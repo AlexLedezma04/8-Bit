@@ -4,6 +4,7 @@
     .cursor = 0xced0d6,
     .selection = 0x214283,
     .search_match = 0x32593d,
+    .matching_bracket = 0x3b514d,
     .current_line = 0x26282e,
 
     .gutter = 0x1e1f22,
@@ -35,6 +36,7 @@
         .number = 0x2aacb8,
         .constant = 0xc77dbb,
         .type = 0x16baac,
+        .builtin = 0x8888c6,
         .function = 0x56a8f5,
         .operator = 0xbcbec4,
         .punctuation = 0xbcbec4,

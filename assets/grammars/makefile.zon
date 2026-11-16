@@ -1,0 +1,23 @@
+.{
+    .name = "Makefile",
+    .extensions = .{ "mk", "mak" },
+    .file_names = .{ "Makefile", "makefile", "GNUmakefile" },
+    .line_comments = .{"#"},
+    .strings = .{ .{ .start = "\"" }, .{ .start = "'" } },
+    .keywords = .{
+        "define",  "else",     "endef",   "endif",    "export",   "ifdef", "ifeq", "ifndef", "ifneq",
+        "include", "override", "private", "sinclude", "unexport", "vpath",
+    },
+    .builtins = .{
+        "abspath", "addprefix", "addsuffix",  "and",        "basename",  "call",     "dir",      "error",    "eval",
+        "file",    "filter",    "filter-out", "findstring", "firstword", "flavor",   "foreach",  "if",       "info",
+        "join",    "lastword",  "notdir",     "or",         "origin",    "patsubst", "realpath", "shell",    "sort",
+        "strip",   "subst",     "suffix",     "value",      "warning",   "wildcard", "word",     "wordlist", "words",
+    },
+    .numbers = false,
+    .functions = false,
+    .key_before = ":=?+",
+    .operators = "=:?+|@%",
+    .word_chars = "-",
+    .prefixes = .{.{ .text = "$", .style = .builtin }},
+}

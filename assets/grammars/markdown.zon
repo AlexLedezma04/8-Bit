@@ -1,0 +1,18 @@
+.{
+    .name = "Markdown",
+    .extensions = .{ "md", "markdown", "mdown", "mkd" },
+    .block_comment = .{ .start = "<!--", .end = "-->" },
+    .strings = .{
+        .{ .start = "```", .escape = false, .multiline = true },
+        .{ .start = "`", .escape = false },
+    },
+    .numbers = false,
+    .functions = false,
+    .punctuation = "",
+    .line_starts = .{
+        .{ .text = "#", .style = .keyword },
+        .{ .text = ">", .style = .comment },
+        .{ .text = "---", .style = .punctuation },
+        .{ .text = "***", .style = .punctuation },
+    },
+}

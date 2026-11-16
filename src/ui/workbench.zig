@@ -311,9 +311,11 @@ pub const Workbench = struct {
                 }
                 break :blk .{ "Find in folder:", project.items };
             },
+            .language => .{ "Language:", "" },
             .new_file, .new_folder, .rename => unreachable,
         };
-        self.prompt.open(if (self.replacing) .find else kind, label, initial) catch {};
+        const choices = if (kind == .language) editor.language_names else &.{};
+        self.prompt.open(if (self.replacing) .find else kind, label, initial, choices) catch {};
     }
 
     /// Find follows the text of its prompt as it is typed.
@@ -339,6 +341,7 @@ pub const Workbench = struct {
             },
             .replace => return self.run(.replace_next),
             .goto_line => editor.gotoLine(text),
+            .language => editor.setLanguage(text),
             .find_in_project => {
                 editor.findInProject(text);
                 if (editor.project.running) {

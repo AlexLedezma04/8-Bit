@@ -1,0 +1,28 @@
+.{
+    .name = "CMake",
+    .extensions = .{"cmake"},
+    .file_names = .{"CMakeLists.txt"},
+    .line_comments = .{"#"},
+    .block_comment = .{ .start = "#[[", .end = "]]" },
+    .strings = .{.{ .start = "\"" }},
+    .keywords = .{
+        "add_compile_options",        "add_custom_command",     "add_custom_target",          "add_definitions",
+        "add_dependencies",           "add_executable",         "add_library",                "add_subdirectory",
+        "add_test",                   "break",                  "cmake_minimum_required",     "configure_file",
+        "continue",                   "else",                   "elseif",                     "enable_testing",
+        "endforeach",                 "endfunction",            "endif",                      "endmacro",
+        "endwhile",                   "file",                   "find_package",               "foreach",
+        "function",                   "get_filename_component", "if",                         "include",
+        "include_directories",        "install",                "link_directories",           "list",
+        "macro",                      "message",                "option",                     "project",
+        "return",                     "set",                    "set_target_properties",      "string",
+        "target_compile_definitions", "target_compile_options", "target_include_directories", "target_link_libraries",
+        "unset",                      "while",
+    },
+    .constants = .{
+        "on", "off", "true", "false", "yes", "no", "public", "private", "interface", "required",
+    },
+    .ignore_case = true,
+    .operators = "",
+    .prefixes = .{.{ .text = "$", .style = .builtin }},
+}
