@@ -66,7 +66,10 @@ pub const Loader = struct {
         }
         if (self.dir) |dir| {
             const sub = try std.fs.path.join(arena, &.{ dir, folder });
-            try list.appendSlice(arena, try fs.list(self.io, arena, sub, ".zon"));
+            for (try fs.list(self.io, arena, sub)) |entry| {
+                if (!entry.is_dir and std.mem.endsWith(u8, entry.name, ".zon"))
+                    try list.append(arena, entry.name[0 .. entry.name.len - ".zon".len]);
+            }
         }
         std.mem.sort([]const u8, list.items, {}, lessThan);
         var unique: usize = 0;

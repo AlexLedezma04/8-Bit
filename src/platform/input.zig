@@ -108,6 +108,8 @@ fn translate(ev: c.SDL_Event) ?Event {
             .left_down = ev.motion.state & c.SDL_BUTTON_LMASK != 0,
         } },
         c.SDL_EVENT_MOUSE_WHEEL => .{ .wheel = .{
+            .x = ev.wheel.mouse_x,
+            .y = ev.wheel.mouse_y,
             .dx = ev.wheel.x,
             .dy = ev.wheel.y,
             .mods = modsOf(c.SDL_GetModState()),

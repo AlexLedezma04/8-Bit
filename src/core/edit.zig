@@ -69,6 +69,8 @@ pub const Document = struct {
     tab_width: usize = 4,
     /// The Tab key inserts spaces instead of a tab character.
     soft_tabs: bool = true,
+    /// Cursors of other views of this text. `apply` keeps them on their text.
+    followers: std.ArrayList(*Cursor) = .empty,
 
     pub const max_tab_width = 16;
 
@@ -79,6 +81,16 @@ pub const Document = struct {
     pub fn deinit(self: *Document) void {
         self.buffer.deinit();
         self.history.deinit();
+        self.followers.deinit(self.buffer.allocator);
+    }
+
+    pub fn follow(self: *Document, cursor: *Cursor) !void {
+        try self.followers.append(self.buffer.allocator, cursor);
+    }
+
+    pub fn unfollow(self: *Document, cursor: *Cursor) void {
+        const at = std.mem.indexOfScalar(*Cursor, self.followers.items, cursor) orelse return;
+        _ = self.followers.swapRemove(at);
     }
 
     /// Replaces everything with a newly opened text and forgets the history.
@@ -94,6 +106,7 @@ pub const Document = struct {
     pub fn apply(self: *Document, range: Range, text: []const u8) !Range {
         try self.buffer.insert(range.end, text);
         self.buffer.delete(range.start, range.len());
+        for (self.followers.items) |cursor| cursor.shift(range, text.len);
         return .{ .start = range.start, .end = range.start + text.len };
     }
 
@@ -379,6 +392,20 @@ test "apply returns the changed range" {
     try expectText(&doc.buffer, "hello you");
     try testing.expectEqual(Range{ .start = 0, .end = 0 }, try doc.apply(.{ .start = 0, .end = 6 }, ""));
     try expectText(&doc.buffer, "you");
+}
+
+test "apply moves the cursors of other views" {
+    var doc = try testDocument("one two");
+    defer doc.deinit();
+    var other: Cursor = .{ .pos = 5 };
+    try doc.follow(&other);
+    try doc.insert("> ");
+    try testing.expectEqual(@as(usize, 7), other.pos);
+    _ = try doc.undo();
+    try testing.expectEqual(@as(usize, 5), other.pos);
+    doc.unfollow(&other);
+    try doc.insert("x");
+    try testing.expectEqual(@as(usize, 5), other.pos);
 }
 
 test "insert replaces the selection" {

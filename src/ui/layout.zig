@@ -1,9 +1,29 @@
-//! Where the parts of the window are: gutter, text area, status bar.
+//! Where the parts of the window are: sidebar, editor panes, bottom panel,
+//! status bar, and the gutter and text of each pane. Pure math, no drawing.
 //! Every size comes from the cell size, so zooming scales everything.
 const std = @import("std");
 const bitmap_font = @import("../font/bitmap_font.zig");
+const panes = @import("../editor/panes.zig");
 
-pub const Rect = struct { x: f32 = 0, y: f32 = 0, w: f32 = 0, h: f32 = 0 };
+pub const Rect = struct {
+    x: f32 = 0,
+    y: f32 = 0,
+    w: f32 = 0,
+    h: f32 = 0,
+
+    pub fn contains(self: Rect, x: f32, y: f32) bool {
+        return x >= self.x and x < self.x + self.w and y >= self.y and y < self.y + self.h;
+    }
+
+    /// The top `h` pixels, and the rest below.
+    pub fn splitTop(self: Rect, h: f32) [2]Rect {
+        const top = @min(h, self.h);
+        return .{
+            .{ .x = self.x, .y = self.y, .w = self.w, .h = top },
+            .{ .x = self.x, .y = self.y + top, .w = self.w, .h = self.h - top },
+        };
+    }
+};
 
 pub const Metrics = struct {
     /// Width of one character on screen.
@@ -16,16 +36,139 @@ pub const Metrics = struct {
         const scale: f32 = @floatFromInt(zoom);
         return .{ .cell = bitmap_font.width * scale, .row = bitmap_font.height * scale };
     }
+
+    /// Height of a tab bar or a panel title.
+    pub fn bar(self: Metrics) f32 {
+        return self.row + @floor(self.row / 2);
+    }
+
+    /// Top of text that is centered in a bar starting at `top`.
+    pub fn barText(self: Metrics, top: f32) f32 {
+        return top + @floor((self.bar() - self.row) / 2);
+    }
+
+    /// Whole cells that fit in `w` pixels.
+    pub fn cols(self: Metrics, w: f32) usize {
+        return @intFromFloat(@max(0, w) / self.cell);
+    }
 };
+
+/// The parts of the window. A hidden dock is null.
+pub const Frame = struct {
+    sidebar: ?Rect,
+    editor: Rect,
+    bottom: ?Rect,
+    status: Rect,
+
+    /// Space the editor area always keeps, in cells and rows.
+    const min_editor_cols = 12;
+    const min_editor_rows = 4;
+    /// Pixels on each side of an edge where a drag can start.
+    pub const grip = 4;
+
+    /// `sidebar` is a width in cells, `bottom` a height in rows.
+    pub fn init(width: f32, height: f32, metrics: Metrics, sidebar: ?u16, bottom: ?u16) Frame {
+        const status_h = @min(metrics.row, height);
+        var main: Rect = .{ .w = width, .h = height - status_h };
+        var frame: Frame = .{ .sidebar = null, .editor = main, .bottom = null, .status = .{ .y = main.h, .w = width, .h = status_h } };
+        if (sidebar) |cols| {
+            const w = @max(0, @min(@as(f32, @floatFromInt(cols)) * metrics.cell, width - min_editor_cols * metrics.cell));
+            frame.sidebar = .{ .w = w, .h = main.h };
+            main.x = w + 1;
+            main.w = @max(0, width - w - 1);
+        }
+        if (bottom) |rows| {
+            const h = @max(0, @min(@as(f32, @floatFromInt(rows)) * metrics.row, main.h - min_editor_rows * metrics.row));
+            frame.bottom = .{ .x = main.x, .y = main.h - h, .w = main.w, .h = h };
+            main.h = @max(0, main.h - h - 1);
+        }
+        frame.editor = main;
+        return frame;
+    }
+
+    pub const Edge = enum { sidebar, bottom };
+
+    /// The dock edge under a pixel, for resizing.
+    pub fn edgeAt(self: Frame, x: f32, y: f32) ?Edge {
+        if (self.sidebar) |side| {
+            if (@abs(x - (side.x + side.w)) <= grip and y < side.h) return .sidebar;
+        }
+        if (self.bottom) |bottom| {
+            if (@abs(y - bottom.y) <= grip and x >= bottom.x) return .bottom;
+        }
+        return null;
+    }
+
+    /// Dock size for an edge dragged to a pixel: cells or rows.
+    pub fn sizeAt(self: Frame, edge: Edge, metrics: Metrics, x: f32, y: f32) u16 {
+        const size = switch (edge) {
+            .sidebar => x / metrics.cell,
+            .bottom => (self.status.y - y) / metrics.row,
+        };
+        return @intFromFloat(std.math.clamp(@round(size), 2, 500));
+    }
+};
+
+/// A pane and where it is.
+pub const Placed = struct { node: *panes.Node, rect: Rect };
+
+/// The line between the two halves of a split, and the space they share.
+pub const Splitter = struct { split: *panes.Split, area: Rect, line: Rect };
+
+/// Places the panes of the tree in `rect`, with a one-pixel line between
+/// halves.
+pub fn placePanes(
+    allocator: std.mem.Allocator,
+    node: *panes.Node,
+    rect: Rect,
+    placed: *std.ArrayList(Placed),
+    splitters: *std.ArrayList(Splitter),
+) !void {
+    switch (node.kind) {
+        .pane => try placed.append(allocator, .{ .node = node, .rect = rect }),
+        .split => |*split| {
+            var first = rect;
+            var second = rect;
+            var line = rect;
+            switch (split.axis) {
+                .right => {
+                    first.w = @floor(@max(0, rect.w - 1) * split.ratio);
+                    line = .{ .x = rect.x + first.w, .y = rect.y, .w = 1, .h = rect.h };
+                    second.x = line.x + 1;
+                    second.w = @max(0, rect.w - first.w - 1);
+                },
+                .down => {
+                    first.h = @floor(@max(0, rect.h - 1) * split.ratio);
+                    line = .{ .x = rect.x, .y = rect.y + first.h, .w = rect.w, .h = 1 };
+                    second.y = line.y + 1;
+                    second.h = @max(0, rect.h - first.h - 1);
+                },
+            }
+            try splitters.append(allocator, .{ .split = split, .area = rect, .line = line });
+            try placePanes(allocator, split.first, first, placed, splitters);
+            try placePanes(allocator, split.second, second, placed, splitters);
+        },
+    }
+}
+
+/// The share of a split's area before a pixel, kept away from the ends.
+pub fn ratioAt(splitter: Splitter, x: f32, y: f32) f32 {
+    const area = splitter.area;
+    const share = switch (splitter.split.axis) {
+        .right => (x - area.x) / @max(1, area.w),
+        .down => (y - area.y) / @max(1, area.h),
+    };
+    return std.math.clamp(share, 0.1, 0.9);
+}
 
 /// A cell of the text area. Negative or too large when outside of it.
 pub const Cell = struct { x: isize, y: isize };
 
-pub const Layout = struct {
+/// The gutter and text of one pane.
+pub const TextLayout = struct {
     metrics: Metrics,
     gutter: Rect,
     text: Rect,
-    status: Rect,
     /// Cells of the gutter: one for markers, the gutter text, the line
     /// number, and one of space before the text.
     gutter_text_cols: usize,
@@ -37,26 +180,24 @@ pub const Layout = struct {
     const min_number_cols = 2;
 
     /// Without a `line_count`, there are no line numbers.
-    pub fn init(width: f32, height: f32, metrics: Metrics, line_count: ?usize, gutter_text_cols: usize) Layout {
+    pub fn init(area: Rect, metrics: Metrics, line_count: ?usize, gutter_text_cols: usize) TextLayout {
         const number_cols = if (line_count) |count| @max(min_number_cols, std.math.log10_int(count) + 1) else 0;
         const gutter_cols: f32 = @floatFromInt(1 + gutter_text_cols + number_cols + 1);
-        const gutter_w = @min(gutter_cols * metrics.cell, width);
-        const status_h = @min(metrics.row, height);
-        const text: Rect = .{ .x = gutter_w, .w = width - gutter_w, .h = height - status_h };
+        const gutter_w = @min(gutter_cols * metrics.cell, area.w);
+        const text: Rect = .{ .x = area.x + gutter_w, .y = area.y, .w = area.w - gutter_w, .h = area.h };
         return .{
             .metrics = metrics,
-            .gutter = .{ .w = gutter_w, .h = text.h },
+            .gutter = .{ .x = area.x, .y = area.y, .w = gutter_w, .h = area.h },
             .text = text,
-            .status = .{ .y = text.h, .w = width, .h = status_h },
             .gutter_text_cols = gutter_text_cols,
             .number_cols = number_cols,
-            .cols = @intFromFloat(text.w / metrics.cell),
-            .rows = @intFromFloat(text.h / metrics.row),
+            .cols = metrics.cols(text.w),
+            .rows = @intFromFloat(@max(0, text.h) / metrics.row),
         };
     }
 
     /// The text cell under a window pixel.
-    pub fn cellAt(self: Layout, x: f32, y: f32) Cell {
+    pub fn cellAt(self: TextLayout, x: f32, y: f32) Cell {
         return .{
             .x = @intFromFloat(@floor((x - self.text.x) / self.metrics.cell)),
             .y = @intFromFloat(@floor((y - self.text.y) / self.metrics.row)),
@@ -64,7 +205,7 @@ pub const Layout = struct {
     }
 
     /// Top-left pixel of a text cell.
-    pub fn cellRect(self: Layout, column: usize, row: usize, columns: usize) Rect {
+    pub fn cellRect(self: TextLayout, column: usize, row: usize, columns: usize) Rect {
         return .{
             .x = self.text.x + @as(f32, @floatFromInt(column)) * self.metrics.cell,
             .y = self.text.y + @as(f32, @floatFromInt(row)) * self.metrics.row,
@@ -79,36 +220,78 @@ const testing = std.testing;
 test "metrics scale with the zoom" {
     try testing.expectEqual(Metrics{ .cell = 8, .row = 16 }, Metrics.init(1));
     try testing.expectEqual(Metrics{ .cell = 16, .row = 32 }, Metrics.init(2));
+    try testing.expectEqual(@as(f32, 24), Metrics.init(1).bar());
+    try testing.expectEqual(@as(f32, 104), Metrics.init(1).barText(100));
 }
 
-test "the window is split into gutter, text and status bar" {
-    const layout = Layout.init(800, 600, .init(1), 120, 0);
+test "the window: sidebar, editor, bottom panel and status bar" {
+    const metrics = Metrics.init(1);
+    const plain = Frame.init(800, 600, metrics, null, null);
+    try testing.expectEqual(Rect{ .w = 800, .h = 584 }, plain.editor);
+    try testing.expectEqual(Rect{ .y = 584, .w = 800, .h = 16 }, plain.status);
+
+    const full = Frame.init(800, 600, metrics, 30, 10);
+    try testing.expectEqual(Rect{ .w = 240, .h = 584 }, full.sidebar.?);
+    try testing.expectEqual(Rect{ .x = 241, .y = 424, .w = 559, .h = 160 }, full.bottom.?);
+    try testing.expectEqual(Rect{ .x = 241, .w = 559, .h = 423 }, full.editor);
+
+    // Docks never squeeze the editor away.
+    const big = Frame.init(800, 600, metrics, 500, 500);
+    try testing.expectEqual(@as(f32, 800 - 12 * 8), big.sidebar.?.w);
+    try testing.expect(big.editor.h >= 4 * 16 - 1);
+}
+
+test "dock edges can be found and dragged" {
+    const metrics = Metrics.init(1);
+    const frame = Frame.init(800, 600, metrics, 30, 10);
+    try testing.expectEqual(@as(?Frame.Edge, .sidebar), frame.edgeAt(242, 100));
+    try testing.expectEqual(@as(?Frame.Edge, .bottom), frame.edgeAt(400, 422));
+    try testing.expectEqual(@as(?Frame.Edge, null), frame.edgeAt(400, 300));
+    try testing.expectEqual(@as(u16, 40), frame.sizeAt(.sidebar, metrics, 320, 0));
+    try testing.expectEqual(@as(u16, 20), frame.sizeAt(.bottom, metrics, 0, 584 - 320));
+}
+
+test "panes are placed by the split tree" {
+    const root = try panes.Node.create(testing.allocator);
+    defer root.destroy(testing.allocator);
+    const right = try root.split(testing.allocator, .right);
+    _ = try right.split(testing.allocator, .down);
+
+    var placed: std.ArrayList(Placed) = .empty;
+    defer placed.deinit(testing.allocator);
+    var splitters: std.ArrayList(Splitter) = .empty;
+    defer splitters.deinit(testing.allocator);
+    try placePanes(testing.allocator, root, .{ .w = 201, .h = 101 }, &placed, &splitters);
+
+    try testing.expectEqual(@as(usize, 3), placed.items.len);
+    try testing.expectEqual(Rect{ .w = 100, .h = 101 }, placed.items[0].rect);
+    try testing.expectEqual(Rect{ .x = 101, .w = 100, .h = 50 }, placed.items[1].rect);
+    try testing.expectEqual(Rect{ .x = 101, .y = 51, .w = 100, .h = 50 }, placed.items[2].rect);
+    try testing.expectEqual(@as(usize, 2), splitters.items.len);
+    try testing.expectEqual(@as(f32, 0.25), ratioAt(splitters.items[0], 50.25, 0));
+    try testing.expectEqual(@as(f32, 0.9), ratioAt(splitters.items[1], 0, 1000));
+}
+
+test "a pane: gutter that fits the line numbers, and text" {
+    const layout = TextLayout.init(.{ .x = 10, .y = 20, .w = 800, .h = 600 }, .init(1), 120, 0);
     // Gutter: marker + 3 digits + space = 5 cells.
-    try testing.expectEqual(Rect{ .w = 40, .h = 584 }, layout.gutter);
-    try testing.expectEqual(Rect{ .x = 40, .w = 760, .h = 584 }, layout.text);
-    try testing.expectEqual(Rect{ .y = 584, .w = 800, .h = 16 }, layout.status);
+    try testing.expectEqual(Rect{ .x = 10, .y = 20, .w = 40, .h = 600 }, layout.gutter);
+    try testing.expectEqual(Rect{ .x = 50, .y = 20, .w = 760, .h = 600 }, layout.text);
     try testing.expectEqual(@as(usize, 95), layout.cols);
-    try testing.expectEqual(@as(usize, 36), layout.rows);
+    try testing.expectEqual(@as(usize, 37), layout.rows);
+    try testing.expectEqual(@as(usize, 7), TextLayout.init(.{ .w = 800 }, .init(1), 1_000_000, 0).number_cols);
+    try testing.expectEqual(@as(f32, 8 * 2), TextLayout.init(.{ .w = 800 }, .init(1), null, 0).gutter.w);
 }
 
-test "the gutter fits the largest line number and the gutter text" {
-    try testing.expectEqual(@as(usize, 2), Layout.init(800, 600, .init(1), 1, 0).number_cols);
-    try testing.expectEqual(@as(usize, 2), Layout.init(800, 600, .init(1), 99, 0).number_cols);
-    try testing.expectEqual(@as(usize, 3), Layout.init(800, 600, .init(1), 100, 0).number_cols);
-    try testing.expectEqual(@as(usize, 7), Layout.init(800, 600, .init(1), 1_000_000, 0).number_cols);
-    try testing.expectEqual(@as(f32, 8 * 12), Layout.init(800, 600, .init(1), 1, 8).gutter.w);
-    try testing.expectEqual(@as(f32, 8 * 2), Layout.init(800, 600, .init(1), null, 0).gutter.w);
-}
-
-test "a tiny window gives no cells instead of negative sizes" {
-    const layout = Layout.init(10, 4, .init(2), 1, 0);
+test "a tiny pane gives no cells instead of negative sizes" {
+    const layout = TextLayout.init(.{ .w = 10, .h = 4 }, .init(2), 1, 0);
     try testing.expectEqual(@as(usize, 0), layout.cols);
     try testing.expectEqual(@as(usize, 0), layout.rows);
     try testing.expectEqual(@as(f32, 0), layout.text.w);
 }
 
 test "pixels map to text cells and back" {
-    const layout = Layout.init(800, 600, .init(1), 1, 0);
+    const layout = TextLayout.init(.{ .w = 800, .h = 600 }, .init(1), 1, 0);
     try testing.expectEqual(Cell{ .x = 0, .y = 0 }, layout.cellAt(32, 0));
     try testing.expectEqual(Cell{ .x = 2, .y = 1 }, layout.cellAt(32 + 20, 17));
     try testing.expectEqual(Cell{ .x = -1, .y = -1 }, layout.cellAt(31, -1));

@@ -5,6 +5,7 @@ const std = @import("std");
 const editor_zig = @import("editor.zig");
 const Editor = editor_zig.Editor;
 const Request = editor_zig.Request;
+const panes = @import("panes.zig");
 
 /// The tag name is the command's text name, used by key binding files.
 pub const Command = enum {
@@ -57,6 +58,19 @@ pub const Command = enum {
     zoom_reset,
     open_settings,
     next_theme,
+    new_file,
+    close_tab,
+    next_tab,
+    prev_tab,
+    split_right,
+    split_down,
+    next_pane,
+    prev_pane,
+    toggle_sidebar,
+    toggle_bottom,
+    focus_sidebar,
+    focus_editor,
+    focus_bottom,
 
     pub fn fromName(name: []const u8) ?Command {
         return std.meta.stringToEnum(Command, name);
@@ -74,8 +88,8 @@ pub fn run(editor: *Editor, command: Command) ?Request {
 }
 
 fn execute(editor: *Editor, command: Command) !?Request {
-    const doc = &editor.doc;
-    const view = &editor.view;
+    const doc = editor.doc();
+    const view = editor.view();
     switch (command) {
         .move_left => doc.move(.left, false),
         .move_right => doc.move(.right, false),
@@ -127,8 +141,21 @@ fn execute(editor: *Editor, command: Command) !?Request {
         .zoom_in => editor.setZoom(@as(i32, editor.zoom) + 1),
         .zoom_out => editor.setZoom(@as(i32, editor.zoom) - 1),
         .zoom_reset => editor.setZoom(editor.default_zoom),
-        .open_settings => return try editor.openSettings(),
+        .open_settings => try editor.openSettings(),
         .next_theme => try editor.nextTheme(),
+        .new_file => try editor.newTab(),
+        .close_tab => return editor.closeTab(editor.pane.pane().active),
+        .next_tab => editor.cycleTab(1),
+        .prev_tab => editor.cycleTab(-1),
+        .split_right => try editor.split(.right),
+        .split_down => try editor.split(.down),
+        .next_pane => try editor.cyclePane(1),
+        .prev_pane => try editor.cyclePane(-1),
+        .toggle_sidebar => editor.toggleDock(.sidebar),
+        .toggle_bottom => editor.toggleDock(.bottom),
+        .focus_sidebar => editor.focusArea(.sidebar),
+        .focus_editor => editor.focusArea(.editor),
+        .focus_bottom => editor.focusArea(.bottom),
     }
     return null;
 }
@@ -144,43 +171,43 @@ test "every command has a text name" {
 }
 
 test "run moves, selects and edits" {
-    var editor = Editor.init(testing.allocator, testing.io);
+    var editor = try Editor.init(testing.allocator, testing.io);
     defer editor.deinit();
-    try editor.doc.load("one two\nthree");
+    try editor.doc().load("one two\nthree");
 
     _ = run(&editor, .move_word_right);
     _ = run(&editor, .select_line_end);
-    try testing.expectEqual(@as(usize, 2), editor.decorations.items.len);
+    try testing.expectEqual(@as(usize, 2), editor.tab().decorations.items.len);
     _ = run(&editor, .delete_left);
     _ = run(&editor, .insert_newline);
     _ = run(&editor, .indent);
-    try expectText(&editor.doc.buffer, "one\n    \nthree");
+    try expectText(&editor.doc().buffer, "one\n    \nthree");
     _ = run(&editor, .undo);
     _ = run(&editor, .undo);
-    try expectText(&editor.doc.buffer, "one two\nthree");
+    try expectText(&editor.doc().buffer, "one two\nthree");
     _ = run(&editor, .redo);
-    try expectText(&editor.doc.buffer, "one\nthree");
+    try expectText(&editor.doc().buffer, "one\nthree");
 }
 
 test "page moves use the height of the view" {
-    var editor = Editor.init(testing.allocator, testing.io);
+    var editor = try Editor.init(testing.allocator, testing.io);
     defer editor.deinit();
-    try editor.doc.load("0\n1\n2\n3\n4\n5\n6\n7\n8\n9");
-    editor.view = .{ .cols = 10, .rows = 4 };
+    try editor.doc().load("0\n1\n2\n3\n4\n5\n6\n7\n8\n9");
+    editor.view().* = .{ .cols = 10, .rows = 4 };
 
     _ = run(&editor, .move_page_down);
-    try testing.expectEqual(@as(usize, 6), editor.doc.cursor.pos);
+    try testing.expectEqual(@as(usize, 6), editor.doc().cursor.pos);
     _ = run(&editor, .select_page_down);
-    try testing.expectEqual(@as(usize, 12), editor.doc.cursor.pos);
-    try testing.expectEqual(@as(usize, 4), editor.view.top.line);
+    try testing.expectEqual(@as(usize, 12), editor.doc().cursor.pos);
+    try testing.expectEqual(@as(usize, 4), editor.view().top.line);
     _ = run(&editor, .move_page_up);
-    try testing.expectEqual(@as(usize, 6), editor.doc.cursor.pos);
+    try testing.expectEqual(@as(usize, 6), editor.doc().cursor.pos);
 }
 
 test "commands that need the platform return a request" {
-    var editor = Editor.init(testing.allocator, testing.io);
+    var editor = try Editor.init(testing.allocator, testing.io);
     defer editor.deinit();
-    try editor.doc.load("text");
+    try editor.doc().load("text");
 
     try testing.expectEqualStrings("text", run(&editor, .copy).?.copy);
     try testing.expectEqual(Request.paste, run(&editor, .paste).?);
@@ -193,7 +220,7 @@ test "commands that need the platform return a request" {
 }
 
 test "zoom and wrap commands" {
-    var editor = Editor.init(testing.allocator, testing.io);
+    var editor = try Editor.init(testing.allocator, testing.io);
     defer editor.deinit();
     _ = run(&editor, .zoom_in);
     _ = run(&editor, .zoom_in);
@@ -204,6 +231,31 @@ test "zoom and wrap commands" {
     try testing.expectEqual(@as(u8, 1), editor.zoom);
 
     _ = run(&editor, .toggle_wrap);
-    try testing.expect(editor.view.wrap);
+    try testing.expect(editor.view().wrap);
     try testing.expectEqualStrings("Line wrap on", editor.currentMessage().?);
+}
+
+test "tab and pane commands" {
+    var editor = try Editor.init(testing.allocator, testing.io);
+    defer editor.deinit();
+    _ = run(&editor, .new_file);
+    _ = run(&editor, .new_file);
+    const pane = editor.pane.pane();
+    try testing.expectEqual(@as(usize, 3), pane.tabs.items.len);
+    try testing.expectEqual(@as(usize, 2), pane.active);
+    _ = run(&editor, .next_tab);
+    try testing.expectEqual(@as(usize, 0), pane.active);
+    _ = run(&editor, .prev_tab);
+    try testing.expectEqual(@as(usize, 2), pane.active);
+    _ = run(&editor, .close_tab);
+    try testing.expectEqual(@as(usize, 2), editor.files.items.len);
+
+    _ = run(&editor, .split_down);
+    try testing.expectEqual(panes.Axis.down, editor.root.kind.split.axis);
+    _ = run(&editor, .prev_pane);
+    try testing.expectEqual(editor.root.kind.split.first, editor.pane);
+    _ = run(&editor, .focus_sidebar);
+    try testing.expect(editor.sidebar.shown);
+    _ = run(&editor, .toggle_sidebar);
+    try testing.expectEqual(@import("editor.zig").Area.editor, editor.focus);
 }
