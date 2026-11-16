@@ -39,7 +39,11 @@ pub const Session = struct {
         try self.write("b.txt", "bee\n");
         try self.write("a/x.txt", "ex\n");
         try self.git(&.{ "init", "-q", "-b", "main" });
-        for ([_][2][]const u8{ .{ "user.name", "Tester" }, .{ "user.email", "tester@example.com" }, .{ "commit.gpgsign", "false" } }) |pair| {
+        for ([_][2][]const u8{
+            .{ "user.name", "Tester" },    .{ "user.email", "tester@example.com" }, .{ "commit.gpgsign", "false" },
+            // Windows runners turn on autocrlf; tests expect files as written.
+            .{ "core.autocrlf", "false" },
+        }) |pair| {
             try self.git(&.{ "config", pair[0], pair[1] });
         }
         self.editor.openFolder(folder);
