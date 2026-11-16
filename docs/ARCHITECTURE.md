@@ -162,6 +162,29 @@ third_party/      vendored C dependencies (SDL3)
 - The sidebar has the file tree and the git panel; each dock switches its
   panels with the tabs widget.
 
+## Terminal (`terminal/`, `platform/pty.zig`, `editor/terminals.zig`)
+
+- `platform/pty.zig` starts the shell in a pseudo-terminal: `/dev/ptmx` and
+  fork with plain system calls on Linux, ConPTY on Windows, one API picked
+  at compile time. It needs no libc and no SDL, so tests run a real shell.
+  A thread reads the output and hands it to a callback. The shell gets every
+  signal back at its default, even ones the editor ignores.
+- `terminal/vt.zig` is the parser, after the classic DEC state machine. Its
+  state carries over between reads, so split UTF-8 and split sequences work.
+  OSC and DCS strings are read and dropped.
+- `terminal/grid.zig` is the screen: cells, cursor, scroll region, alternate
+  screen and the scrollback, a ring of lines without their blank ends.
+  Resizing cuts or pads lines and never reflows.
+- `terminal/keys.zig` turns keys into bytes; typed text comes from text events.
+- `terminal/terminal.zig` has `Session`: it maps parser actions to the grid
+  and answers status queries. It gets the shell as a `Port` (write, resize),
+  so its tests use a fake one.
+- `editor/terminals.zig` owns the terminals. The pty thread posts output
+  through the mailbox with the terminal's id; output of a closed one is dropped.
+- `ui/panels/terminal.zig` draws each run of one color with `drawText`. The
+  16 colors come from the theme's `terminal` colors; 256 and true colors
+  are computed. Keys go to the shell, except a few window commands.
+
 ## Config (`editor/config.zig`)
 
 - **One loader.** `Loader.load(T, name, base)` reads `name.zon` from the
@@ -193,5 +216,6 @@ third_party/      vendored C dependencies (SDL3)
 - `platform/root.zig` imports only its SDL-free files.
 - The test build has no SDL, so a test that reaches SDL code fails to build.
   Keep testable logic out of the SDL files of `platform/`.
-- `tests/workbench_test.zig` drives the whole window with events and checks
-  what is drawn with `canvas.Recorder`.
+- `tests/session.zig` drives the whole window with events and checks what
+  is drawn with `canvas.Recorder`, in a real folder that is a git repository.
+  Terminals in tests run `/bin/sh` (`cmd.exe` on Windows).

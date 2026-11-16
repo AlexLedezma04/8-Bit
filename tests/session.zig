@@ -1,6 +1,6 @@
 //! A whole window for end to end tests: editor, workbench and a recording
-//! canvas, with a real folder on disk that is a git repository. Driven by
-//! the events `main.zig` passes on.
+//! canvas, with a real folder on disk that is a git repository, and a real
+//! shell for terminals. Driven by the events `main.zig` passes on.
 const std = @import("std");
 const app = @import("8-bit");
 
@@ -13,8 +13,12 @@ const Recorder = app.ui.canvas.Recorder;
 const keymap = app.editor.keymap;
 const fs = app.platform.fs;
 
+/// The shell of terminals in tests: the same on every machine.
+pub const shell = if (@import("builtin").os.tag == .windows) "cmd.exe" else "/bin/sh";
+
 pub const Session = struct {
     tmp: testing.TmpDir,
+    env: std.process.Environ.Map,
     editor: Editor,
     mailbox: Mailbox,
     workbench: Workbench,
@@ -27,12 +31,15 @@ pub const Session = struct {
     pub fn init(self: *Session) !void {
         self.* = .{
             .tmp = testing.tmpDir(.{}),
+            .env = try testing.environ.createMap(testing.allocator),
             .editor = try .init(testing.allocator, testing.io),
             .mailbox = .{ .allocator = testing.allocator, .io = testing.io, .wake = noWake },
             .workbench = undefined,
             .recorder = .{ .allocator = testing.allocator },
         };
         self.editor.mailbox = &self.mailbox;
+        self.editor.environ = &self.env;
+        self.editor.settings.shell = shell;
         self.workbench.init(&self.editor);
         const folder = try std.fmt.bufPrint(&self.folder, ".zig-cache/tmp/{s}", .{self.tmp.sub_path});
         self.folder_len = folder.len;
@@ -95,6 +102,7 @@ pub const Session = struct {
         self.workbench.deinit();
         self.editor.deinit();
         self.mailbox.deinit();
+        self.env.deinit();
         self.tmp.cleanup();
     }
 
@@ -150,6 +158,26 @@ pub const Session = struct {
 
     pub fn shows(self: *const Session, part: []const u8) bool {
         return self.recorder.find(part) != null;
+    }
+
+    /// Takes what the shells of terminals write until `part` is on screen.
+    /// Fails after 10 seconds, showing what is on screen.
+    pub fn waitForTerminal(self: *Session, part: []const u8) !void {
+        const clock: std.Io.Clock = .awake;
+        const deadline = clock.now(testing.io).addDuration(.fromMilliseconds(10_000));
+        while (!self.shows(part)) {
+            if (clock.now(testing.io).nanoseconds > deadline.nanoseconds) {
+                for (self.recorder.texts.items) |item| std.debug.print("{d}: {s}\n", .{ item.y, item.text });
+                std.debug.print("not on screen: {s}\n", .{part});
+                return error.Timeout;
+            }
+            const posted = self.mailbox.take() orelse {
+                std.Thread.yield() catch {};
+                continue;
+            };
+            _ = self.editor.receive(posted);
+            self.draw();
+        }
     }
 
     /// Takes what find in project posts until it is done, then draws.

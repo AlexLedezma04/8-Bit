@@ -94,6 +94,7 @@ pub fn main(init: std.process.Init) !void {
     defer app.workbench.deinit();
     dialog.init(&app.mailbox);
     app.editor.mailbox = &app.mailbox;
+    app.editor.environ = init.environ_map;
 
     // A high-DPI screen starts at a matching zoom.
     app.editor.screen_zoom = @intFromFloat(std.math.clamp(@round(app.window.displayScale()), Editor.min_zoom, Editor.max_zoom));

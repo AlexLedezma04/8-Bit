@@ -16,4 +16,9 @@
     .search_exclude = .{ "zig-out", ".zig-cache", "node_modules" },
     // The git program, by name or path. Git features are off without it.
     .git = "git",
+    // The shell of new terminals: empty for $SHELL on Linux and PowerShell
+    // on Windows. On Windows this is a whole command line.
+    .shell = "",
+    // Lines a terminal keeps above its screen.
+    .terminal_scrollback = 10000,
 }

@@ -92,6 +92,8 @@ pub const Command = enum {
     prev_change,
     toggle_blame,
     file_history,
+    toggle_terminal,
+    new_terminal,
 
     pub fn fromName(name: []const u8) ?Command {
         return std.meta.stringToEnum(Command, name);
@@ -200,6 +202,8 @@ fn execute(editor: *Editor, command: Command) !?Request {
         .prev_change => editor.jumpToChange(false),
         .toggle_blame => editor.toggleBlame(),
         .file_history => editor.fileHistory(),
+        .toggle_terminal => editor.toggleTerminal(),
+        .new_terminal => editor.openTerminal(),
     }
     return null;
 }
