@@ -102,6 +102,10 @@ const others = [_]Binding{
     .{ .key = .f7, .mods = shift, .command = .prev_change },
     .{ .key = .char('b'), .mods = alt, .command = .toggle_blame },
     .{ .key = .char('h'), .mods = alt, .command = .file_history },
+    .{ .key = .char('`'), .mods = ctrl, .command = .toggle_terminal },
+    .{ .key = .f12, .mods = alt, .command = .toggle_terminal },
+    .{ .key = .char('`'), .mods = ctrl_shift, .command = .new_terminal },
+    .{ .key = .f12, .mods = alt_shift, .command = .new_terminal },
 };
 
 pub const default = moves ++ selecting(moves) ++ others;

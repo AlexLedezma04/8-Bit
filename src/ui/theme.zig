@@ -52,6 +52,7 @@ pub const Theme = struct {
     diff_removed: Color,
 
     syntax: Syntax,
+    terminal: Ansi,
 
     /// The color of a file with this git status.
     pub fn gitColor(self: *const Theme, kind: GitKind) Color {
@@ -80,6 +81,32 @@ pub const Syntax = struct {
     punctuation: Color,
 };
 
+/// The 16 colors terminal programs pick by number, in that order.
+pub const Ansi = struct {
+    black: Color,
+    red: Color,
+    green: Color,
+    yellow: Color,
+    blue: Color,
+    magenta: Color,
+    cyan: Color,
+    white: Color,
+    bright_black: Color,
+    bright_red: Color,
+    bright_green: Color,
+    bright_yellow: Color,
+    bright_blue: Color,
+    bright_magenta: Color,
+    bright_cyan: Color,
+    bright_white: Color,
+
+    pub fn get(self: *const Ansi, index: u4) Color {
+        return switch (index) {
+            inline else => |i| @field(self, @typeInfo(Ansi).@"struct".field_names[i]),
+        };
+    }
+};
+
 const folder = config.theme_folder;
 
 /// The theme `name`. Colors it leaves out come from the dark theme.
@@ -102,6 +129,8 @@ test "built-in themes set every color" {
     const light = config.builtin(Theme, testing.allocator, arena.allocator(), "themes/light");
     try testing.expectEqual(Color.rgb(0x1e1f22), dark.background);
     try testing.expectEqual(Color.rgb(0xf8f8f4), light.background);
+    try testing.expectEqual(dark.terminal.red, dark.terminal.get(1));
+    try testing.expectEqual(dark.terminal.bright_white, dark.terminal.get(15));
 }
 
 test "a theme that leaves colors out gets them from the default theme" {

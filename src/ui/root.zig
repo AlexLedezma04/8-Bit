@@ -15,6 +15,7 @@ pub const git = @import("panels/git.zig");
 pub const messages = @import("panels/messages.zig");
 pub const search = @import("panels/search.zig");
 pub const status_bar = @import("panels/status_bar.zig");
+pub const terminal = @import("panels/terminal.zig");
 
 test {
     @import("std").testing.refAllDecls(@This());

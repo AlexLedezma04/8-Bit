@@ -2,6 +2,7 @@
 //! Import every file of this folder here, so `zig build test` runs its tests.
 
 pub const grid = @import("grid.zig");
+pub const keys = @import("keys.zig");
 pub const terminal = @import("terminal.zig");
 pub const vt = @import("vt.zig");
 

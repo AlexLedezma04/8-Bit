@@ -22,6 +22,8 @@ const language = @import("../syntax/language.zig");
 const comment = @import("../core/comment.zig");
 const git_zig = @import("git.zig");
 const Git = git_zig.Git;
+const terminals_zig = @import("terminals.zig");
+const Terminals = terminals_zig.Terminals;
 
 pub const Pick = enum { open_file, save_file, open_folder };
 
@@ -70,6 +72,7 @@ pub const Posted = union(enum) {
     found: project_search.Found,
     search_done: project_search.Done,
     git: *git_zig.Job,
+    terminal: terminals_zig.Output,
 };
 
 pub const Mailbox = @import("../platform/mailbox.zig").Mailbox(Posted);
@@ -93,7 +96,7 @@ pub const Area = enum { sidebar, editor, bottom };
 
 /// The panels of the sidebar and of the bottom dock.
 pub const SidePanel = enum { files, git };
-pub const BottomPanel = enum { messages, search };
+pub const BottomPanel = enum { messages, search, terminal };
 
 /// A panel at an edge of the window.
 pub const Dock = struct {
@@ -146,7 +149,11 @@ pub const Editor = struct {
     find: Find,
     project: ProjectSearch,
     git: Git,
-    /// Where background work posts results. Needed for find in project and git.
+    terminals: Terminals,
+    /// The environment the shells of terminals get.
+    environ: ?*const std.process.Environ.Map = null,
+    /// Where background work posts results. Needed for find in project, git
+    /// and terminals.
     mailbox: ?*Mailbox = null,
     /// The id the next file gets.
     next_id: u32 = 1,
@@ -178,6 +185,7 @@ pub const Editor = struct {
             .find = .{ .allocator = allocator },
             .project = .{ .allocator = allocator, .io = io },
             .git = .{ .allocator = allocator, .io = io },
+            .terminals = .{ .allocator = allocator },
         };
         errdefer editor.deinit();
         editor.reloadConfig();
@@ -188,6 +196,7 @@ pub const Editor = struct {
     pub fn deinit(self: *Editor) void {
         self.project.deinit();
         self.git.deinit();
+        self.terminals.deinit();
         // Results that came too late.
         if (self.mailbox) |mailbox| while (mailbox.take()) |posted| self.drop(posted);
         self.find.deinit();
@@ -724,6 +733,7 @@ pub const Editor = struct {
         switch (posted) {
             .found => |found| self.project.receive(found),
             .search_done => |done| self.project.done(done),
+            .terminal => |output| self.terminals.receive(output),
             .git => |job| {
                 defer self.refreshVisible(self.root);
                 return self.git.receive(job);
@@ -757,6 +767,7 @@ pub const Editor = struct {
         switch (posted) {
             .picked => |picked| self.allocator.free(picked.path),
             .found => |found| project_search.freeFound(self.allocator, found),
+            .terminal => |output| if (output.bytes) |bytes| self.allocator.free(bytes),
             // `Git.deinit` already freed it.
             .git, .cancelled, .dialog_failed, .search_done => {},
         }
@@ -849,9 +860,11 @@ pub const Editor = struct {
         if (panel == .git) self.git.refresh();
     }
 
+    /// The terminal panel starts a terminal when it has none.
     pub fn showBottom(self: *Editor, panel: BottomPanel) void {
         self.bottom_panel = panel;
         self.focusArea(.bottom);
+        if (panel == .terminal and self.terminals.list.items.len == 0) self.openTerminal();
     }
 
     pub fn focusArea(self: *Editor, area: Area) void {
@@ -863,6 +876,35 @@ pub const Editor = struct {
         const target = self.dock(area);
         target.shown = !target.shown;
         if (!target.shown and self.focus == area) self.focus = .editor;
+    }
+
+    // Terminals
+
+    /// Starts a shell in the open folder, in a new terminal.
+    pub fn openTerminal(self: *Editor) void {
+        const mailbox = self.mailbox orelse return;
+        self.terminals.open(mailbox, .{
+            .shell = self.settings.shell,
+            .cwd = self.folder,
+            .env = self.environ,
+            .scrollback = self.settings.terminal_scrollback,
+        }) catch |err| return self.notify("Could not start a terminal: {t}", .{err});
+        self.showBottom(.terminal);
+    }
+
+    /// Shows the terminal panel, or hides it when it has focus.
+    pub fn toggleTerminal(self: *Editor) void {
+        if (self.bottom.shown and self.bottom_panel == .terminal and self.focus == .bottom) return self.toggleDock(.bottom);
+        self.showBottom(.terminal);
+    }
+
+    /// Closing the last terminal hides the panel.
+    pub fn closeTerminal(self: *Editor, index: usize) void {
+        self.terminals.close(index);
+        if (self.terminals.list.items.len == 0 and self.bottom_panel == .terminal) {
+            self.bottom.shown = false;
+            self.focus = .editor;
+        }
     }
 
     // Config

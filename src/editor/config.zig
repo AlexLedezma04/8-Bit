@@ -22,6 +22,10 @@ pub const Settings = struct {
     search_exclude: []const []const u8,
     /// The git program, by name or path.
     git: []const u8,
+    /// The program of new terminals; empty for the system's shell.
+    shell: []const u8,
+    /// Lines a terminal keeps above its screen.
+    terminal_scrollback: u32,
 };
 
 pub const Loader = struct {

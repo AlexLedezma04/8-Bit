@@ -26,6 +26,7 @@ const FileTree = @import("panels/file_tree.zig").FileTree;
 const Messages = @import("panels/messages.zig").Messages;
 const Search = @import("panels/search.zig").Search;
 const GitPanel = @import("panels/git.zig").GitPanel;
+const TerminalPanel = @import("panels/terminal.zig").TerminalPanel;
 const tabs = @import("widgets/tabs.zig");
 const status_bar = @import("panels/status_bar.zig");
 const event = @import("../platform/event.zig");
@@ -51,6 +52,7 @@ pub const Workbench = struct {
     messages: Messages,
     search: Search,
     git: GitPanel,
+    terminal: TerminalPanel,
     /// The find prompt asks what to replace; Enter then asks for the replacement.
     replacing: bool = false,
     /// Window size in pixels, and pixels per unit of mouse position.
@@ -74,11 +76,13 @@ pub const Workbench = struct {
             .messages = .{ .editor = editor },
             .search = .{ .editor = editor },
             .git = .{ .editor = editor, .prompt = &self.prompt },
+            .terminal = .{ .editor = editor },
         };
     }
 
     pub fn deinit(self: *Workbench) void {
         self.git.deinit();
+        self.terminal.deinit();
         self.files.deinit();
         self.view.deinit();
         self.prompt.deinit();
@@ -118,6 +122,7 @@ pub const Workbench = struct {
         return switch (which) {
             .messages => .of(Messages, &self.messages),
             .search => .of(Search, &self.search),
+            .terminal => .of(TerminalPanel, &self.terminal),
         };
     }
 
@@ -214,7 +219,7 @@ pub const Workbench = struct {
                     self.promptChanged();
                 } else if (editor.focus == .editor) {
                     editor.typeText(text);
-                }
+                } else return self.toPanel(editor.focus, ev);
             },
             .mouse_down => |mouse| return self.onMouseDown(mouse),
             .mouse_move => |mouse| {
@@ -453,10 +458,13 @@ pub const Workbench = struct {
 
     /// Clipboard text after a `paste` request.
     pub fn paste(self: *Workbench, text: []const u8) void {
+        const editor = self.editor;
         if (self.prompt.kind != null) {
             self.prompt.typeText(text);
             self.promptChanged();
-        } else self.editor.paste(text);
+        } else if (editor.focus == .bottom and editor.bottom_panel == .terminal) {
+            self.terminal.paste(text);
+        } else editor.paste(text);
     }
 
     /// Milliseconds until the screen must change by itself, if ever.
