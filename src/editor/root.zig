@@ -5,7 +5,9 @@ pub const commands = @import("commands.zig");
 pub const config = @import("config.zig");
 pub const decoration = @import("decoration.zig");
 pub const editor = @import("editor.zig");
+pub const file = @import("file.zig");
 pub const keymap = @import("keymap.zig");
+pub const panes = @import("panes.zig");
 pub const view = @import("view.zig");
 
 test {

@@ -1,5 +1,5 @@
 //! Native dialogs: open file, save file, open folder, and the
-//! Save / Don't save / Cancel message box.
+//! message boxes that ask a question.
 const std = @import("std");
 const c = @import("sdl.zig").c;
 const Window = @import("window.zig").Window;
@@ -45,28 +45,39 @@ fn onResult(context: ?*anyopaque, files: [*c]const [*c]const u8, _: c_int) callc
     };
 }
 
-/// Asks what to do with unsaved changes. Blocks until the user answers.
-/// Null when no message box could be shown.
-pub fn confirmSave(window: *const Window, name: []const u8) ?editor.Choice {
+const Button = struct { answer: editor.Answer, text: [*:0]const u8 };
+
+/// Asks a question about `name`. Blocks until the user answers. Null when
+/// no message box could be shown.
+pub fn ask(window: *const Window, question: editor.Question, name: []const u8) ?editor.Answer {
     var text: [256]u8 = undefined;
-    const message = std.fmt.bufPrint(&text, "Save changes to {s}?\x00", .{name}) catch "Save changes?\x00";
-    const choices = std.enums.values(editor.Choice);
-    const buttons = [_]c.SDL_MessageBoxButtonData{
-        .{ .flags = c.SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, .buttonID = @backingInt(editor.Choice.save), .text = "Save" },
-        .{ .flags = 0, .buttonID = @backingInt(editor.Choice.discard), .text = "Don't save" },
-        .{ .flags = c.SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, .buttonID = @backingInt(editor.Choice.cancel), .text = "Cancel" },
+    const message = switch (question) {
+        .save => std.fmt.bufPrint(&text, "Save changes to {s}?\x00", .{name}),
+        .reload => std.fmt.bufPrint(&text, "{s} changed on disk. Reload it and lose your changes?\x00", .{name}),
+        .delete => std.fmt.bufPrint(&text, "Delete {s}?\x00", .{name}),
+    } catch "Are you sure?\x00";
+    const buttons: []const Button = switch (question) {
+        .save => &.{ .{ .answer = .yes, .text = "Save" }, .{ .answer = .no, .text = "Don't save" }, .{ .answer = .cancel, .text = "Cancel" } },
+        .reload => &.{ .{ .answer = .yes, .text = "Reload" }, .{ .answer = .no, .text = "Keep mine" } },
+        .delete => &.{ .{ .answer = .yes, .text = "Delete" }, .{ .answer = .cancel, .text = "Cancel" } },
+    };
+    var data: [3]c.SDL_MessageBoxButtonData = undefined;
+    for (buttons, 0..) |button, i| data[i] = .{
+        .flags = if (i == 0) c.SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT else if (i == buttons.len - 1) c.SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT else 0,
+        .buttonID = @intCast(i),
+        .text = button.text,
     };
     const box: c.SDL_MessageBoxData = .{
         .flags = c.SDL_MESSAGEBOX_WARNING,
         .window = window.handle,
         .title = "8-Bit",
         .message = message.ptr,
-        .numbuttons = buttons.len,
-        .buttons = &buttons,
+        .numbuttons = @intCast(buttons.len),
+        .buttons = &data,
         .colorScheme = null,
     };
     var pressed: c_int = -1;
     if (!c.SDL_ShowMessageBox(&box, &pressed)) return null;
     // Closing the box without a button counts as Cancel.
-    return if (pressed >= 0 and pressed < choices.len) choices[@intCast(pressed)] else .cancel;
+    return if (pressed >= 0 and pressed < buttons.len) buttons[@intCast(pressed)].answer else .cancel;
 }

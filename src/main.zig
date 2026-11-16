@@ -5,108 +5,41 @@ const Renderer = @import("platform/renderer.zig").Renderer;
 const input = @import("platform/input.zig");
 const clipboard = @import("platform/clipboard.zig");
 const dialog = @import("platform/dialog.zig");
-const event = @import("platform/event.zig");
+const fs = @import("platform/fs.zig");
 const editor_zig = @import("editor/editor.zig");
 const Editor = editor_zig.Editor;
 const Request = editor_zig.Request;
-const commands = @import("editor/commands.zig");
-const keymap = @import("editor/keymap.zig");
-const decoration = @import("editor/decoration.zig");
-const theme_zig = @import("ui/theme.zig");
-const Theme = theme_zig.Theme;
-const fs = @import("platform/fs.zig");
-const layout_zig = @import("ui/layout.zig");
-const Layout = layout_zig.Layout;
-const editor_view = @import("ui/panels/editor_view.zig");
-const status_bar = @import("ui/panels/status_bar.zig");
-
-/// Rows scrolled per step of the mouse wheel.
-const wheel_rows = 3;
+const Workbench = @import("ui/workbench.zig").Workbench;
 
 const App = struct {
     window: Window,
     renderer: Renderer,
     editor: Editor,
+    workbench: Workbench,
     mailbox: dialog.Mailbox,
-    theme: Theme = undefined,
-    /// The `config_version` of the editor that `theme` was loaded for.
-    theme_version: ?u32 = null,
-    layout: Layout = undefined,
-    /// A key press ran a command, so the text it also types is dropped.
-    swallow_text: bool = false,
     quit: bool = false,
-
-    /// Lays out the window for the current size, zoom, settings and document.
-    fn updateLayout(self: *App) void {
-        if (self.theme_version != self.editor.config_version) {
-            self.theme = theme_zig.load(self.editor.loader, self.editor.config_arena.allocator(), self.editor.settings.theme, &self.editor);
-            self.theme_version = self.editor.config_version;
-        }
-        const size = self.renderer.outputSize();
-        self.renderer.scale = @floatFromInt(self.editor.zoom);
-        self.layout = .init(
-            size.w,
-            size.h,
-            .init(self.editor.zoom),
-            if (self.editor.settings.line_numbers) self.editor.doc.buffer.lineCount() else null,
-            decoration.gutterTextWidth(self.editor.decorations.items),
-        );
-        self.editor.view.cols = self.layout.cols;
-        self.editor.view.rows = self.layout.rows;
-    }
 
     fn draw(self: *App) void {
         var title: [128]u8 = undefined;
         self.window.setTitle(self.editor.title(&title));
-        self.renderer.clear(self.theme.background);
-        editor_view.draw(&self.renderer, &self.theme, &self.editor, &self.layout);
-        status_bar.draw(&self.renderer, &self.theme, self.editor.status(), &self.layout);
+        const size = self.renderer.outputSize();
+        self.renderer.scale = @floatFromInt(self.editor.zoom);
+        self.workbench.width = size.w;
+        self.workbench.height = size.h;
+        self.workbench.density = self.window.pixelDensity();
+        self.workbench.draw(self.renderer.canvas());
         self.renderer.present();
     }
 
     /// Returns false when the event cannot have changed what is on screen.
-    fn handle(self: *App, ev: event.Event) bool {
-        switch (ev) {
-            .quit => self.fulfil(commands.run(&self.editor, .quit)),
-            .redraw, .focus => {},
-            .mouse_up => return false,
-            .key => |press| {
-                const command = keymap.lookup(self.editor.bindings, press.key, press.mods);
-                self.swallow_text = command != null;
-                if (command) |found| self.fulfil(commands.run(&self.editor, found));
-            },
-            .text => |text| if (!self.swallow_text) self.editor.typeText(text),
-            .mouse_down => |mouse| if (mouse.button == .left) {
-                const cell = self.cellAt(mouse.x, mouse.y);
-                self.editor.mouseDown(cell.x, cell.y, mouse.clicks, mouse.mods.shift);
-            },
-            .mouse_move => |mouse| {
-                if (!mouse.left_down) return false;
-                const cell = self.cellAt(mouse.x, mouse.y);
-                self.editor.mouseDrag(cell.x, cell.y);
-            },
-            .wheel => |wheel| self.onWheel(wheel),
-            .drop_file => |path| self.fulfil(self.editor.open(path)),
-            .wake => while (self.mailbox.take()) |posted| self.fulfil(self.editor.receive(posted)),
+    fn handle(self: *App, ev: @import("platform/event.zig").Event) bool {
+        if (ev == .wake) {
+            while (self.mailbox.take()) |posted| self.fulfil(self.editor.receive(posted));
+            return true;
         }
-        return true;
-    }
-
-    fn onWheel(self: *App, wheel: event.Wheel) void {
-        if (wheel.mods.ctrl) {
-            if (wheel.dy != 0) self.fulfil(commands.run(&self.editor, if (wheel.dy > 0) .zoom_in else .zoom_out));
-            return;
-        }
-        const rows: isize = @intFromFloat(-wheel.dy * wheel_rows);
-        const cols: isize = @intFromFloat(wheel.dx * wheel_rows);
-        // Shift turns the wheel sideways.
-        if (wheel.mods.shift) self.editor.scroll(0, rows) else self.editor.scroll(rows, cols);
-    }
-
-    /// Mouse positions are in window units; the layout is in pixels.
-    fn cellAt(self: *const App, x: f32, y: f32) layout_zig.Cell {
-        const density = self.window.pixelDensity();
-        return self.layout.cellAt(x * density, y * density);
+        const outcome = self.workbench.handle(ev);
+        self.fulfil(outcome.request);
+        return outcome.redraw or outcome.request != null;
     }
 
     /// Does what the editor asked for. An answer can lead to a new request.
@@ -124,14 +57,14 @@ const App = struct {
             .paste => blk: {
                 const text = clipboard.get(self.editor.allocator) orelse break :blk null;
                 defer self.editor.allocator.free(text);
-                self.editor.paste(text);
+                self.workbench.paste(text);
                 break :blk null;
             },
             .pick => |pick| blk: {
                 dialog.show(pick, &self.window);
                 break :blk null;
             },
-            .confirm => self.editor.answer(dialog.confirmSave(&self.window, self.editor.name()) orelse blk: {
+            .ask => |question| self.workbench.answer(question.question, dialog.ask(&self.window, question.question, question.name) orelse blk: {
                 self.editor.notify("Could not show a message box", .{});
                 break :blk .cancel;
             }),
@@ -150,11 +83,14 @@ pub fn main(init: std.process.Init) !void {
     var app: App = .{
         .window = window,
         .renderer = renderer,
-        .editor = .init(init.gpa, init.io),
+        .editor = try .init(init.gpa, init.io),
+        .workbench = undefined,
         .mailbox = .{ .allocator = init.gpa, .io = init.io, .wake = input.wake },
     };
     defer app.editor.deinit();
     defer app.mailbox.deinit();
+    app.workbench.init(&app.editor);
+    defer app.workbench.deinit();
     dialog.init(&app.mailbox);
 
     // A high-DPI screen starts at a matching zoom.
@@ -163,8 +99,9 @@ pub fn main(init: std.process.Init) !void {
     defer if (config_dir) |dir| init.gpa.free(dir);
     app.editor.loader.dir = config_dir;
     app.editor.reloadConfig();
-    app.updateLayout();
-    if (args.len > 1) app.fulfil(app.editor.open(args[1]));
+    if (args.len > 1) {
+        if (fs.isDir(init.io, args[1])) app.editor.openFolder(args[1]) else app.editor.open(args[1]);
+    }
 
     // Sleep until an event comes, handle all waiting events, then draw one
     // frame only if something changed. Nothing runs while the user does
@@ -172,12 +109,9 @@ pub fn main(init: std.process.Init) !void {
     var dirty = true;
     while (!app.quit) {
         app.editor.now_ms = input.now();
-        if (dirty) {
-            app.updateLayout();
-            app.draw();
-        }
+        if (dirty) app.draw();
 
-        var next = input.wait(app.editor.messageTimeLeft());
+        var next = input.wait(app.workbench.timeLeft());
         app.editor.now_ms = input.now();
         // No event means the message timed out and must be removed.
         dirty = next == null;

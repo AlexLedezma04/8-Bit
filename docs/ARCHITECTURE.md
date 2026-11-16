@@ -9,12 +9,16 @@ src/
   syntax/         highlighting engine; language data lives in assets/grammars
   git/            VCS integration via the git CLI
   terminal/       VT parser + screen grid; pty comes from platform/
-  editor/         app state, commands, keymap, view, decoration, config
+  editor/         app state: files, panes and tabs, commands, keymap, view,
+                  decoration, config
   ui/
+    canvas.zig    what the UI draws on; the renderer implements it
+    panel.zig     the interface every panel follows
+    workbench.zig the whole window: places panels, routes input, focus
     theme.zig     the color struct; theme files live in assets/themes
     layout.zig    where the parts of the window are; all sizes come from the cell
-    widgets/      reusable controls (prompt, lists, tabs, ...)
-    panels/       one view per feature (editor_view, status_bar, file_tree, git, terminal)
+    widgets/      reusable controls (list, tabs, prompt)
+    panels/       one view per feature (editor_view, file_tree, messages, status_bar, ...)
   font/           bitmap font
 assets/           built-in ZON files, embedded in the exe (assets.zig lists them)
   settings.zon    default settings
@@ -35,7 +39,8 @@ third_party/      vendored C dependencies (SDL3)
 - `editor/` owns state and depends on the feature modules. It never calls
   SDL: what only the platform can do (clipboard, dialogs, quit) is returned
   as a `Request`, and `main.zig` carries it out.
-- `ui/` renders `editor/` state through `platform/renderer.zig`.
+- `ui/` renders `editor/` state on a `Canvas` (`ui/canvas.zig`), which
+  `platform/renderer.zig` implements. So `ui/` has no SDL and is tested.
 
 ## Text model (`core/`)
 
@@ -64,8 +69,21 @@ third_party/      vendored C dependencies (SDL3)
 ## The editor (`editor/`, `ui/`, `main.zig`)
 
 - **Input.** `platform/input.zig` turns SDL events into the plain events of
-  `platform/event.zig`. A key press is looked up in the `editor/keymap.zig`
-  table and becomes a `Command`; typed text goes to `Editor.typeText`.
+  `platform/event.zig`, and `main.zig` hands them to `ui/workbench.zig`. A
+  key goes to the prompt if it is open, else to the focused panel, else it
+  is looked up in the `editor/keymap.zig` table and becomes a `Command`.
+- **Panels.** The sidebar (file tree), the editor area and the bottom panel
+  (messages) follow `ui/panel.zig`: `title`, `draw(rect)` and `handle(event)`.
+  One area has focus; a click gives focus. The workbench draws and routes
+  without knowing what a panel is.
+- **Files, panes and tabs.** `Editor.files` holds the open files
+  (`editor/file.zig`: document, path, time on disk). The editor area is a
+  tree of splits (`editor/panes.zig`) whose leaves are panes of tabs. A tab
+  is one view of a file with its own cursor and scroll. The active tab uses
+  the document's cursor; the other tabs register theirs with
+  `Document.follow`, and `apply` moves them on every change.
+- **Changes on disk.** When the window gets focus, `Editor.checkDisk` reloads
+  files that changed, or asks first when they have unsaved changes.
 - **Commands.** `editor/commands.zig` lists every action and runs it with
   `run(editor, command)`. Keys, mouse and dialogs all end up there. A new
   action is one enum value and one case; its tag name is its text name.
@@ -73,8 +91,8 @@ third_party/      vendored C dependencies (SDL3)
   wrap, which text position is under a cell. It works in cells and only
   measures lines near the screen, so file size does not matter.
   `ui/panels/editor_view.zig` only draws what the view says is visible.
-- **Decorations.** Selection, and later search matches, git markers and
-  blame, are entries in `Editor.decorations` (`editor/decoration.zig`).
+- **Decorations.** The current line, selection, and later search matches,
+  git markers and blame, are entries in `Tab.decorations` (`editor/decoration.zig`).
   Features add entries; only the editor view draws them.
 - **Background work.** A thread hands a result to the main loop with
   `Mailbox.post` (`platform/mailbox.zig`), which wakes the event wait. The
@@ -82,10 +100,11 @@ third_party/      vendored C dependencies (SDL3)
 - **Files.** `platform/fs.zig` reads whole files and saves through a
   temporary file and a rename. The buffer keeps the bytes as they are, so
   line endings and the final newline survive a save.
-- **Unsaved changes.** The flag comes from the undo history
-  (`History.isModified`). Quit and open ask Save / Don't save / Cancel.
+- **Questions.** The flag for unsaved changes comes from the undo history
+  (`History.isModified`). Quit and closing a tab ask Save / Don't save /
+  Cancel with an `ask` request; the answer comes back to `Editor.answer`.
 - **Messages.** Everything reports through `Editor.notify`; the status bar
-  shows the message for a few seconds.
+  shows the message for a few seconds and the messages panel keeps it.
 - **Sizes.** `ui/layout.zig` derives every size from the cell size, which is
   the 8x16 font times the zoom (1x to 4x).
 
@@ -117,7 +136,8 @@ third_party/      vendored C dependencies (SDL3)
   `src/tests.zig` imports only these roots. A new file only needs one line
   in its folder's `root.zig`; a new integration test needs one line in
   `tests/root.zig`.
-- `ui/root.zig` and `platform/root.zig` import only their SDL-free files.
+- `platform/root.zig` imports only its SDL-free files.
 - The test build has no SDL, so a test that reaches SDL code fails to build.
-  Keep testable logic out of the SDL files of `platform/`, and out of
-  `panels/` and `widgets/`.
+  Keep testable logic out of the SDL files of `platform/`.
+- `tests/workbench_test.zig` drives the whole window with events and checks
+  what is drawn with `canvas.Recorder`.

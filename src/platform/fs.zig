@@ -1,4 +1,5 @@
-//! Reads and writes whole files, lists folders, finds the config folder.
+//! Reads and writes whole files, lists, creates, renames and deletes files
+//! and folders, finds the config folder.
 //! Paths are relative to the working directory or absolute. No SDL here.
 const std = @import("std");
 const builtin = @import("builtin");
@@ -21,22 +22,61 @@ pub fn write(io: Io, path: []const u8, parts: []const []const u8) !void {
     try atomic.replace(io);
 }
 
-/// Names of the files in `path` that end with `suffix`, without it. A missing
-/// folder has none.
-pub fn list(io: Io, allocator: std.mem.Allocator, path: []const u8, suffix: []const u8) ![][]u8 {
-    var names: std.ArrayList([]u8) = .empty;
-    errdefer names.deinit(allocator);
+pub const Entry = struct { name: []u8, is_dir: bool };
+
+/// The files and folders in `path`, in no order. A missing folder has none.
+/// Free with `freeList`.
+pub fn list(io: Io, allocator: std.mem.Allocator, path: []const u8) ![]Entry {
+    var found: std.ArrayList(Entry) = .empty;
+    errdefer freeList(allocator, found.items);
+    errdefer found.deinit(allocator);
     var dir = Io.Dir.cwd().openDir(io, path, .{ .iterate = true }) catch |err| switch (err) {
-        error.FileNotFound => return names.toOwnedSlice(allocator),
+        error.FileNotFound => return found.toOwnedSlice(allocator),
         else => return err,
     };
     defer dir.close(io);
     var entries = dir.iterate();
     while (try entries.next(io)) |entry| {
-        if (entry.kind != .file or !std.mem.endsWith(u8, entry.name, suffix)) continue;
-        try names.append(allocator, try allocator.dupe(u8, entry.name[0 .. entry.name.len - suffix.len]));
+        try found.ensureUnusedCapacity(allocator, 1);
+        found.appendAssumeCapacity(.{ .name = try allocator.dupe(u8, entry.name), .is_dir = entry.kind == .directory });
     }
-    return names.toOwnedSlice(allocator);
+    return found.toOwnedSlice(allocator);
+}
+
+pub fn freeList(allocator: std.mem.Allocator, entries: []const Entry) void {
+    for (entries) |entry| allocator.free(entry.name);
+    allocator.free(entries);
+}
+
+/// Modification time, or null when the file cannot be read.
+pub fn modTime(io: Io, path: []const u8) ?i96 {
+    const stat = Io.Dir.cwd().statFile(io, path, .{}) catch return null;
+    return stat.mtime.nanoseconds;
+}
+
+pub fn isDir(io: Io, path: []const u8) bool {
+    const stat = Io.Dir.cwd().statFile(io, path, .{}) catch return false;
+    return stat.kind == .directory;
+}
+
+/// A new empty file. Fails if something is already there.
+pub fn createFile(io: Io, path: []const u8) !void {
+    const file = try Io.Dir.cwd().createFile(io, path, .{ .exclusive = true });
+    file.close(io);
+}
+
+pub fn createDir(io: Io, path: []const u8) !void {
+    try Io.Dir.cwd().createDir(io, path, .default_dir);
+}
+
+pub fn rename(io: Io, old: []const u8, new: []const u8) !void {
+    if (modTime(io, new) != null) return error.PathAlreadyExists;
+    try Io.Dir.rename(.cwd(), old, .cwd(), new, io);
+}
+
+/// Deletes a file, or a folder with everything in it.
+pub fn delete(io: Io, path: []const u8) !void {
+    try Io.Dir.cwd().deleteTree(io, path);
 }
 
 /// The folder for user settings: `%APPDATA%\8-bit` on Windows,
@@ -87,21 +127,30 @@ test "write replaces the old file and leaves no temporary file" {
     try testing.expectEqual(@as(usize, 1), names);
 }
 
-test "list finds the files with a suffix" {
+test "create, list, rename and delete files and folders" {
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
-    var buffer: [128]u8 = undefined;
-    try write(testing.io, try tmpPath(&tmp, &buffer, "sub/a.zon"), &.{""});
-    try write(testing.io, try tmpPath(&tmp, &buffer, "sub/b.txt"), &.{""});
+    var a: [128]u8 = undefined;
+    var b: [128]u8 = undefined;
+    try createDir(testing.io, try tmpPath(&tmp, &a, "sub"));
+    try createFile(testing.io, try tmpPath(&tmp, &a, "sub/a.txt"));
+    try testing.expectError(error.PathAlreadyExists, createFile(testing.io, try tmpPath(&tmp, &a, "sub/a.txt")));
+    try testing.expect(isDir(testing.io, try tmpPath(&tmp, &a, "sub")));
+    try testing.expect(!isDir(testing.io, try tmpPath(&tmp, &a, "sub/a.txt")));
 
-    const names = try list(testing.io, testing.allocator, try tmpPath(&tmp, &buffer, "sub"), ".zon");
-    defer {
-        for (names) |name| testing.allocator.free(name);
-        testing.allocator.free(names);
-    }
-    try testing.expectEqual(@as(usize, 1), names.len);
-    try testing.expectEqualStrings("a", names[0]);
-    try testing.expectEqual(@as(usize, 0), (try list(testing.io, testing.allocator, try tmpPath(&tmp, &buffer, "none"), ".zon")).len);
+    const entries = try list(testing.io, testing.allocator, try tmpPath(&tmp, &a, ""));
+    defer freeList(testing.allocator, entries);
+    try testing.expectEqual(@as(usize, 1), entries.len);
+    try testing.expectEqualStrings("sub", entries[0].name);
+    try testing.expect(entries[0].is_dir);
+    try testing.expectEqual(@as(usize, 0), (try list(testing.io, testing.allocator, try tmpPath(&tmp, &a, "none"))).len);
+
+    try rename(testing.io, try tmpPath(&tmp, &a, "sub/a.txt"), try tmpPath(&tmp, &b, "sub/b.txt"));
+    try testing.expect(modTime(testing.io, try tmpPath(&tmp, &a, "sub/b.txt")) != null);
+    try createFile(testing.io, try tmpPath(&tmp, &a, "sub/c.txt"));
+    try testing.expectError(error.PathAlreadyExists, rename(testing.io, try tmpPath(&tmp, &a, "sub/c.txt"), try tmpPath(&tmp, &b, "sub/b.txt")));
+    try delete(testing.io, try tmpPath(&tmp, &a, "sub"));
+    try testing.expectEqual(@as(?i96, null), modTime(testing.io, try tmpPath(&tmp, &a, "sub")));
 }
 
 test "the config folder comes from the environment" {

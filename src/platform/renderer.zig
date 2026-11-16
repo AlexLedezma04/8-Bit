@@ -5,6 +5,7 @@ const Window = @import("window.zig").Window;
 const Color = @import("../ui/theme.zig").Color;
 const Rect = @import("../ui/layout.zig").Rect;
 const bitmap_font = @import("../font/bitmap_font.zig");
+const Canvas = @import("../ui/canvas.zig").Canvas;
 
 /// Glyphs sent to SDL in one call.
 const batch_size = 128;
@@ -31,6 +32,10 @@ pub const Renderer = struct {
         errdefer c.SDL_DestroyRenderer(handle);
         _ = c.SDL_SetRenderVSync(handle, 1);
         return .{ .handle = handle, .font = try createFontTexture(handle) };
+    }
+
+    pub fn canvas(self: *Renderer) Canvas {
+        return .of(Renderer, self);
     }
 
     pub fn deinit(self: *Renderer) void {
