@@ -286,7 +286,7 @@ test "searches the folder on a thread, skips what it should" {
     try testing.expectEqualStrings("a.txt:2: one Two", project.hits.items[0].text);
     try testing.expectEqual(@as(usize, 1), project.hits.items[0].line);
     try testing.expectEqual(@as(usize, 6), project.hits.items[0].column);
-    try testing.expectEqualStrings("sub/b.txt:1: TWO", project.hits.items[1].text);
+    try testing.expectEqualStrings("sub" ++ std.fs.path.sep_str ++ "b.txt:1: TWO", project.hits.items[1].text);
     var line: [128]u8 = undefined;
     try testing.expectEqualStrings("\"two\": 2 results in 2 files", project.summary(&line));
 
