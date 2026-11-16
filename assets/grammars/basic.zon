@@ -1,0 +1,25 @@
+.{
+    .name = "BASIC",
+    .extensions = .{ "bas", "vb", "vbs", "vba", "frm", "bi" },
+    .line_comments = .{ "'", "REM ", "rem ", "Rem " },
+    .strings = .{.{ .start = "\"", .escape = false }},
+    .keywords = .{
+        "and",    "as",       "byref",     "byval", "call",   "case",     "class",   "const",    "dim",       "do",        "each",
+        "else",   "elseif",   "end",       "exit",  "for",    "function", "get",     "gosub",    "goto",      "if",        "imports",
+        "in",     "inherits", "interface", "is",    "let",    "loop",     "me",      "mod",      "module",    "namespace", "new",
+        "next",   "not",      "of",        "on",    "option", "or",       "private", "property", "protected", "public",    "redim",
+        "resume", "return",   "select",    "set",   "shared", "static",   "step",    "sub",      "then",      "to",        "try",
+        "catch",  "finally",  "until",     "using", "wend",   "while",    "with",    "xor",
+    },
+    .types = .{
+        "boolean", "byte",   "char",   "date",    "decimal", "double", "integer", "long", "object",
+        "short",   "single", "string", "variant",
+    },
+    .constants = .{ "true", "false", "nothing", "null" },
+    .builtins = .{
+        "print", "input", "msgbox", "len", "mid", "left", "right", "ucase", "lcase", "val",
+        "str",   "chr",   "asc",
+    },
+    .ignore_case = true,
+    .operators = "+-*/\\=<>&^",
+}

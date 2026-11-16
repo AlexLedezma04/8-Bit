@@ -1,0 +1,18 @@
+.{
+    .name = "TOML",
+    .extensions = .{"toml"},
+    .file_names = .{"Cargo.lock"},
+    .line_comments = .{"#"},
+    .strings = .{
+        .{ .start = "\"\"\"", .multiline = true },
+        .{ .start = "'''", .escape = false, .multiline = true },
+        .{ .start = "\"" },
+        .{ .start = "'", .escape = false },
+    },
+    .constants = .{ "true", "false", "inf", "nan" },
+    .functions = false,
+    .key_before = "=",
+    .operators = "=",
+    .word_chars = "-",
+    .line_starts = .{.{ .text = "[", .style = .type }},
+}

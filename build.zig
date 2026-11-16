@@ -15,7 +15,8 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const exe = addEditor(b, target, optimize);
+    const assets = addAssets(b);
+    const exe = addEditor(b, target, optimize, assets);
     b.installArtifact(exe);
 
     const run = b.addRunArtifact(exe);
@@ -26,7 +27,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/tests.zig"),
         .target = target,
         .optimize = optimize,
-        .imports = &.{.{ .name = "assets", .module = addAssets(b) }},
+        .imports = &.{.{ .name = "assets", .module = assets }},
     });
     const integration = b.createModule(.{
         .root_source_file = b.path("tests/root.zig"),
@@ -35,8 +36,12 @@ pub fn build(b: *std.Build) void {
         .imports = &.{.{ .name = "8-bit", .module = sdl_free }},
     });
     const test_step = b.step("test", "Run SDL-free unit and integration tests");
-    for ([_]*std.Build.Module{ sdl_free, integration }) |mod|
-        test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = mod })).step);
+    for ([_]*std.Build.Module{ sdl_free, integration }) |mod| {
+        const run_tests = b.addRunArtifact(b.addTest(.{ .root_module = mod }));
+        // Tests read files like tests/samples, so they always run.
+        run_tests.has_side_effects = true;
+        test_step.dependOn(&run_tests.step);
+    }
 
     const size_check = b.addRunArtifact(b.addExecutable(.{
         .name = "size_check",
@@ -48,13 +53,13 @@ pub fn build(b: *std.Build) void {
     size_check.addArg(b.fmt("{d}", .{size_limit}));
     for (size_targets) |t| {
         size_check.addArg(t.name);
-        size_check.addFileArg(addEditor(b, b.resolveTargetQuery(t.query), .ReleaseSmall).getEmittedBin());
+        size_check.addFileArg(addEditor(b, b.resolveTargetQuery(t.query), .ReleaseSmall, assets).getEmittedBin());
     }
     b.step("size", "Fail if a release exe is over 2 MiB").dependOn(&size_check.step);
 }
 
 /// The editor exe with SDL linked in. Used by the normal build and by the size check.
-fn addEditor(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
+fn addEditor(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, assets: *std.Build.Module) *std.Build.Step.Compile {
     const sdl_c = b.addTranslateC(.{
         .root_source_file = b.path("src/platform/sdl.h"),
         .target = target,
@@ -71,7 +76,7 @@ fn addEditor(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.buil
             .link_libc = true,
             .imports = &.{
                 .{ .name = "sdl", .module = sdl_c.createModule() },
-                .{ .name = "assets", .module = addAssets(b) },
+                .{ .name = "assets", .module = assets },
             },
         }),
     });
@@ -79,9 +84,24 @@ fn addEditor(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.buil
     return exe;
 }
 
-/// The built-in data files of assets/, embedded in the exe.
+/// The built-in data files of assets/, embedded in the exe. Every grammar
+/// file is found by `tools/embed_dir.zig`.
 fn addAssets(b: *std.Build) *std.Build.Module {
-    return b.createModule(.{ .root_source_file = b.path("assets/assets.zig") });
+    const embed = b.addRunArtifact(b.addExecutable(.{
+        .name = "embed_dir",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/embed_dir.zig"),
+            .target = b.graph.host,
+        }),
+    }));
+    // The folder's contents are not hashed, so run every time to see new files.
+    embed.has_side_effects = true;
+    embed.addArg("grammars");
+    embed.addDirectoryArg(b.path("assets/grammars"));
+    const grammars = b.createModule(.{ .root_source_file = embed.addOutputFileArg("grammars.zig") });
+    const assets = b.createModule(.{ .root_source_file = b.path("assets/assets.zig") });
+    assets.addImport("grammars", grammars);
+    return assets;
 }
 
 fn buildSdl(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {

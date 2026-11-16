@@ -1,0 +1,25 @@
+.{
+    .name = "Forth",
+    .extensions = .{ "fth", "4th", "forth", "frt", "fs" },
+    .hints = .{ "\\ ", "\n: " },
+    .line_comments = .{"\\ "},
+    .block_comment = .{ .start = "( ", .end = ")" },
+    .strings = .{
+        .{ .start = ".\" ", .end = "\"", .escape = false },
+        .{ .start = "s\" ", .end = "\"", .escape = false },
+    },
+    .keywords = .{
+        "if",    "else",   "then",  "begin",   "until", "while",     "repeat", "again",   "do",       "loop",
+        "+loop", "leave",  "exit",  "recurse", "case",  "of",        "endof",  "endcase", "variable", "constant",
+        "value", "create", "does>", "allot",   "cells", "immediate",
+    },
+    .builtins = .{
+        "dup",  "drop", "swap", "over", "rot", "nip", "tuck", "pick", "roll", ".", "emit", "cr",
+        "type", "key",  "@",    "!",    "+!",  "c@",  "c!",   "here", ",",    ".", ".s",
+    },
+    .ignore_case = true,
+    .functions = false,
+    .operators = ":;",
+    .punctuation = "",
+    .word_chars = "-*+!?<>=/&%$.:",
+}

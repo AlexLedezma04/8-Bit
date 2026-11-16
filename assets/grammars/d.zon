@@ -1,0 +1,31 @@
+.{
+    .name = "D",
+    .extensions = .{ "d", "di" },
+    .shebangs = .{"rdmd"},
+    .line_comments = .{"//"},
+    .block_comment = .{ .start = "/*", .end = "*/" },
+    .strings = .{
+        .{ .start = "/+", .end = "+/", .escape = false, .multiline = true, .style = .comment },
+        .{ .start = "`", .escape = false, .multiline = true },
+        .{ .start = "r\"", .end = "\"", .escape = false },
+        .{ .start = "\"" },
+        .{ .start = "'" },
+    },
+    .keywords = .{
+        "abstract",     "alias",    "align",     "asm",      "assert", "auto",     "body",      "break",     "case",            "cast",
+        "catch",        "class",    "const",     "continue", "debug",  "default",  "delegate",  "delete",    "deprecated",      "do",
+        "else",         "enum",     "export",    "extern",   "final",  "finally",  "for",       "foreach",   "foreach_reverse", "function",
+        "goto",         "if",       "immutable", "import",   "in",     "inout",    "interface", "invariant", "is",              "lazy",
+        "mixin",        "module",   "new",       "nothrow",  "out",    "override", "package",   "pragma",    "private",         "protected",
+        "public",       "pure",     "ref",       "return",   "scope",  "shared",   "static",    "struct",    "super",           "switch",
+        "synchronized", "template", "this",      "throw",    "try",    "typeid",   "typeof",    "union",     "unittest",        "version",
+        "while",        "with",
+    },
+    .types = .{
+        "bool",   "byte", "ubyte", "short", "ushort", "int",    "uint", "long",   "ulong", "float",
+        "double", "real", "char",  "wchar", "dchar",  "string", "void", "size_t",
+    },
+    .constants = .{ "true", "false", "null" },
+    .operators = "+-*/%=<>!&|^~?:",
+    .prefixes = .{.{ .text = "@", .style = .builtin }},
+}

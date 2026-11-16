@@ -1,0 +1,28 @@
+.{
+    .name = "F#",
+    .extensions = .{ "fs", "fsi", "fsx", "fsscript" },
+    .line_comments = .{"//"},
+    .block_comment = .{ .start = "(*", .end = "*)" },
+    .strings = .{
+        .{ .start = "\"\"\"", .escape = false, .multiline = true },
+        .{ .start = "@\"", .end = "\"", .escape = false },
+        .{ .start = "\"" },
+    },
+    .keywords = .{
+        "abstract", "and",    "as",       "assert", "base",     "begin",   "class",   "default",   "delegate",
+        "do",       "done",   "downcast", "downto", "elif",     "else",    "end",     "exception", "extern",
+        "for",      "fun",    "function", "global", "if",       "in",      "inherit", "inline",    "interface",
+        "internal", "lazy",   "let",      "match",  "member",   "module",  "mutable", "namespace", "new",
+        "not",      "of",     "open",     "or",     "override", "private", "public",  "rec",       "return",
+        "static",   "struct", "then",     "to",     "try",      "type",    "upcast",  "use",       "val",
+        "void",     "when",   "while",    "with",   "yield",
+    },
+    .types = .{
+        "bool", "byte",   "char", "decimal", "double", "float", "int",    "int64", "list", "option",
+        "seq",  "string", "unit", "array",   "Map",    "Set",   "Result",
+    },
+    .constants = .{ "true", "false", "null", "None", "Some", "Ok", "Error" },
+    .operators = "+-*/%=<>!&|^~?:@",
+    .word_chars = "'",
+    .prefixes = .{.{ .text = "#", .style = .keyword }},
+}

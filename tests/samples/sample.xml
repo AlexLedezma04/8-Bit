@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A config. -->
+<config xmlns:x="urn:x">
+  <item id="1" x:name='first'>Text &amp; more</item>
+  <empty/>
+</config>

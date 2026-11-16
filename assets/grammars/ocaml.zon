@@ -1,0 +1,22 @@
+.{
+    .name = "OCaml",
+    .extensions = .{ "ml", "mli", "mll", "mly" },
+    .shebangs = .{"ocaml"},
+    .block_comment = .{ .start = "(*", .end = "*)" },
+    .strings = .{.{ .start = "\"" }},
+    .keywords = .{
+        "and",     "as",          "assert",   "begin",   "class",   "constraint", "do",      "done",    "downto", "else",
+        "end",     "exception",   "external", "for",     "fun",     "function",   "functor", "if",      "in",     "include",
+        "inherit", "initializer", "lazy",     "let",     "match",   "method",     "module",  "mutable", "new",    "nonrec",
+        "object",  "of",          "open",     "or",      "private", "rec",        "sig",     "struct",  "then",   "to",
+        "try",     "type",        "val",      "virtual", "when",    "while",      "with",
+    },
+    .types = .{
+        "bool", "char", "float", "int", "list", "option", "string", "unit", "array", "bytes",
+        "exn",  "ref",
+    },
+    .constants = .{ "true", "false", "None", "Some", "Ok", "Error" },
+    .functions = false,
+    .operators = "+-*/=<>!&|^~?:@",
+    .word_chars = "'",
+}

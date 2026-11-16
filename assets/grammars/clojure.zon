@@ -1,0 +1,20 @@
+.{
+    .name = "Clojure",
+    .extensions = .{ "clj", "cljs", "cljc", "edn", "bb" },
+    .shebangs = .{ "bb", "clojure" },
+    .line_comments = .{";"},
+    .strings = .{.{ .start = "\"", .multiline = true }},
+    .keywords = .{
+        "def",      "defn",    "defn-", "defmacro", "defmulti", "defmethod", "defprotocol", "defrecord",
+        "deftype",  "defonce", "fn",    "let",      "letfn",    "if",        "if-not",      "when",
+        "when-not", "cond",    "case",  "do",       "loop",     "recur",     "try",         "catch",
+        "finally",  "throw",   "ns",    "require",  "import",   "quote",     "var",         "and",
+        "or",       "not",     "doseq", "dotimes",  "for",
+    },
+    .constants = .{ "true", "false", "nil" },
+    .functions = false,
+    .operators = "'`~@^#",
+    .punctuation = "()[]{}",
+    .word_chars = "-*+!?<>=/&%$.:",
+    .prefixes = .{.{ .text = ":", .style = .constant }},
+}

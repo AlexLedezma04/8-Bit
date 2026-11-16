@@ -1,0 +1,20 @@
+.{
+    .name = "PL/I",
+    .extensions = .{ "pli", "pl1", "plinc" },
+    .block_comment = .{ .start = "/*", .end = "*/" },
+    .strings = .{ .{ .start = "\"", .escape = false }, .{ .start = "'", .escape = false } },
+    .keywords = .{
+        "allocate", "begin",     "by",    "call", "close", "dcl",    "declare",   "do",     "else",   "end",
+        "entry",    "exit",      "free",  "get",  "go",    "goto",   "if",        "leave",  "on",     "open",
+        "options",  "procedure", "proc",  "put",  "read",  "return", "returns",   "select", "signal", "stop",
+        "then",     "to",        "until", "when", "while", "write",  "otherwise",
+    },
+    .types = .{
+        "binary", "bit",        "char",   "character", "decimal",  "fixed", "float",   "pointer", "label",
+        "based",  "controlled", "static", "automatic", "external", "init",  "initial", "varying",
+    },
+    .builtins = .{ "substr", "length", "index", "mod", "abs", "max", "min", "sqrt" },
+    .ignore_case = true,
+    .operators = "+-*/=<>&|^:",
+    .punctuation = "()[],;",
+}

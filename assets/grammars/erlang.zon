@@ -1,0 +1,20 @@
+.{
+    .name = "Erlang",
+    .extensions = .{ "erl", "hrl", "escript" },
+    .file_names = .{"rebar.config"},
+    .shebangs = .{"escript"},
+    .line_comments = .{"%"},
+    .strings = .{ .{ .start = "\"" }, .{ .start = "'" } },
+    .keywords = .{
+        "after",  "and",     "andalso", "band", "begin", "bnot", "bor", "bsl",   "bsr", "bxor", "case",
+        "catch",  "cond",    "div",     "end",  "fun",   "if",   "let", "maybe", "not", "of",   "or",
+        "orelse", "receive", "rem",     "try",  "when",  "xor",
+    },
+    .constants = .{ "true", "false", "undefined", "ok", "error" },
+    .operators = "+-*/=<>!|:",
+    .prefixes = .{
+        .{ .text = "-", .style = .keyword },
+        .{ .text = "?", .style = .builtin },
+        .{ .text = "$", .style = .constant },
+    },
+}

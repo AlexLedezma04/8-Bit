@@ -1,0 +1,16 @@
+.{
+    .name = "Prolog",
+    .extensions = .{ "pl", "pro", "prolog" },
+    .shebangs = .{"swipl"},
+    .hints = .{":-"},
+    .line_comments = .{"%"},
+    .block_comment = .{ .start = "/*", .end = "*/" },
+    .strings = .{ .{ .start = "\"" }, .{ .start = "'" } },
+    .keywords = .{
+        "is",         "mod",     "rem",           "div",     "not",     "fail",   "true",  "false",   "call", "findall", "bagof",
+        "setof",      "assert",  "asserta",       "assertz", "retract", "format", "write", "writeln", "nl",   "halt",    "module",
+        "use_module", "dynamic", "discontiguous",
+    },
+    .functions = true,
+    .operators = ":-=<>\\+*/|!?.",
+}

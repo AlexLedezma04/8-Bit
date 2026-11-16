@@ -1,0 +1,16 @@
+.{
+    .name = "Diff",
+    .extensions = .{ "diff", "patch" },
+    .numbers = false,
+    .functions = false,
+    .punctuation = "",
+    .line_starts = .{
+        .{ .text = "+++", .style = .type },
+        .{ .text = "---", .style = .type },
+        .{ .text = "@@", .style = .constant },
+        .{ .text = "diff ", .style = .keyword },
+        .{ .text = "index ", .style = .comment },
+        .{ .text = "+", .style = .string },
+        .{ .text = "-", .style = .keyword },
+    },
+}

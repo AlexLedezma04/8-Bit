@@ -1,0 +1,28 @@
+.{
+    .name = "GLSL",
+    .extensions = .{ "glsl", "vert", "frag", "geom", "comp", "tesc", "tese" },
+    .line_comments = .{"//"},
+    .block_comment = .{ .start = "/*", .end = "*/" },
+    .strings = .{.{ .start = "\"" }},
+    .keywords = .{
+        "attribute", "break",   "buffer",     "case",     "centroid", "coherent", "const",         "continue",
+        "default",   "discard", "do",         "else",     "flat",     "for",      "highp",         "if",
+        "in",        "inout",   "invariant",  "layout",   "lowp",     "mediump",  "noperspective", "out",
+        "patch",     "precise", "precision",  "readonly", "restrict", "return",   "sample",        "shared",
+        "smooth",    "struct",  "subroutine", "switch",   "uniform",  "varying",  "volatile",      "while",
+        "writeonly",
+    },
+    .types = .{
+        "bool",           "bvec2",   "bvec3",  "bvec4",  "double", "dvec2",     "dvec3",     "dvec4",     "float",       "int",
+        "ivec2",          "ivec3",   "ivec4",  "mat2",   "mat3",   "mat4",      "mat2x2",    "mat2x3",    "mat2x4",      "mat3x2",
+        "mat3x3",         "mat3x4",  "mat4x2", "mat4x3", "mat4x4", "sampler1D", "sampler2D", "sampler3D", "samplerCube", "sampler2DShadow",
+        "sampler2DArray", "image2D", "uint",   "uvec2",  "uvec3",  "uvec4",     "vec2",      "vec3",      "vec4",        "void",
+    },
+    .constants = .{ "true", "false" },
+    .builtins = .{
+        "gl_FragColor", "gl_FragCoord", "gl_FragDepth", "gl_FrontFacing", "gl_InstanceID",
+        "gl_PointSize", "gl_Position",  "gl_VertexID",
+    },
+    .operators = "+-*/%=<>!&|^~?:",
+    .prefixes = .{.{ .text = "#", .style = .keyword }},
+}

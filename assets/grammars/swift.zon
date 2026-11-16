@@ -1,0 +1,23 @@
+.{
+    .name = "Swift",
+    .extensions = .{"swift"},
+    .line_comments = .{"//"},
+    .block_comment = .{ .start = "/*", .end = "*/" },
+    .strings = .{ .{ .start = "\"\"\"", .multiline = true }, .{ .start = "\"" } },
+    .keywords = .{
+        "actor",       "any",         "as",      "associatedtype", "async",  "await",     "break",   "case",     "catch",
+        "class",       "continue",    "default", "defer",          "deinit", "do",        "else",    "enum",     "extension",
+        "fallthrough", "fileprivate", "for",     "func",           "guard",  "if",        "import",  "in",       "init",
+        "inout",       "internal",    "is",      "let",            "open",   "operator",  "private", "protocol", "public",
+        "repeat",      "rethrows",    "return",  "self",           "Self",   "some",      "static",  "struct",   "subscript",
+        "super",       "switch",      "throw",   "throws",         "try",    "typealias", "var",     "where",    "while",
+    },
+    .types = .{
+        "Int",   "Int8",   "Int16", "Int32",  "Int64",     "UInt",  "UInt8",      "UInt16", "UInt32",   "UInt64",
+        "Float", "Double", "Bool",  "String", "Character", "Array", "Dictionary", "Set",    "Optional", "Void",
+        "Any",
+    },
+    .constants = .{ "true", "false", "nil" },
+    .operators = "+-*/%=<>!&|^~?:",
+    .prefixes = .{ .{ .text = "@", .style = .builtin }, .{ .text = "#", .style = .keyword } },
+}

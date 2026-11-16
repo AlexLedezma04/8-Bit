@@ -1,0 +1,19 @@
+.{
+    .name = "MATLAB",
+    .extensions = .{"m"},
+    .line_comments = .{"%"},
+    .block_comment = .{ .start = "%{", .end = "%}" },
+    .strings = .{ .{ .start = "\"" }, .{ .start = "'", .escape = false } },
+    .keywords = .{
+        "break",    "case",   "catch", "classdef", "continue",  "else",        "elseif",     "end",        "for",
+        "function", "global", "if",    "methods",  "otherwise", "parfor",      "persistent", "properties", "return",
+        "spmd",     "switch", "try",   "while",    "events",    "enumeration",
+    },
+    .constants = .{ "true", "false", "pi", "Inf", "NaN", "eps" },
+    .builtins = .{
+        "disp",   "fprintf", "sprintf", "zeros",  "ones",  "eye",    "size",     "length", "numel", "plot",
+        "figure", "hold",    "xlabel",  "ylabel", "title", "legend", "linspace", "max",    "min",   "sum",
+        "mean",   "abs",     "sqrt",
+    },
+    .operators = "+-*/\\^=<>~&|:",
+}

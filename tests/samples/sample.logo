@@ -1,0 +1,8 @@
+; Draw a square.
+to square :size
+  repeat 4 [forward :size right 90]
+end
+
+clearscreen
+square 100
+print "done

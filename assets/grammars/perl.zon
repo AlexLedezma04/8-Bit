@@ -1,0 +1,26 @@
+.{
+    .name = "Perl",
+    .extensions = .{ "pl", "pm", "t", "pod", "psgi" },
+    .shebangs = .{"perl"},
+    .line_comments = .{"#"},
+    .block_comment = .{ .start = "=pod", .end = "=cut" },
+    .strings = .{ .{ .start = "\"" }, .{ .start = "'" }, .{ .start = "`" } },
+    .keywords = .{
+        "do",    "else", "elsif",   "for",  "foreach", "goto",   "if",  "last",   "local", "my",  "next",
+        "no",    "our",  "package", "redo", "require", "return", "sub", "unless", "until", "use", "while",
+        "and",   "or",   "not",     "eq",   "ne",      "lt",     "gt",  "le",     "ge",    "cmp", "qw",
+        "BEGIN", "END",
+    },
+    .constants = .{ "__FILE__", "__LINE__", "__PACKAGE__", "__DATA__", "__END__" },
+    .builtins = .{
+        "chomp",   "chop",      "die",   "exists", "defined", "delete", "each",  "join",    "keys", "map",
+        "open",    "close",     "print", "printf", "push",    "pop",    "shift", "unshift", "sort", "split",
+        "sprintf", "wantarray",
+    },
+    .operators = "+-*/=<>!&|^~?:.",
+    .prefixes = .{
+        .{ .text = "$", .style = .builtin },
+        .{ .text = "@", .style = .builtin },
+        .{ .text = "%", .style = .builtin },
+    },
+}

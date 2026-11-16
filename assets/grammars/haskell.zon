@@ -1,0 +1,26 @@
+.{
+    .name = "Haskell",
+    .extensions = .{ "hs", "lhs" },
+    .shebangs = .{ "runhaskell", "stack" },
+    .line_comments = .{"--"},
+    .block_comment = .{ .start = "{-", .end = "-}" },
+    .strings = .{.{ .start = "\"" }},
+    .keywords = .{
+        "case",    "class",  "data",    "default", "deriving", "do",        "else",   "family",   "forall",
+        "foreign", "if",     "import",  "in",      "infix",    "infixl",    "infixr", "instance", "let",
+        "mdo",     "module", "newtype", "of",      "proc",     "qualified", "rec",    "then",     "type",
+        "where",   "as",     "hiding",
+    },
+    .types = .{
+        "Bool",     "Char",   "Double", "Either", "Float", "Int", "Integer", "IO", "Maybe",
+        "Ordering", "String", "Word",
+    },
+    .constants = .{ "True", "False", "Nothing", "Just", "Left", "Right", "LT", "EQ", "GT" },
+    .builtins = .{
+        "map",      "filter", "foldl", "foldr",  "fst",  "snd",  "head",  "tail",   "length", "print",
+        "putStrLn", "show",   "read",  "return", "pure", "fmap", "mapM_", "concat", "zip",
+    },
+    .functions = false,
+    .operators = "+-*/=<>!&|^.:$@~\\",
+    .word_chars = "'",
+}

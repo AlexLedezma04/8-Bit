@@ -1,0 +1,17 @@
+.{
+    .name = "HTML",
+    .extensions = .{ "html", "htm", "xhtml" },
+    .block_comment = .{ .start = "<!--", .end = "-->" },
+    .strings = .{ .{ .start = "\"", .escape = false }, .{ .start = "'", .escape = false } },
+    .numbers = false,
+    .functions = false,
+    .key_before = "=",
+    .punctuation = "<>/",
+    .word_chars = "-",
+    .prefixes = .{
+        .{ .text = "</", .style = .keyword },
+        .{ .text = "<!", .style = .keyword },
+        .{ .text = "<", .style = .keyword },
+        .{ .text = "&", .style = .constant },
+    },
+}

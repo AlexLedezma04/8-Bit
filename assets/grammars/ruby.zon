@@ -1,0 +1,24 @@
+.{
+    .name = "Ruby",
+    .extensions = .{ "rb", "rake", "gemspec", "ru" },
+    .file_names = .{ "Rakefile", "Gemfile" },
+    .shebangs = .{"ruby"},
+    .line_comments = .{"#"},
+    .block_comment = .{ .start = "=begin", .end = "=end" },
+    .strings = .{ .{ .start = "\"" }, .{ .start = "'" }, .{ .start = "`" } },
+    .keywords = .{
+        "BEGIN",       "END",         "alias",   "and",       "begin",  "break",   "case",             "class",   "def",    "defined?",
+        "do",          "else",        "elsif",   "end",       "ensure", "for",     "if",               "in",      "module", "next",
+        "not",         "or",          "redo",    "rescue",    "retry",  "return",  "self",             "super",   "then",   "undef",
+        "unless",      "until",       "when",    "while",     "yield",  "require", "require_relative", "include", "extend", "attr_accessor",
+        "attr_reader", "attr_writer", "private", "protected", "public", "lambda",  "proc",             "raise",
+    },
+    .constants = .{ "true", "false", "nil" },
+    .operators = "+-*/%=<>!&|^~",
+    .word_chars = "?!",
+    .prefixes = .{
+        .{ .text = ":", .style = .constant },
+        .{ .text = "@", .style = .type },
+        .{ .text = "$", .style = .builtin },
+    },
+}

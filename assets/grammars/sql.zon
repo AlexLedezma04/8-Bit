@@ -1,0 +1,34 @@
+.{
+    .name = "SQL",
+    .extensions = .{"sql"},
+    .line_comments = .{"--"},
+    .block_comment = .{ .start = "/*", .end = "*/" },
+    .strings = .{
+        .{ .start = "'", .escape = false },
+        .{ .start = "\"", .escape = false },
+        .{ .start = "`", .escape = false },
+    },
+    .keywords = .{
+        "add",     "all",         "alter",      "and",     "as",      "asc",       "begin",    "between",  "by",      "case",      "check",
+        "column",  "commit",      "constraint", "create",  "cross",   "database",  "declare",  "default",  "delete",  "desc",      "distinct",
+        "drop",    "else",        "end",        "exists",  "foreign", "from",      "full",     "function", "grant",   "group",     "having",
+        "if",      "in",          "index",      "inner",   "insert",  "intersect", "into",     "is",       "join",    "key",       "left",
+        "like",    "limit",       "not",        "offset",  "on",      "or",        "order",    "outer",    "primary", "procedure", "references",
+        "replace", "return",      "returning",  "returns", "revoke",  "right",     "rollback", "schema",   "select",  "set",       "table",
+        "then",    "transaction", "trigger",    "union",   "unique",  "update",    "using",    "values",   "view",    "when",      "where",
+        "with",
+    },
+    .types = .{
+        "bigint",    "bigserial", "blob",   "bool",     "boolean", "bytea",    "char",      "date",        "datetime",
+        "decimal",   "double",    "float",  "int",      "integer", "interval", "json",      "jsonb",       "numeric",
+        "precision", "real",      "serial", "smallint", "text",    "time",     "timestamp", "timestamptz", "tinyint",
+        "uuid",      "varchar",
+    },
+    .constants = .{ "true", "false", "null" },
+    .builtins = .{
+        "abs",    "avg",   "cast",      "coalesce", "count", "length", "lower", "max", "min", "now",
+        "nullif", "round", "substring", "sum",      "upper",
+    },
+    .ignore_case = true,
+    .operators = "+-*/%=<>!|",
+}

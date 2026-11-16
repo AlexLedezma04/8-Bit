@@ -1,0 +1,22 @@
+.{
+    .name = "Cypher",
+    .extensions = .{ "cypher", "cyp", "cql" },
+    .line_comments = .{"//"},
+    .block_comment = .{ .start = "/*", .end = "*/" },
+    .strings = .{ .{ .start = "\"" }, .{ .start = "'" }, .{ .start = "`", .escape = false } },
+    .keywords = .{
+        "all",    "and",    "as",         "asc",    "ascending", "by",     "call", "case",  "contains", "create",
+        "delete", "desc",   "descending", "detach", "distinct",  "else",   "end",  "ends",  "exists",   "foreach",
+        "in",     "is",     "limit",      "load",   "match",     "merge",  "not",  "on",    "optional", "or",
+        "order",  "remove", "return",     "set",    "skip",      "starts", "then", "union", "unwind",   "when",
+        "where",  "with",   "xor",        "yield",  "csv",
+    },
+    .constants = .{ "true", "false", "null" },
+    .builtins = .{
+        "count",         "collect", "sum",  "avg",    "min",  "max",      "size",   "length",  "nodes",
+        "relationships", "id",      "type", "labels", "keys", "coalesce", "exists", "toUpper", "toLower",
+    },
+    .ignore_case = true,
+    .operators = "+-*/%=<>|:",
+    .prefixes = .{.{ .text = "$", .style = .builtin }},
+}

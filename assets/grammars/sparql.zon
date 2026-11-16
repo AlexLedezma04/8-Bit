@@ -1,0 +1,31 @@
+.{
+    .name = "SPARQL",
+    .extensions = .{ "sparql", "rq" },
+    .line_comments = .{"#"},
+    .strings = .{
+        .{ .start = "\"\"\"", .multiline = true },
+        .{ .start = "\"" },
+        .{ .start = "'" },
+        .{ .start = "<http", .end = ">", .escape = false, .style = .constant },
+        .{ .start = "<urn:", .end = ">", .escape = false, .style = .constant },
+    },
+    .keywords = .{
+        "a",        "ask",     "as",    "asc",    "base",   "bind",   "by",       "construct", "describe", "desc",
+        "distinct", "filter",  "from",  "graph",  "group",  "having", "insert",   "delete",    "data",     "into",
+        "limit",    "minus",   "named", "not",    "exists", "offset", "optional", "order",     "prefix",   "reduced",
+        "select",   "service", "union", "values", "where",  "with",
+    },
+    .constants = .{ "true", "false" },
+    .builtins = .{
+        "bound", "str",    "lang",     "datatype", "iri", "uri", "regex", "count", "sum", "avg", "min",
+        "max",   "concat", "contains", "strlen",
+    },
+    .ignore_case = true,
+    .operators = "=<>!&|^*+/",
+    .word_chars = "-",
+    .prefixes = .{
+        .{ .text = "?", .style = .builtin },
+        .{ .text = "$", .style = .builtin },
+        .{ .text = "@", .style = .constant },
+    },
+}

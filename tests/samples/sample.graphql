@@ -1,0 +1,13 @@
+# A schema.
+type User {
+  id: ID!
+  name: String
+  posts(first: Int = 10): [Post!]! @deprecated(reason: "Use feed")
+}
+
+"""
+Fetches a user.
+"""
+query GetUser($id: ID!) {
+  user(id: $id) { ...UserFields }
+}

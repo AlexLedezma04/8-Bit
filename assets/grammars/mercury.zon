@@ -1,0 +1,18 @@
+.{
+    .name = "Mercury",
+    .extensions = .{"m"},
+    .hints = .{":- module"},
+    .line_comments = .{"%"},
+    .block_comment = .{ .start = "/*", .end = "*/" },
+    .strings = .{ .{ .start = "\"" }, .{ .start = "'" } },
+    .keywords = .{
+        "module", "import_module", "use_module", "interface", "implementation", "pred",      "func",
+        "mode",   "type",          "inst",       "is",        "det",            "semidet",   "multi",
+        "nondet", "cc_multi",      "cc_nondet",  "erroneous", "failure",        "where",     "some",
+        "all",    "not",           "if",         "then",      "else",           "typeclass", "instance",
+        "pragma",
+    },
+    .types = .{ "int", "float", "string", "char", "bool", "list", "io" },
+    .constants = .{ "true", "false", "yes", "no" },
+    .operators = ":-=<>\\+*/|!?.&",
+}

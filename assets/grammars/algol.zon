@@ -1,0 +1,18 @@
+.{
+    .name = "ALGOL",
+    .extensions = .{ "alg", "a68", "algol" },
+    .block_comment = .{ .start = "#", .end = "#" },
+    .strings = .{.{ .start = "\"", .escape = false }},
+    .keywords = .{
+        "begin", "end",    "if",    "then", "else",  "elif",  "fi",      "case",      "in",    "out",  "esac",    "for",
+        "from",  "by",     "to",    "do",   "od",    "while", "proc",    "mode",      "op",    "prio", "struct",  "union",
+        "ref",   "loc",    "heap",  "goto", "skip",  "co",    "comment", "par",       "go",    "real", "int",     "bool",
+        "char",  "string", "void",  "long", "short", "array", "switch",  "procedure", "value", "own",  "integer", "boolean",
+        "label", "step",   "until",
+    },
+    .constants = .{ "true", "false", "nil", "empty" },
+    .builtins = .{ "print", "read", "newline" },
+    .ignore_case = true,
+    .functions = false,
+    .operators = ":=+-*/<>&^|~",
+}

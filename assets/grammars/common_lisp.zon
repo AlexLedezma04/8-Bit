@@ -1,0 +1,26 @@
+.{
+    .name = "Common Lisp",
+    .extensions = .{ "lisp", "lsp", "cl", "asd", "ros" },
+    .shebangs = .{ "sbcl", "clisp" },
+    .line_comments = .{";"},
+    .block_comment = .{ .start = "#|", .end = "|#" },
+    .strings = .{.{ .start = "\"", .multiline = true }},
+    .keywords = .{
+        "defun",       "defmacro",  "defvar",     "defparameter", "defconstant",    "defclass",            "defmethod",
+        "defgeneric",  "defstruct", "defpackage", "in-package",   "lambda",         "let",                 "let*",
+        "flet",        "labels",    "if",         "when",         "unless",         "cond",                "case",
+        "progn",       "prog1",     "loop",       "do",           "dolist",         "dotimes",             "return",
+        "return-from", "block",     "tagbody",    "go",           "setf",           "setq",                "quote",
+        "function",    "declare",   "the",        "handler-case", "unwind-protect", "multiple-value-bind", "destructuring-bind",
+    },
+    .constants = .{ "t", "nil" },
+    .builtins = .{
+        "car",    "cdr",     "cons", "list",  "append", "mapcar", "format", "funcall", "apply",
+        "length", "reverse", "nth",  "first", "rest",
+    },
+    .functions = false,
+    .operators = "'`,#",
+    .punctuation = "()",
+    .word_chars = "-*+!?<>=/&%$.:",
+    .prefixes = .{.{ .text = ":", .style = .constant }},
+}

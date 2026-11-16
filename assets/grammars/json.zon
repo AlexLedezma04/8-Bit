@@ -1,0 +1,11 @@
+.{
+    .name = "JSON",
+    .extensions = .{ "json", "jsonc", "json5", "geojson", "webmanifest" },
+    .file_names = .{ ".babelrc", ".eslintrc", ".prettierrc" },
+    .line_comments = .{"//"},
+    .block_comment = .{ .start = "/*", .end = "*/" },
+    .strings = .{.{ .start = "\"" }},
+    .constants = .{ "true", "false", "null" },
+    .functions = false,
+    .punctuation = "()[]{},;:",
+}

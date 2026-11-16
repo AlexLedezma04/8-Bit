@@ -1,0 +1,22 @@
+.{
+    .name = "ActionScript",
+    .extensions = .{"as"},
+    .line_comments = .{"//"},
+    .block_comment = .{ .start = "/*", .end = "*/" },
+    .strings = .{ .{ .start = "\"" }, .{ .start = "'" } },
+    .keywords = .{
+        "as",         "break",    "case",    "catch",   "class",      "const",     "continue", "default",  "delete",    "do",
+        "dynamic",    "each",     "else",    "extends", "final",      "finally",   "for",      "function", "get",       "if",
+        "implements", "import",   "in",      "include", "instanceof", "interface", "internal", "is",       "namespace", "native",
+        "new",        "override", "package", "private", "protected",  "public",    "return",   "set",      "static",    "super",
+        "switch",     "this",     "throw",   "try",     "typeof",     "use",       "var",      "while",    "with",
+    },
+    .types = .{
+        "Array",  "Boolean",   "int",   "Number", "Object", "String", "uint", "void", "Vector",
+        "Sprite", "MovieClip", "Event",
+    },
+    .constants = .{ "true", "false", "null", "undefined", "NaN", "Infinity" },
+    .builtins = .{"trace"},
+    .operators = "+-*/%=<>!&|^~?:",
+    .word_chars = "$",
+}

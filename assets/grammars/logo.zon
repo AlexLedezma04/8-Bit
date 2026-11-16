@@ -1,0 +1,18 @@
+.{
+    .name = "Logo",
+    .extensions = .{ "logo", "lgo", "lg" },
+    .line_comments = .{";"},
+    .keywords = .{
+        "to",  "end",     "repeat", "if", "ifelse", "make", "local", "output", "stop", "while",
+        "for", "foreach",
+    },
+    .builtins = .{
+        "forward", "fd",   "back",        "bk", "left",  "lt",   "right", "rt",     "penup", "pu", "pendown",
+        "pd",      "home", "clearscreen", "cs", "print", "show", "sum",   "random", "setxy",
+    },
+    .ignore_case = true,
+    .functions = false,
+    .operators = "+-*/=<>",
+    .punctuation = "[]()",
+    .prefixes = .{ .{ .text = ":", .style = .builtin }, .{ .text = "\"", .style = .string } },
+}

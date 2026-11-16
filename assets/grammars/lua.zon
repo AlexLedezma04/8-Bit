@@ -1,0 +1,23 @@
+.{
+    .name = "Lua",
+    .extensions = .{"lua"},
+    .shebangs = .{"lua"},
+    .line_comments = .{"--"},
+    .block_comment = .{ .start = "--[[", .end = "]]" },
+    .strings = .{
+        .{ .start = "[[", .end = "]]", .escape = false, .multiline = true },
+        .{ .start = "\"" },
+        .{ .start = "'" },
+    },
+    .keywords = .{
+        "and",   "break", "do", "else",   "elseif", "end",  "for",   "function", "goto", "if", "in",
+        "local", "not",   "or", "repeat", "return", "then", "until", "while",
+    },
+    .constants = .{ "true", "false", "nil" },
+    .builtins = .{
+        "assert",   "error",    "getmetatable", "io",     "ipairs",  "math",   "next",         "os",     "pairs",
+        "pcall",    "print",    "rawget",       "rawset", "require", "select", "setmetatable", "string", "table",
+        "tonumber", "tostring", "type",         "unpack", "xpcall",
+    },
+    .operators = "+-*/%^#=<>~:",
+}

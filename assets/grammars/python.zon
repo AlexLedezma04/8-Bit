@@ -1,0 +1,30 @@
+.{
+    .name = "Python",
+    .extensions = .{ "py", "pyw", "pyi" },
+    .shebangs = .{"python"},
+    .line_comments = .{"#"},
+    .strings = .{
+        .{ .start = "\"\"\"", .multiline = true },
+        .{ .start = "'''", .multiline = true },
+        .{ .start = "\"" },
+        .{ .start = "'" },
+    },
+    .keywords = .{
+        "and", "as",    "assert", "async",  "await",    "break", "case", "class",  "continue", "def",
+        "del", "elif",  "else",   "except", "finally",  "for",   "from", "global", "if",       "import",
+        "in",  "is",    "lambda", "match",  "nonlocal", "not",   "or",   "pass",   "raise",    "return",
+        "try", "while", "with",   "yield",
+    },
+    .types = .{
+        "int",       "float", "complex", "str", "bool", "bytes", "bytearray", "list", "dict", "set",
+        "frozenset", "tuple", "object",
+    },
+    .constants = .{ "True", "False", "None", "self", "cls" },
+    .builtins = .{
+        "abs",     "all",    "any", "enumerate", "filter", "getattr", "hasattr", "input", "isinstance",
+        "len",     "map",    "max", "min",       "open",   "print",   "range",   "repr",  "reversed",
+        "setattr", "sorted", "sum", "super",     "type",   "zip",
+    },
+    .operators = "+-*/%=<>!&|^~:",
+    .prefixes = .{.{ .text = "@", .style = .builtin }},
+}

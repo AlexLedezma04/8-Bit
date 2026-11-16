@@ -19,6 +19,8 @@ const Handled = panel.Handled;
 const tabs = @import("../widgets/tabs.zig");
 const Color = @import("../theme.zig").Color;
 const Event = @import("../../platform/event.zig").Event;
+const syntax = @import("../../syntax/syntax.zig");
+const Style = @import("../../syntax/grammar.zig").Style;
 
 /// Rows scrolled per step of the mouse wheel.
 const wheel_rows = 3;
@@ -29,6 +31,8 @@ pub const EditorView = struct {
     placed: std.ArrayList(layout.Placed) = .empty,
     splitters: std.ArrayList(layout.Splitter) = .empty,
     items: std.ArrayList(tabs.Item) = .empty,
+    /// The styled spans of the line being drawn.
+    spans: std.ArrayList(syntax.Span) = .empty,
     /// What the left mouse button is doing since it went down.
     drag: union(enum) { none, select, split: *panes.Split } = .none,
 
@@ -37,6 +41,7 @@ pub const EditorView = struct {
         self.placed.deinit(allocator);
         self.splitters.deinit(allocator);
         self.items.deinit(allocator);
+        self.spans.deinit(allocator);
     }
 
     pub fn title(_: *EditorView) []const u8 {
@@ -74,7 +79,7 @@ pub const EditorView = struct {
             tab.view.cols = text.cols;
             tab.view.rows = text.rows;
             canvas.setClip(.{ .x = text.gutter.x, .y = text.gutter.y, .w = text.gutter.w + text.text.w, .h = text.text.h });
-            drawTab(canvas, look, self.editor, tab, &text, focused and active);
+            drawTab(canvas, look, self.editor, tab, &text, focused and active, &self.spans);
             canvas.setClip(null);
         }
         for (self.splitters.items) |splitter| canvas.fillRect(splitter.line, look.theme.border);
@@ -165,6 +170,8 @@ const Painter = struct {
     show_cursor: bool,
     layout: *const TextLayout,
     decorations: []const Decoration,
+    /// Of the line being drawn.
+    spans: []const syntax.Span = &.{},
 
     fn drawLine(self: Painter, visible: VisibleLine) void {
         // Line backgrounds first and the selection last, so it stays on top.
@@ -242,16 +249,21 @@ const Painter = struct {
         self.canvas.drawText(rect.x + column * text_layout.metrics.cell, rect.y, number, if (current) theme.line_number_current else theme.line_number);
     }
 
-    /// Draws the characters of the visible rows, one draw call per row.
-    /// Characters outside the rows are skipped without being drawn.
+    /// Draws the characters of the visible rows, one draw call per run of
+    /// one style. Characters outside the rows are skipped without being drawn.
     fn drawText(self: Painter, visible: VisibleLine) void {
         const doc = &self.tab.file.doc;
         const view = &self.tab.view;
+        const line_start = doc.buffer.lineStart(visible.line);
         const last_wrap = visible.first_wrap + visible.rows - 1;
 
-        var row_text: [2048]u8 = undefined;
+        var text: [2048]u8 = undefined;
         var len: usize = 0;
-        var filled: usize = 0;
+        // The cell of the first character in `text`, and the cell after the last.
+        var run_x: usize = 0;
+        var next_x: usize = 0;
+        var style: Style = .text;
+        var span: usize = 0;
         var wrap = visible.first_wrap;
         var cells = doc.cells(visible.line);
         while (cells.next()) |cell| {
@@ -263,24 +275,40 @@ const Painter = struct {
             const x = cell.column - first;
             if (x >= view.cols) break;
             if (cell_wrap != wrap) {
-                self.drawRowText(visible, wrap, row_text[0..len]);
+                self.drawRun(visible, wrap, run_x, text[0..len], style);
                 wrap = cell_wrap;
                 len = 0;
-                filled = 0;
             }
             if (cell.char.cp == '\t' or cell.char.cp == ' ') continue;
-            const pad = x - filled;
-            if (len + pad + cell.char.len > row_text.len) break;
-            @memset(row_text[len..][0..pad], ' ');
-            len += pad + doc.buffer.copy(cell.pos, row_text[len + pad ..][0..cell.char.len]).len;
-            filled = x + 1;
+            const offset = cell.pos - line_start;
+            while (span < self.spans.len and self.spans[span].end <= offset) span += 1;
+            const cell_style = if (span < self.spans.len and self.spans[span].start <= offset) self.spans[span].style else .text;
+            if (len > 0 and cell_style != style) {
+                self.drawRun(visible, wrap, run_x, text[0..len], style);
+                len = 0;
+            }
+            if (len == 0) {
+                run_x = x;
+                next_x = x;
+                style = cell_style;
+            }
+            const pad = x - next_x;
+            if (len + pad + cell.char.len > text.len) break;
+            @memset(text[len..][0..pad], ' ');
+            len += pad + doc.buffer.copy(cell.pos, text[len + pad ..][0..cell.char.len]).len;
+            next_x = x + 1;
         }
-        self.drawRowText(visible, wrap, row_text[0..len]);
+        self.drawRun(visible, wrap, run_x, text[0..len], style);
     }
 
-    fn drawRowText(self: Painter, visible: VisibleLine, wrap: usize, text: []const u8) void {
-        const rect = self.layout.cellRect(0, visible.y + wrap - visible.first_wrap, 0);
-        self.canvas.drawText(rect.x, rect.y, text, self.look.theme.text);
+    fn drawRun(self: Painter, visible: VisibleLine, wrap: usize, x: usize, text: []const u8, style: Style) void {
+        if (text.len == 0) return;
+        const rect = self.layout.cellRect(x, visible.y + wrap - visible.first_wrap, 0);
+        const theme = self.look.theme;
+        self.canvas.drawText(rect.x, rect.y, text, switch (style) {
+            .text => theme.text,
+            inline else => |tag| @field(theme.syntax, @tagName(tag)),
+        });
     }
 
     fn drawCursor(self: Painter, visible: VisibleLine) void {
@@ -304,6 +332,7 @@ const Painter = struct {
             .selection => theme.selection,
             .current_line => theme.current_line,
             .match => theme.search_match,
+            .bracket => theme.matching_bracket,
             .added => theme.git_added,
             .changed => theme.git_changed,
             .removed => theme.git_removed,
@@ -313,7 +342,7 @@ const Painter = struct {
 
 /// Draws only the lines of a tab that are on screen, so the size of the
 /// file does not matter.
-fn drawTab(canvas: Canvas, look: Look, editor: *const Editor, tab: *const Tab, text: *const TextLayout, focused: bool) void {
+fn drawTab(canvas: Canvas, look: Look, editor: *const Editor, tab: *const Tab, text: *const TextLayout, focused: bool, spans: *std.ArrayList(syntax.Span)) void {
     const doc = &tab.file.doc;
     const view = &tab.view;
     canvas.fillRect(text.gutter, look.theme.gutter);
@@ -321,7 +350,7 @@ fn drawTab(canvas: Canvas, look: Look, editor: *const Editor, tab: *const Tab, t
     const line_count = doc.buffer.lineCount();
     const top = view.advance(doc, view.top, 0);
     const last_line = @min(top.line + view.rows, line_count - 1);
-    const painter: Painter = .{
+    var painter: Painter = .{
         .canvas = canvas,
         .look = look,
         .tab = tab,
@@ -339,6 +368,8 @@ fn drawTab(canvas: Canvas, look: Look, editor: *const Editor, tab: *const Tab, t
     var y: usize = 0;
     while (y < view.rows and line < line_count) : (line += 1) {
         const rows = @min(view.rowsOf(doc, line) - first_wrap, view.rows - y);
+        tab.file.highlighter.spans(&tab.file.doc, line, spans);
+        painter.spans = spans.items;
         painter.drawLine(.{ .line = line, .first_wrap = first_wrap, .rows = rows, .y = y });
         y += rows;
         first_wrap = 0;

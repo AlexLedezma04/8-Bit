@@ -1,0 +1,14 @@
+.{
+    .name = "ZON",
+    .extensions = .{"zon"},
+    .line_comments = .{"//"},
+    .strings = .{
+        .{ .start = "\\\\", .end = "\n", .escape = false },
+        .{ .start = "\"" },
+        .{ .start = "'" },
+    },
+    .constants = .{ "true", "false", "null" },
+    .functions = false,
+    .operators = "=",
+    .prefixes = .{.{ .text = ".", .style = .type }},
+}

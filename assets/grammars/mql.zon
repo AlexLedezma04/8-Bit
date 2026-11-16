@@ -1,0 +1,25 @@
+.{
+    .name = "MQL",
+    .extensions = .{ "mq4", "mq5", "mqh" },
+    .line_comments = .{"//"},
+    .block_comment = .{ .start = "/*", .end = "*/" },
+    .strings = .{ .{ .start = "\"" }, .{ .start = "'" } },
+    .keywords = .{
+        "auto",           "break",         "case",   "const",    "continue",  "default",  "do",       "else",    "enum",     "extern",
+        "for",            "goto",          "if",     "inline",   "register",  "restrict", "return",   "sizeof",  "static",   "struct",
+        "switch",         "typedef",       "union",  "volatile", "while",     "_Alignas", "_Alignof", "_Atomic", "_Generic", "_Noreturn",
+        "_Static_assert", "_Thread_local", "class",  "private",  "protected", "public",   "virtual",  "new",     "delete",   "this",
+        "template",       "input",         "extern", "sinput",
+    },
+    .types = .{
+        "void",  "bool",   "char",   "uchar",    "short", "ushort", "int", "uint", "long", "ulong",
+        "float", "double", "string", "datetime", "color",
+    },
+    .constants = .{ "true", "false", "NULL", "EMPTY_VALUE", "clrRed", "clrGreen", "clrBlue" },
+    .builtins = .{
+        "Print",  "Alert",  "Comment", "OrderSend", "OrderClose", "iMA", "iRSI", "Bid", "Ask",
+        "Symbol", "Period", "OnInit",  "OnDeinit",  "OnTick",
+    },
+    .operators = "+-*/%=<>!&|^~?:",
+    .prefixes = .{.{ .text = "#", .style = .keyword }},
+}

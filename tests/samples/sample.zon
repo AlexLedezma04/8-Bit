@@ -1,0 +1,7 @@
+.{
+    // The package.
+    .name = .sample,
+    .version = "0.1.0",
+    .paths = .{ "src", "build.zig" },
+    .lazy = true,
+}

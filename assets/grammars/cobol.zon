@@ -1,0 +1,22 @@
+.{
+    .name = "COBOL",
+    .extensions = .{ "cob", "cbl", "cpy", "cobol" },
+    .line_comments = .{"*>"},
+    .strings = .{ .{ .start = "\"", .escape = false }, .{ .start = "'", .escape = false } },
+    .keywords = .{
+        "accept",  "add",     "by",              "call",        "compute",   "data",       "display", "divide",   "division",
+        "else",    "end-if",  "end-perform",     "environment", "evaluate",  "exit",       "file",    "from",     "giving",
+        "go",      "goback",  "identification",  "if",          "into",      "is",         "move",    "multiply", "not",
+        "of",      "perform", "pic",             "picture",     "procedure", "program-id", "read",    "record",   "section",
+        "select",  "stop",    "subtract",        "then",        "times",     "to",         "until",   "using",    "value",
+        "varying", "when",    "working-storage", "write",
+    },
+    .constants = .{
+        "zero",  "zeros", "zeroes", "space", "spaces", "high-value", "low-value", "true",
+        "false",
+    },
+    .ignore_case = true,
+    .functions = false,
+    .operators = "+-*/=<>",
+    .word_chars = "-",
+}

@@ -1,0 +1,30 @@
+.{
+    .name = "Dart",
+    .extensions = .{"dart"},
+    .shebangs = .{"dart"},
+    .line_comments = .{"//"},
+    .block_comment = .{ .start = "/*", .end = "*/" },
+    .strings = .{
+        .{ .start = "'''", .multiline = true },
+        .{ .start = "\"\"\"", .multiline = true },
+        .{ .start = "\"" },
+        .{ .start = "'" },
+    },
+    .keywords = .{
+        "abstract",   "as",        "assert",    "async",     "await",    "base",    "break",   "case",  "catch",  "class",
+        "const",      "continue",  "covariant", "default",   "deferred", "do",      "dynamic", "else",  "enum",   "export",
+        "extends",    "extension", "external",  "factory",   "final",    "finally", "for",     "get",   "hide",   "if",
+        "implements", "import",    "in",        "interface", "is",       "late",    "library", "mixin", "new",    "on",
+        "operator",   "part",      "required",  "rethrow",   "return",   "sealed",  "set",     "show",  "static", "super",
+        "switch",     "sync",      "this",      "throw",     "try",      "typedef", "var",     "when",  "while",  "with",
+        "yield",
+    },
+    .types = .{
+        "bool",   "double", "dynamic", "int",   "num",      "Object",   "String", "List", "Map", "Set",
+        "Future", "Stream", "void",    "Never", "Function", "Iterable",
+    },
+    .constants = .{ "true", "false", "null" },
+    .operators = "+-*/%=<>!&|^~?:",
+    .word_chars = "$",
+    .prefixes = .{.{ .text = "@", .style = .builtin }},
+}

@@ -1,0 +1,22 @@
+.{
+    .name = "R",
+    .extensions = .{ "r", "rmd" },
+    .file_names = .{".Rprofile"},
+    .shebangs = .{"Rscript"},
+    .line_comments = .{"#"},
+    .strings = .{ .{ .start = "\"" }, .{ .start = "'" }, .{ .start = "`", .escape = false } },
+    .keywords = .{
+        "break", "else", "for", "function", "if", "in", "next", "repeat", "return", "while",
+    },
+    .constants = .{
+        "TRUE", "FALSE", "NULL", "NA", "NA_integer_", "NA_real_", "NA_character_", "Inf", "NaN",
+        "T",    "F",
+    },
+    .builtins = .{
+        "c",     "library", "require", "list", "data.frame", "matrix", "vector", "length", "print",
+        "paste", "paste0",  "cat",     "sum",  "mean",       "median", "sd",     "lapply", "sapply",
+        "apply", "seq",     "rep",     "nrow", "ncol",       "head",   "tail",   "names",
+    },
+    .operators = "<-+*/^=!&|~$@:%>",
+    .word_chars = ".",
+}

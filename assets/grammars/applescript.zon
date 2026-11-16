@@ -1,0 +1,26 @@
+.{
+    .name = "AppleScript",
+    .extensions = .{"applescript"},
+    .shebangs = .{"osascript"},
+    .line_comments = .{ "--", "#" },
+    .block_comment = .{ .start = "(*", .end = "*)" },
+    .strings = .{.{ .start = "\"" }},
+    .keywords = .{
+        "about",    "above",   "after",  "against",     "and",   "as",    "before",      "beginning", "behind",
+        "below",    "beneath", "beside", "between",     "but",   "by",    "considering", "contains",  "does",
+        "each",     "else",    "end",    "error",       "every", "exit",  "false",       "from",      "get",
+        "given",    "global",  "if",     "ignoring",    "in",    "into",  "is",          "it",        "its",
+        "last",     "local",   "me",     "my",          "of",    "on",    "or",          "out",       "over",
+        "property", "repeat",  "return", "script",      "set",   "some",  "tell",        "then",      "through",
+        "thru",     "times",   "to",     "transaction", "try",   "until", "where",       "while",     "whose",
+        "with",     "without",
+    },
+    .constants = .{ "true", "false", "missing", "value" },
+    .builtins = .{
+        "display", "dialog", "activate", "quit", "open", "close", "make", "delete", "count",
+        "exists",
+    },
+    .ignore_case = true,
+    .functions = false,
+    .operators = "&=<>+-*/^",
+}

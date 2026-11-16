@@ -1,0 +1,23 @@
+.{
+    .name = "Shell",
+    .extensions = .{ "sh", "bash", "zsh", "ksh" },
+    .file_names = .{ ".bashrc", ".bash_profile", ".zshrc", ".profile", ".bash_aliases" },
+    .shebangs = .{ "sh", "bash", "zsh", "ksh", "dash" },
+    .line_comments = .{"#"},
+    .strings = .{ .{ .start = "\"" }, .{ .start = "'", .escape = false }, .{ .start = "`" } },
+    .keywords = .{
+        "alias",    "break",  "case",   "continue", "declare", "do",     "done",     "elif", "else", "esac",
+        "eval",     "exec",   "exit",   "export",   "fi",      "for",    "function", "if",   "in",   "local",
+        "readonly", "return", "select", "set",      "shift",   "source", "then",     "time", "trap", "unset",
+        "until",    "while",
+    },
+    .constants = .{ "true", "false" },
+    .builtins = .{
+        "awk",  "cat",   "cd",    "chmod",  "chown", "cp",   "echo", "find", "grep",  "head", "kill",
+        "ls",   "mkdir", "mv",    "printf", "pwd",   "read", "rm",   "sed",  "sleep", "sort", "tail",
+        "test", "wait",  "xargs",
+    },
+    .operators = "=|&<>!;",
+    .punctuation = "()[]{}",
+    .prefixes = .{.{ .text = "$", .style = .builtin }},
+}

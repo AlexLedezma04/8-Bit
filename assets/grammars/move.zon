@@ -1,0 +1,17 @@
+.{
+    .name = "Move",
+    .extensions = .{"move"},
+    .line_comments = .{"//"},
+    .block_comment = .{ .start = "/*", .end = "*/" },
+    .strings = .{.{ .start = "\"" }},
+    .keywords = .{
+        "abort",  "acquires", "as",  "break",  "const",  "continue",  "copy",   "else", "entry",
+        "enum",   "friend",   "fun", "has",    "if",     "invariant", "let",    "loop", "match",
+        "module", "move",     "mut", "native", "public", "return",    "script", "spec", "struct",
+        "use",    "while",
+    },
+    .types = .{ "address", "bool", "signer", "u8", "u16", "u32", "u64", "u128", "u256", "vector" },
+    .constants = .{ "true", "false" },
+    .operators = "+-*/%=<>!&|^~?:",
+    .prefixes = .{ .{ .text = "#", .style = .builtin }, .{ .text = "@", .style = .constant } },
+}

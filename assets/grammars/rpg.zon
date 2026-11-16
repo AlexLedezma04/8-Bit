@@ -1,0 +1,23 @@
+.{
+    .name = "RPG",
+    .extensions = .{ "rpg", "rpgle", "sqlrpgle", "rpgleinc" },
+    .line_comments = .{"//"},
+    .strings = .{.{ .start = "'", .escape = false }},
+    .keywords = .{
+        "dcl-s",  "dcl-c",    "dcl-ds", "dcl-f",  "dcl-pr", "dcl-pi", "dcl-proc", "end-ds",   "end-pr",
+        "end-pi", "end-proc", "if",     "elseif", "else",   "endif",  "dow",      "dou",      "enddo",
+        "for",    "endfor",   "select", "when",   "other",  "endsl",  "monitor",  "on-error", "endmon",
+        "return", "leave",    "iter",   "exsr",   "begsr",  "endsr",  "callp",    "eval",     "chain",
+        "read",   "reade",    "setll",  "write",  "update", "delete",
+    },
+    .types = .{
+        "char",    "varchar", "int",    "uns", "packed", "zoned", "date", "time", "timestamp", "ind",
+        "pointer", "like",    "likeds",
+    },
+    .constants = .{ "*on", "*off", "*blank", "*blanks", "*zero", "*zeros", "*null" },
+    .builtins = .{ "%trim", "%len", "%subst", "%char", "%dec", "%int", "%found", "%eof" },
+    .ignore_case = true,
+    .operators = "+-*/=<>",
+    .word_chars = "-%*",
+    .line_starts = .{ .{ .text = "**free", .style = .keyword }, .{ .text = "**FREE", .style = .keyword } },
+}

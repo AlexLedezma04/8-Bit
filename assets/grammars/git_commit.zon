@@ -1,0 +1,12 @@
+.{
+    .name = "Git Commit",
+    .file_names = .{ "COMMIT_EDITMSG", "MERGE_MSG", "TAG_EDITMSG", "SQUASH_MSG" },
+    .numbers = false,
+    .functions = false,
+    .punctuation = "",
+    .line_starts = .{
+        .{ .text = "#", .style = .comment },
+        .{ .text = "Signed-off-by:", .style = .keyword },
+        .{ .text = "Co-authored-by:", .style = .keyword },
+    },
+}

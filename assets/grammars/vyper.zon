@@ -1,0 +1,18 @@
+.{
+    .name = "Vyper",
+    .extensions = .{ "vy", "vyi" },
+    .line_comments = .{"#"},
+    .strings = .{ .{ .start = "\"\"\"", .multiline = true }, .{ .start = "\"" }, .{ .start = "'" } },
+    .keywords = .{
+        "and", "as",   "assert", "break",      "continue", "def", "elif",    "else",      "enum", "event",
+        "for", "from", "if",     "implements", "import",   "in",  "indexed", "interface", "log",  "not",
+        "or",  "pass", "raise",  "return",     "struct",
+    },
+    .types = .{
+        "address", "bool",    "bytes32",  "Bytes", "decimal", "int128", "int256", "String", "uint8",
+        "uint256", "HashMap", "DynArray",
+    },
+    .constants = .{ "True", "False", "self", "msg", "block", "empty" },
+    .operators = "+-*/%=<>!&|^~:",
+    .prefixes = .{.{ .text = "@", .style = .builtin }},
+}

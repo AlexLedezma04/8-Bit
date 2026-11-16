@@ -1,0 +1,24 @@
+.{
+    .name = "Elixir",
+    .extensions = .{ "ex", "exs" },
+    .file_names = .{"mix.lock"},
+    .shebangs = .{"elixir"},
+    .line_comments = .{"#"},
+    .strings = .{
+        .{ .start = "\"\"\"", .multiline = true },
+        .{ .start = "'''", .multiline = true },
+        .{ .start = "\"" },
+        .{ .start = "'" },
+    },
+    .keywords = .{
+        "after",    "alias",   "and",      "catch",     "cond",      "def",     "defdelegate", "defexception",
+        "defguard", "defimpl", "defmacro", "defmacrop", "defmodule", "defp",    "defprotocol", "defstruct",
+        "do",       "else",    "end",      "fn",        "for",       "if",      "import",      "in",
+        "not",      "or",      "quote",    "raise",     "receive",   "require", "rescue",      "try",
+        "unless",   "unquote", "use",      "when",      "with",
+    },
+    .constants = .{ "true", "false", "nil" },
+    .operators = "+-*/=<>!&|^~\\",
+    .word_chars = "?!",
+    .prefixes = .{ .{ .text = ":", .style = .constant }, .{ .text = "@", .style = .builtin } },
+}

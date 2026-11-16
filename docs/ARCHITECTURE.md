@@ -24,9 +24,10 @@ assets/           built-in ZON files, embedded in the exe (assets.zig lists them
   settings.zon    default settings
   keymap.zon      user key bindings (empty: the defaults are in keymap.zig)
   themes/         theme data files
-  grammars/       one grammar file per language
+  grammars/       one grammar file per language (docs/GRAMMARS.md)
 tests/            integration tests (unit tests stay next to the code)
-tools/            small build helpers (size_check: `zig build size`)
+tools/            small build helpers (size_check: `zig build size`,
+                  embed_dir: embeds every grammar file)
 third_party/      vendored C dependencies (SDL3)
 ```
 
@@ -120,6 +121,23 @@ third_party/      vendored C dependencies (SDL3)
   found again after every change and drawn as decorations.
 - `editor/project_search.zig` walks the open folder on a thread and posts
   the hits of each file. A new search drops the late hits of the old one.
+
+## Syntax (`syntax/`)
+
+- `grammar.zig` is the shape of a grammar file (see `docs/GRAMMARS.md`) and
+  the rule set made from it, with a sorted word list for keyword lookup.
+- `syntax.zig` turns a line into styled spans. Each line has a one-byte
+  start state (normal, inside a block comment, inside a multiline string).
+  A `Highlighter` per file finds states only down to the lines asked for;
+  `Document.apply` notes the first changed line and the states from there
+  are found again when needed. It also finds matching brackets, skipping
+  strings and comments.
+- `language.zig` picks a grammar by file name, extension, then shebang.
+  Grammars that share an extension (`.m`, `.pl`, `.v`, `.fs`) are told
+  apart by hints found in the first 1 KB of the file.
+- Grammars load with the settings into the config arena. `tools/embed_dir.zig`
+  embeds every file of `assets/grammars/` at build time.
+- The editor view draws each run of one style in its theme color.
 
 ## Config (`editor/config.zig`)
 

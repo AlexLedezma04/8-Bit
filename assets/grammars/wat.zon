@@ -1,0 +1,19 @@
+.{
+    .name = "WebAssembly",
+    .extensions = .{ "wat", "wast" },
+    .line_comments = .{";;"},
+    .block_comment = .{ .start = "(;", .end = ";)" },
+    .strings = .{.{ .start = "\"" }},
+    .keywords = .{
+        "module", "func",        "param", "result", "local",    "global", "memory", "table",         "type",
+        "import", "export",      "start", "elem",   "data",     "block",  "loop",   "if",            "then",
+        "else",   "end",         "br",    "br_if",  "br_table", "return", "call",   "call_indirect", "drop",
+        "select", "unreachable", "nop",   "mut",    "offset",   "align",
+    },
+    .types = .{ "i32", "i64", "f32", "f64", "v128", "funcref", "externref", "anyfunc" },
+    .functions = false,
+    .operators = "=",
+    .punctuation = "()",
+    .word_chars = "._",
+    .prefixes = .{.{ .text = "$", .style = .type }},
+}

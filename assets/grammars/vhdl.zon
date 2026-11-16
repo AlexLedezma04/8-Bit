@@ -1,0 +1,26 @@
+.{
+    .name = "VHDL",
+    .extensions = .{ "vhd", "vhdl" },
+    .line_comments = .{"--"},
+    .block_comment = .{ .start = "/*", .end = "*/" },
+    .strings = .{.{ .start = "\"", .escape = false }},
+    .keywords = .{
+        "abs",       "access",   "after",   "alias",  "all",      "and",      "architecture", "array",     "assert",
+        "attribute", "begin",    "block",   "body",   "buffer",   "bus",      "case",         "component", "configuration",
+        "constant",  "downto",   "else",    "elsif",  "end",      "entity",   "exit",         "file",      "for",
+        "function",  "generate", "generic", "if",     "in",       "inout",    "is",           "library",   "loop",
+        "map",       "mod",      "nand",    "next",   "nor",      "not",      "null",         "of",        "on",
+        "open",      "or",       "others",  "out",    "package",  "port",     "procedure",    "process",   "range",
+        "record",    "rem",      "report",  "return", "select",   "severity", "signal",       "subtype",   "then",
+        "to",        "type",     "until",   "use",    "variable", "wait",     "when",         "while",     "with",
+        "xor",
+    },
+    .types = .{
+        "bit",    "bit_vector", "boolean",          "character",  "integer", "natural", "positive", "real",
+        "signed", "std_logic",  "std_logic_vector", "std_ulogic", "string",  "time",    "unsigned",
+    },
+    .constants = .{ "true", "false" },
+    .ignore_case = true,
+    .functions = false,
+    .operators = "+-*/=<>&:|",
+}

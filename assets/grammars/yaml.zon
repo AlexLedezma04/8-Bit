@@ -1,0 +1,17 @@
+.{
+    .name = "YAML",
+    .extensions = .{ "yaml", "yml" },
+    .line_comments = .{"#"},
+    .strings = .{ .{ .start = "\"" }, .{ .start = "'", .escape = false } },
+    .constants = .{ "true", "false", "null", "yes", "no", "on", "off", "True", "False", "Null" },
+    .functions = false,
+    .key_before = ":",
+    .operators = "|>",
+    .word_chars = "-",
+    .prefixes = .{
+        .{ .text = "&", .style = .constant },
+        .{ .text = "*", .style = .constant },
+        .{ .text = "!", .style = .builtin },
+    },
+    .line_starts = .{ .{ .text = "---", .style = .keyword }, .{ .text = "...", .style = .keyword } },
+}

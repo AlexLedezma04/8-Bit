@@ -1,0 +1,19 @@
+.{
+    .name = "WGSL",
+    .extensions = .{"wgsl"},
+    .line_comments = .{"//"},
+    .block_comment = .{ .start = "/*", .end = "*/" },
+    .keywords = .{
+        "alias",      "break",    "case",     "const",  "const_assert", "continue", "continuing", "default",
+        "diagnostic", "discard",  "else",     "enable", "fn",           "for",      "if",         "let",
+        "loop",       "override", "requires", "return", "struct",       "switch",   "var",        "while",
+    },
+    .types = .{
+        "bool",   "f16",   "f32",     "i32",        "u32",        "vec2",         "vec3",               "vec4",   "vec2f",  "vec3f",   "vec4f",
+        "vec2i",  "vec3i", "vec4i",   "vec2u",      "vec3u",      "vec4u",        "mat2x2",             "mat3x3", "mat4x4", "mat4x4f", "array",
+        "atomic", "ptr",   "sampler", "texture_2d", "texture_3d", "texture_cube", "texture_storage_2d",
+    },
+    .constants = .{ "true", "false" },
+    .operators = "+-*/%=<>!&|^~?:",
+    .prefixes = .{.{ .text = "@", .style = .builtin }},
+}

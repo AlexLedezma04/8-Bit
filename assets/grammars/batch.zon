@@ -1,0 +1,22 @@
+.{
+    .name = "Batch",
+    .extensions = .{ "bat", "cmd" },
+    .line_comments = .{ "rem ", "REM ", "Rem ", "@rem ", "@REM ", "::" },
+    .strings = .{.{ .start = "\"", .escape = false }},
+    .keywords = .{
+        "call",     "cd",    "choice",     "cls",      "color", "copy",  "defined", "del",  "do",  "echo",  "else",
+        "endlocal", "equ",   "errorlevel", "exist",    "exit",  "for",   "geq",     "goto", "gtr", "if",    "in",
+        "leq",      "lss",   "mkdir",      "move",     "neq",   "not",   "nul",     "off",  "on",  "pause", "popd",
+        "pushd",    "rmdir", "set",        "setlocal", "shift", "start", "title",   "type",
+    },
+    .ignore_case = true,
+    .functions = false,
+    .operators = "=<>|&",
+    .punctuation = "()",
+    .prefixes = .{
+        .{ .text = "%", .style = .builtin },
+        .{ .text = "!", .style = .builtin },
+        .{ .text = ":", .style = .type },
+        .{ .text = "@", .style = .keyword },
+    },
+}

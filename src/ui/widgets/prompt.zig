@@ -2,7 +2,7 @@
 //! cancels; find and replace stay open on Enter. The text is a `Document`,
 //! so editing keys work as in the editor. Each kind of prompt keeps its own
 //! history; entries that contain the text are suggested in a list, picked
-//! with Up and Down.
+//! with Up and Down. A prompt can suggest from fixed choices instead.
 const std = @import("std");
 const Document = @import("../../core/edit.zig").Document;
 const Canvas = @import("../canvas.zig").Canvas;
@@ -35,6 +35,8 @@ pub const Prompt = struct {
     kind: ?Kind = null,
     label: []const u8 = "",
     histories: [kind_count]std.ArrayList([]u8) = @splat(.empty),
+    /// Suggested in place of the history when not empty.
+    choices: []const []const u8 = &.{},
     /// History entries that contain the text, newest first.
     matches: std.ArrayList([]const u8) = .empty,
     list: List = .{},
@@ -62,11 +64,12 @@ pub const Prompt = struct {
     }
 
     /// Opens with `initial` selected, so typing replaces it.
-    pub fn open(self: *Prompt, kind: Kind, label: []const u8, initial: []const u8) !void {
+    pub fn open(self: *Prompt, kind: Kind, label: []const u8, initial: []const u8, choices: []const []const u8) !void {
         try self.doc.load(initial);
         self.doc.selectAll();
         self.kind = kind;
         self.label = label;
+        self.choices = choices;
         self.refresh();
     }
 
@@ -185,6 +188,13 @@ pub const Prompt = struct {
         self.matches.clearRetainingCapacity();
         const kind = self.kind orelse return;
         const typed = self.text();
+        if (self.choices.len > 0) {
+            for (self.choices) |choice| {
+                if (std.ascii.findIgnoreCase(choice, typed) == null) continue;
+                self.matches.append(self.allocator, choice) catch return;
+            }
+            return;
+        }
         const history = self.histories[@backingInt(kind)].items;
         var i = history.len;
         while (i > 0) {
@@ -265,7 +275,7 @@ fn hit(prompt: *Prompt, code: @import("../../platform/event.zig").Key, mods: @im
 test "typing, editing keys, Enter and Esc" {
     var prompt = Prompt.init(testing.allocator);
     defer prompt.deinit();
-    try prompt.open(.rename, "Rename:", "old.txt");
+    try prompt.open(.rename, "Rename:", "old.txt", &.{});
     prompt.typeText("new\n.zig");
     try expectText(&prompt.doc.buffer, "new.zig");
     _ = hit(&prompt, .backspace, .{ .ctrl = true });
@@ -275,7 +285,7 @@ test "typing, editing keys, Enter and Esc" {
     try testing.expectEqualStrings("ne.", hit(&prompt, .enter, .{}).submit);
     try testing.expectEqual(@as(?Kind, null), prompt.kind);
 
-    try prompt.open(.new_file, "New file:", "");
+    try prompt.open(.new_file, "New file:", "", &.{});
     try testing.expectEqual(Outcome.cancel, hit(&prompt, .escape, .{}));
 }
 
@@ -283,14 +293,14 @@ test "each kind has its own history, suggested while typing" {
     var prompt = Prompt.init(testing.allocator);
     defer prompt.deinit();
     for ([_][]const u8{ "main.zig", "notes.txt", "main_test.zig" }) |name| {
-        try prompt.open(.new_file, "New file:", "");
+        try prompt.open(.new_file, "New file:", "", &.{});
         prompt.typeText(name);
         _ = hit(&prompt, .enter, .{});
     }
-    try prompt.open(.new_folder, "New folder:", "");
+    try prompt.open(.new_folder, "New folder:", "", &.{});
     try testing.expectEqual(@as(usize, 0), prompt.matches.items.len);
 
-    try prompt.open(.new_file, "New file:", "");
+    try prompt.open(.new_file, "New file:", "", &.{});
     try testing.expectEqual(@as(usize, 3), prompt.matches.items.len);
     prompt.typeText("main");
     try testing.expectEqual(@as(usize, 2), prompt.matches.items.len);
@@ -300,4 +310,16 @@ test "each kind has its own history, suggested while typing" {
     try testing.expectEqualStrings("main.zig", hit(&prompt, .enter, .{}).submit);
     // Used again: now the newest.
     try testing.expectEqualStrings("main.zig", prompt.histories[0].items[2]);
+}
+
+test "fixed choices are suggested in place of the history" {
+    var prompt = Prompt.init(testing.allocator);
+    defer prompt.deinit();
+    try prompt.open(.language, "Language:", "", &.{ "Plain Text", "Python", "TypeScript" });
+    try testing.expectEqual(@as(usize, 3), prompt.matches.items.len);
+    prompt.typeText("E");
+    try testing.expectEqual(@as(usize, 2), prompt.matches.items.len);
+    _ = hit(&prompt, .down, .{});
+    _ = hit(&prompt, .down, .{});
+    try testing.expectEqualStrings("TypeScript", hit(&prompt, .enter, .{}).submit);
 }

@@ -22,6 +22,7 @@ pub const Theme = struct {
     cursor: Color,
     selection: Color,
     search_match: Color,
+    matching_bracket: Color,
     current_line: Color,
 
     gutter: Color,
@@ -56,6 +57,7 @@ pub const Syntax = struct {
     number: Color,
     constant: Color,
     type: Color,
+    builtin: Color,
     function: Color,
     operator: Color,
     punctuation: Color,

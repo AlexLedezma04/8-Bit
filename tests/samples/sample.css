@@ -1,0 +1,8 @@
+/* Layout */
+@media (max-width: 600px) {
+  #main .card > p {
+    color: #ff0000;
+    margin: 0 auto !important;
+    width: calc(100% - 10px);
+  }
+}

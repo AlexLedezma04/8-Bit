@@ -1,0 +1,13 @@
+.{
+    .name = "INI",
+    .extensions = .{ "ini", "cfg", "conf", "properties", "desktop" },
+    .file_names = .{ ".editorconfig", ".gitconfig", ".npmrc" },
+    .line_comments = .{ ";", "#" },
+    .strings = .{.{ .start = "\"" }},
+    .constants = .{ "true", "false", "yes", "no", "on", "off" },
+    .functions = false,
+    .key_before = "=:",
+    .operators = "=:",
+    .punctuation = "",
+    .line_starts = .{.{ .text = "[", .style = .type }},
+}

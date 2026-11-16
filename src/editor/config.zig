@@ -7,6 +7,8 @@ const fs = @import("../platform/fs.zig");
 
 /// Folder of the theme files, built-in and the user's.
 pub const theme_folder = "themes";
+/// Folder of the grammar files, built-in and the user's.
+pub const grammar_folder = "grammars";
 
 pub const Settings = struct {
     tab_width: u8,
@@ -147,7 +149,8 @@ fn parse(comptime T: type, gpa: std.mem.Allocator, arena: std.mem.Allocator, byt
 }
 
 /// What a file holds for `T`. With `partial`, every struct field may be left
-/// out. A type with `fromZon` is written as that function's argument.
+/// out (an optional field is not wrapped again). A type with `fromZon` is
+/// written as that function's argument.
 fn Zon(comptime T: type, comptime partial: bool) type {
     if (@typeInfo(T) != .@"struct") return T;
     if (@hasDecl(T, "fromZon")) return @typeInfo(@TypeOf(T.fromZon)).@"fn".param_types[0].?;
@@ -155,7 +158,7 @@ fn Zon(comptime T: type, comptime partial: bool) type {
     var types: [info.field_types.len]type = undefined;
     var attrs: [types.len]std.lang.Type.Struct.FieldAttributes = @splat(.{});
     for (info.field_types, 0..) |field, i| {
-        types[i] = if (partial) ?Zon(field, true) else Zon(field, false);
+        types[i] = if (!partial) Zon(field, false) else if (@typeInfo(field) == .optional) field else ?Zon(field, true);
         if (partial) attrs[i].default_value_ptr = &@as(types[i], null);
     }
     return @Struct(.auto, null, info.field_names, &types, &attrs);

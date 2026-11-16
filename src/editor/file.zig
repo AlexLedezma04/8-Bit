@@ -1,8 +1,9 @@
-//! One open file: its document, where it is on disk, and when it was last
-//! read or written there.
+//! One open file: its document and highlighting, where it is on disk, and
+//! when it was last read or written there.
 const std = @import("std");
 const Document = @import("../core/edit.zig").Document;
 const fs = @import("../platform/fs.zig");
+const Highlighter = @import("../syntax/syntax.zig").Highlighter;
 
 pub const File = struct {
     doc: Document,
@@ -10,13 +11,16 @@ pub const File = struct {
     path: ?[]u8 = null,
     /// Modification time on disk when it was last read or written.
     disk_time: ?i96 = null,
+    highlighter: Highlighter,
+    /// The language picked by hand, by name; null to detect it.
+    language: ?[]u8 = null,
 
     pub const untitled = "untitled";
 
     /// A new, empty file that has no path yet.
     pub fn create(allocator: std.mem.Allocator) !*File {
         const file = try allocator.create(File);
-        file.* = .{ .doc = .init(allocator) };
+        file.* = .{ .doc = .init(allocator), .highlighter = .{ .allocator = allocator } };
         return file;
     }
 
@@ -36,6 +40,8 @@ pub const File = struct {
     pub fn destroy(self: *File) void {
         const allocator = self.gpa();
         if (self.path) |path| allocator.free(path);
+        if (self.language) |chosen| allocator.free(chosen);
+        self.highlighter.deinit();
         self.doc.deinit();
         allocator.destroy(self);
     }

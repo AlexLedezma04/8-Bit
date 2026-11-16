@@ -1,0 +1,31 @@
+.{
+    .name = "C#",
+    .extensions = .{ "cs", "csx" },
+    .line_comments = .{"//"},
+    .block_comment = .{ .start = "/*", .end = "*/" },
+    .strings = .{
+        .{ .start = "\"\"\"", .escape = false, .multiline = true },
+        .{ .start = "@\"", .end = "\"", .escape = false, .multiline = true },
+        .{ .start = "$\"", .end = "\"" },
+        .{ .start = "\"" },
+        .{ .start = "'" },
+    },
+    .keywords = .{
+        "abstract",   "as",       "async",    "await",   "base",      "break",    "case",    "catch",   "checked",
+        "class",      "const",    "continue", "default", "delegate",  "do",       "else",    "enum",    "event",
+        "explicit",   "extern",   "finally",  "fixed",   "for",       "foreach",  "get",     "global",  "goto",
+        "if",         "implicit", "in",       "init",    "interface", "internal", "is",      "lock",    "namespace",
+        "nameof",     "new",      "operator", "out",     "override",  "params",   "partial", "private", "protected",
+        "public",     "readonly", "record",   "ref",     "required",  "return",   "sealed",  "set",     "sizeof",
+        "stackalloc", "static",   "struct",   "switch",  "this",      "throw",    "try",     "typeof",  "unchecked",
+        "unsafe",     "using",    "var",      "virtual", "volatile",  "when",     "where",   "while",   "with",
+        "yield",
+    },
+    .types = .{
+        "bool",  "byte",  "sbyte",  "char", "decimal", "double", "float",  "int",  "uint",    "long",
+        "ulong", "short", "ushort", "nint", "nuint",   "object", "string", "void", "dynamic",
+    },
+    .constants = .{ "true", "false", "null", "value" },
+    .operators = "+-*/%=<>!&|^~?:",
+    .prefixes = .{.{ .text = "#", .style = .keyword }},
+}
