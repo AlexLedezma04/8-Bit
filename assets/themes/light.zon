@@ -4,6 +4,7 @@
     .cursor = 0xc04000,
     .selection = 0xc8d8f0,
     .search_match = 0xf0e0a0,
+    .current_line = 0xefefe8,
 
     .gutter = 0xecece6,
     .line_number = 0x9898a8,
@@ -19,6 +20,8 @@
     .tab_text = 0x707080,
     .tab_active_text = 0x202028,
 
+    .border = 0xd8d8d0,
+    .accent = 0x3574f0,
     .list_selection = 0xd8d8e8,
 
     .git_added = 0x308030,

@@ -1,25 +1,20 @@
 //! Where the parts of the window are: gutter, text area, status bar.
 //! Every size comes from the cell size, so zooming scales everything.
 const std = @import("std");
-const font_cell = @import("../font/bitmap_font.zig").cell;
+const bitmap_font = @import("../font/bitmap_font.zig");
 
 pub const Rect = struct { x: f32 = 0, y: f32 = 0, w: f32 = 0, h: f32 = 0 };
 
 pub const Metrics = struct {
-    /// Width and height of one character on screen.
+    /// Width of one character on screen.
     cell: f32,
-    /// Height of a row of text: the character plus a little air.
+    /// Height of a row of text. The font has its own space between lines.
     row: f32,
 
     /// `zoom` is screen pixels per font pixel.
     pub fn init(zoom: u8) Metrics {
-        const cell: f32 = @floatFromInt(font_cell * @as(usize, zoom));
-        return .{ .cell = cell, .row = cell + cell / 4 };
-    }
-
-    /// Top of a character that is centered in a row starting at `row_top`.
-    pub fn textTop(self: Metrics, row_top: f32) f32 {
-        return row_top + (self.row - self.cell) / 2;
+        const scale: f32 = @floatFromInt(zoom);
+        return .{ .cell = bitmap_font.width * scale, .row = bitmap_font.height * scale };
     }
 };
 
@@ -82,19 +77,18 @@ pub const Layout = struct {
 const testing = std.testing;
 
 test "metrics scale with the zoom" {
-    try testing.expectEqual(Metrics{ .cell = 8, .row = 10 }, Metrics.init(1));
-    try testing.expectEqual(Metrics{ .cell = 16, .row = 20 }, Metrics.init(2));
-    try testing.expectEqual(@as(f32, 102), Metrics.init(2).textTop(100));
+    try testing.expectEqual(Metrics{ .cell = 8, .row = 16 }, Metrics.init(1));
+    try testing.expectEqual(Metrics{ .cell = 16, .row = 32 }, Metrics.init(2));
 }
 
 test "the window is split into gutter, text and status bar" {
-    const layout = Layout.init(800, 600, .init(2), 120, 0);
+    const layout = Layout.init(800, 600, .init(1), 120, 0);
     // Gutter: marker + 3 digits + space = 5 cells.
-    try testing.expectEqual(Rect{ .w = 80, .h = 580 }, layout.gutter);
-    try testing.expectEqual(Rect{ .x = 80, .w = 720, .h = 580 }, layout.text);
-    try testing.expectEqual(Rect{ .y = 580, .w = 800, .h = 20 }, layout.status);
-    try testing.expectEqual(@as(usize, 45), layout.cols);
-    try testing.expectEqual(@as(usize, 29), layout.rows);
+    try testing.expectEqual(Rect{ .w = 40, .h = 584 }, layout.gutter);
+    try testing.expectEqual(Rect{ .x = 40, .w = 760, .h = 584 }, layout.text);
+    try testing.expectEqual(Rect{ .y = 584, .w = 800, .h = 16 }, layout.status);
+    try testing.expectEqual(@as(usize, 95), layout.cols);
+    try testing.expectEqual(@as(usize, 36), layout.rows);
 }
 
 test "the gutter fits the largest line number and the gutter text" {
@@ -114,9 +108,9 @@ test "a tiny window gives no cells instead of negative sizes" {
 }
 
 test "pixels map to text cells and back" {
-    const layout = Layout.init(800, 600, .init(2), 1, 0);
-    try testing.expectEqual(Cell{ .x = 0, .y = 0 }, layout.cellAt(64, 0));
-    try testing.expectEqual(Cell{ .x = 2, .y = 1 }, layout.cellAt(64 + 40, 39));
-    try testing.expectEqual(Cell{ .x = -1, .y = -1 }, layout.cellAt(63, -1));
-    try testing.expectEqual(Rect{ .x = 96, .y = 20, .w = 48, .h = 20 }, layout.cellRect(2, 1, 3));
+    const layout = Layout.init(800, 600, .init(1), 1, 0);
+    try testing.expectEqual(Cell{ .x = 0, .y = 0 }, layout.cellAt(32, 0));
+    try testing.expectEqual(Cell{ .x = 2, .y = 1 }, layout.cellAt(32 + 20, 17));
+    try testing.expectEqual(Cell{ .x = -1, .y = -1 }, layout.cellAt(31, -1));
+    try testing.expectEqual(Rect{ .x = 48, .y = 16, .w = 24, .h = 16 }, layout.cellRect(2, 1, 3));
 }

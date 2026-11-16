@@ -158,7 +158,7 @@ pub fn main(init: std.process.Init) !void {
     dialog.init(&app.mailbox);
 
     // A high-DPI screen starts at a matching zoom.
-    app.editor.screen_zoom = @intFromFloat(std.math.clamp(@round(2 * app.window.displayScale()), Editor.min_zoom, Editor.max_zoom));
+    app.editor.screen_zoom = @intFromFloat(std.math.clamp(@round(app.window.displayScale()), Editor.min_zoom, Editor.max_zoom));
     const config_dir = fs.configDir(init.gpa, init.environ_map);
     defer if (config_dir) |dir| init.gpa.free(dir);
     app.editor.loader.dir = config_dir;

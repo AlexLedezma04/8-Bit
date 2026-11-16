@@ -1,15 +1,16 @@
 //! Turns the font bits into atlas pixels and places the glyphs of a text.
 //! The renderer uploads the atlas and draws the placed glyphs.
 const std = @import("std");
-const font = @import("font8x8.zig");
+const font = @import("spleen.zig");
 const utf8 = @import("../core/utf8.zig");
 
-/// Width and height of one character cell, in font pixels.
-pub const cell = font.size;
+/// Size of one character cell, in font pixels.
+pub const width = font.width;
+pub const height = font.height;
 
 const atlas_columns = 32;
-pub const atlas_width = atlas_columns * cell;
-pub const atlas_height = (font.glyphs.len + atlas_columns - 1) / atlas_columns * cell;
+pub const atlas_width = atlas_columns * width;
+pub const atlas_height = (font.glyphs.len + atlas_columns - 1) / atlas_columns * height;
 pub const atlas_bytes = atlas_width * atlas_height * 4;
 
 /// Fills `pixels` as RGBA: white where a glyph has a pixel, transparent
@@ -19,7 +20,7 @@ pub fn drawAtlas(pixels: *[atlas_bytes]u8) void {
     for (font.glyphs, 0..) |glyph, index| {
         const origin = atlasOrigin(index);
         for (glyph, origin.y..) |bits, y| {
-            for (0..cell, origin.x..) |bit, x| {
+            for (0..width, origin.x..) |bit, x| {
                 const on = bits >> @intCast(bit) & 1 == 1;
                 if (!on) pixels[(y * atlas_width + x) * 4 + 3] = 0;
             }
@@ -30,7 +31,7 @@ pub fn drawAtlas(pixels: *[atlas_bytes]u8) void {
 const Origin = struct { x: usize, y: usize };
 
 fn atlasOrigin(index: usize) Origin {
-    return .{ .x = index % atlas_columns * cell, .y = index / atlas_columns * cell };
+    return .{ .x = index % atlas_columns * width, .y = index / atlas_columns * height };
 }
 
 /// One character of a line: its column and where its glyph is in the atlas.
@@ -62,9 +63,9 @@ fn atlasAlpha(pixels: *const [atlas_bytes]u8, x: usize, y: usize) u8 {
 }
 
 test "the atlas has room for every glyph" {
-    try testing.expect(atlas_width / cell * (atlas_height / cell) >= font.glyphs.len);
+    try testing.expect(atlas_width / width * (atlas_height / height) >= font.glyphs.len);
     const last = atlasOrigin(font.glyphs.len - 1);
-    try testing.expect(last.x + cell <= atlas_width and last.y + cell <= atlas_height);
+    try testing.expect(last.x + width <= atlas_width and last.y + height <= atlas_height);
 }
 
 test "atlas pixels are white, with alpha from the glyph bits" {
@@ -74,10 +75,10 @@ test "atlas pixels are white, with alpha from the glyph bits" {
         try testing.expectEqualSlices(u8, &.{ 0xFF, 0xFF, 0xFF }, pixels[i * 4 ..][0..3]);
     }
     const a = atlasOrigin(font.index('A'));
-    const top_row = [cell]u8{ 0, 0, 255, 255, 0, 0, 0, 0 };
-    for (top_row, 0..) |alpha, x| try testing.expectEqual(alpha, atlasAlpha(&pixels, a.x + x, a.y));
-    // The cells after the last glyph stay empty.
-    try testing.expectEqual(@as(u8, 0), atlasAlpha(&pixels, atlas_width - 1, atlas_height - 1));
+    const top_row = [width]u8{ 0, 255, 255, 255, 255, 255, 0, 0 };
+    for (top_row, 0..) |alpha, x| try testing.expectEqual(alpha, atlasAlpha(&pixels, a.x + x, a.y + 2));
+    const space = atlasOrigin(font.index(' '));
+    try testing.expectEqual(@as(u8, 0), atlasAlpha(&pixels, space.x + 3, space.y + 8));
 }
 
 test "glyphs are placed one column per character, skipping spaces" {
