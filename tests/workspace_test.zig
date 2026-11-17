@@ -164,7 +164,7 @@ test "file tree menu: new, copy, cut, paste and delete files and folders" {
     _ = session.clickMenu("Paste");
     try testing.expectEqual(@as(?i96, null), fs.modTime(testing.io, session.path("b copy.txt")));
     try testing.expect(fs.modTime(testing.io, session.path("a/b copy.txt")) != null);
-    try testing.expect(std.mem.endsWith(u8, editor.file().path.?, "a/b copy.txt"));
+    try testing.expect(std.mem.endsWith(u8, editor.file().path.?, "a" ++ std.fs.path.sep_str ++ "b copy.txt"));
 
     // A folder with everything in it; never into itself.
     _ = session.rightClickText("a");
