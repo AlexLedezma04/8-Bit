@@ -134,7 +134,7 @@ pub const EditorView = struct {
     fn tabItems(self: *EditorView, pane: *const panes.Pane) []const tabs.Item {
         self.items.clearRetainingCapacity();
         for (pane.tabs.items) |tab| {
-            self.items.append(self.editor.allocator, .{ .title = tab.file.name(), .modified = tab.file.isModified(), .preview = tab.file.preview }) catch break;
+            self.items.append(self.editor.allocator, .{ .title = tab.file.name(), .preview = tab.file.preview }) catch break;
         }
         return self.items.items;
     }

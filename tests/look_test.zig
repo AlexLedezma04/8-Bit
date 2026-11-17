@@ -60,6 +60,19 @@ test "the logo shows while no file is open" {
     try testing.expectEqual(@as(usize, 1), session.recorder.logos);
 }
 
+test "a tab with unsaved changes keeps its close button" {
+    var session: Session = undefined;
+    try session.init();
+    defer session.deinit();
+    session.editor.open(session.path("b.txt"));
+    session.typeKeys("x");
+    try testing.expect(session.editor.isModified());
+    const tab = session.last("b.txt").?;
+    const cross = session.last("\u{D7}").?;
+    try testing.expectEqual(tab.y, cross.y);
+    try testing.expect(cross.x > tab.x);
+}
+
 test "the actions next to the logo are in the text color" {
     var session: Session = undefined;
     try session.init();

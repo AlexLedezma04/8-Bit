@@ -36,7 +36,6 @@ pub const Theme = struct {
 
     status_bar: Color,
     status_bar_text: Color,
-    unsaved: Color,
 
     /// Background of the sidebar, the bottom panel and their tab bars.
     panel: Color,
