@@ -200,9 +200,7 @@ pub const Editor = struct {
         // Results that came too late.
         if (self.mailbox) |mailbox| while (mailbox.take()) |posted| self.drop(posted);
         self.find.deinit();
-        self.destroyTabs();
-        self.root.destroy(self.allocator);
-        for (self.files.items) |item| item.destroy();
+        self.destroyPanes();
         self.files.deinit(self.allocator);
         if (self.folder) |folder| self.allocator.free(folder);
         for (self.recent.items) |path| self.allocator.free(path);
@@ -211,9 +209,13 @@ pub const Editor = struct {
         self.config_arena.deinit();
     }
 
-    fn destroyTabs(self: *Editor) void {
+    /// Destroys the pane tree, its tabs and every open file.
+    fn destroyPanes(self: *Editor) void {
         var leaves = self.root.leaves();
         while (leaves.next()) |node| for (node.pane().tabs.items) |item| item.destroy(self.allocator);
+        self.root.destroy(self.allocator);
+        for (self.files.items) |item| item.destroy();
+        self.files.clearRetainingCapacity();
     }
 
     // The active tab
@@ -845,10 +847,7 @@ pub const Editor = struct {
 
     fn closeAll(self: *Editor) void {
         const root = Node.create(self.allocator) catch return self.notify("Could not close the folder", .{});
-        self.destroyTabs();
-        self.root.destroy(self.allocator);
-        for (self.files.items) |item| item.destroy();
-        self.files.clearRetainingCapacity();
+        self.destroyPanes();
         self.root = root;
         self.pane = root;
         self.addPlaceholder() catch {};

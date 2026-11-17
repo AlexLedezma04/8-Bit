@@ -236,42 +236,30 @@ pub const Workbench = struct {
             },
             .key => |press| return self.onKey(press),
             .text => |text| if (!self.swallow_text) {
-                if (self.prompt.kind != null) {
-                    self.prompt.typeText(text);
-                    self.promptChanged();
-                } else return self.toPanel(editor.focus, ev);
+                if (!self.typeInPrompt(text)) return self.toPanel(editor.focus, ev);
             },
             .mouse_down => |mouse| return self.onMouseDown(mouse),
             .mouse_move => |mouse| {
-                const x = mouse.x * self.density;
-                const y = mouse.y * self.density;
+                const moved = self.inPixels(mouse);
                 if (self.dragging) |edge| {
-                    editor.dock(if (edge == .sidebar) .sidebar else .bottom).size = self.frame().sizeAt(edge, self.metrics(), x, y);
+                    editor.dock(if (edge == .sidebar) .sidebar else .bottom).size = self.frame().sizeAt(edge, self.metrics(), moved.x, moved.y);
                     return .{};
                 }
                 // Without a capture only hover colors change.
                 const area = self.captured orelse return .{};
-                var scaled = mouse;
-                scaled.x = x;
-                scaled.y = y;
-                return self.toPanel(area, .{ .mouse_move = scaled });
+                return self.toPanel(area, .{ .mouse_move = moved });
             },
             .mouse_up => |mouse| {
                 self.dragging = null;
                 const area = self.captured orelse return .{ .redraw = false };
                 self.captured = null;
-                var scaled = mouse;
-                scaled.x *= self.density;
-                scaled.y *= self.density;
-                return self.toPanel(area, .{ .mouse_up = scaled });
+                return self.toPanel(area, .{ .mouse_up = self.inPixels(mouse) });
             },
             .wheel => |wheel| {
                 const rows = self.wheelRows(wheel);
                 if (rows[0] == 0 and rows[1] == 0) return .{ .redraw = false };
                 if (wheel.mods.ctrl) return self.run(if (rows[1] > 0) .zoom_in else .zoom_out);
-                var scaled = wheel;
-                scaled.x *= self.density;
-                scaled.y *= self.density;
+                var scaled = self.inPixels(wheel);
                 scaled.dx = rows[0];
                 scaled.dy = rows[1];
                 const area = self.areaAt(scaled.x, scaled.y) orelse return .{ .redraw = false };
@@ -410,10 +398,16 @@ pub const Workbench = struct {
         return if (counted.len == 0) notes[1..] else notes;
     }
 
+    /// A mouse event with its position in drawing pixels.
+    fn inPixels(self: *const Workbench, mouse: anytype) @TypeOf(mouse) {
+        var copy = mouse;
+        copy.x *= self.density;
+        copy.y *= self.density;
+        return copy;
+    }
+
     fn onMouseDown(self: *Workbench, mouse: event.MouseDown) Outcome {
-        var scaled = mouse;
-        scaled.x *= self.density;
-        scaled.y *= self.density;
+        const scaled = self.inPixels(mouse);
         if (self.prompt.kind != null) self.closePrompt();
         const target = self.frame();
         if (target.edgeAt(scaled.x, scaled.y)) |edge| {
@@ -484,13 +478,16 @@ pub const Workbench = struct {
 
     /// Clipboard text after a `paste` request.
     pub fn paste(self: *Workbench, text: []const u8) void {
-        const editor = self.editor;
-        if (self.prompt.kind != null) {
-            self.prompt.typeText(text);
-            self.promptChanged();
-        } else if (editor.focus == .bottom) {
-            self.terminal.paste(text);
-        } else editor.paste(text);
+        if (self.typeInPrompt(text)) return;
+        if (self.editor.focus == .bottom) self.terminal.paste(text) else self.editor.paste(text);
+    }
+
+    /// Types into the prompt, if it is open.
+    fn typeInPrompt(self: *Workbench, text: []const u8) bool {
+        if (self.prompt.kind == null) return false;
+        self.prompt.typeText(text);
+        self.promptChanged();
+        return true;
     }
 
     /// The dock edge being dragged, or under the mouse: it gets a resize cursor.
