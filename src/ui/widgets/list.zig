@@ -10,17 +10,20 @@ const Metrics = layout.Metrics;
 const Look = @import("../panel.zig").Look;
 const Color = @import("../theme.zig").Color;
 const KeyPress = @import("../../platform/event.zig").KeyPress;
+const utf8 = @import("../../core/utf8.zig");
 
 pub const Row = struct {
     text: []const u8,
     color: Color,
+    /// Dimmed text after `text`, like the path of a folder.
+    detail: []const u8 = "",
     /// Levels of two cells each.
     indent: usize = 0,
     icon: u8 = ' ',
     /// A letter at the right end, like the git status of a file.
     mark: ?Mark = null,
 
-    pub const Mark = struct { char: u8, color: Color };
+    pub const Mark = struct { char: u21, color: Color };
 };
 
 pub const Action = enum { moved, activate };
@@ -55,11 +58,16 @@ pub const List = struct {
         return .moved;
     }
 
+    /// The row at pixel `y`, if there is one.
+    pub fn rowAt(self: *const List, y: f32, rect: Rect, metrics: Metrics, count: usize) ?usize {
+        if (y < rect.y) return null;
+        const row = self.top + @as(usize, @intFromFloat((y - rect.y) / metrics.row));
+        return if (row < count) row else null;
+    }
+
     /// A click at pixel `y` selects a row; a double click activates it.
     pub fn click(self: *List, y: f32, rect: Rect, metrics: Metrics, count: usize, clicks: u8) ?Action {
-        const row = self.top + @as(usize, @intFromFloat(@max(0, y - rect.y) / metrics.row));
-        if (row >= count) return null;
-        self.selected = row;
+        self.selected = self.rowAt(y, rect, metrics, count) orelse return null;
         return if (clicks >= 2) .activate else .moved;
     }
 
@@ -92,7 +100,15 @@ pub const List = struct {
             const x = rect.x + @as(f32, @floatFromInt(1 + 2 * row.indent)) * metrics.cell;
             if (row.icon != ' ') canvas.drawText(x, y, &.{row.icon}, look.theme.line_number);
             canvas.drawText(x + 2 * metrics.cell, y, row.text, row.color);
-            if (row.mark) |mark| canvas.drawText(rect.x + rect.w - 2 * metrics.cell, y, &.{mark.char}, mark.color);
+            if (row.detail.len > 0) {
+                const detail_x = x + @as(f32, @floatFromInt(3 + utf8.count(row.text))) * metrics.cell;
+                canvas.drawText(detail_x, y, row.detail, look.theme.line_number);
+            }
+            if (row.mark) |mark| {
+                var bytes: [4]u8 = undefined;
+                const len = std.unicode.utf8Encode(mark.char, &bytes) catch 0;
+                canvas.drawText(rect.x + rect.w - 2 * metrics.cell, y, bytes[0..len], mark.color);
+            }
             y += metrics.row;
         }
     }

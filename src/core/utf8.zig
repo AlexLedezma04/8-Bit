@@ -38,6 +38,14 @@ pub fn prefix(text: []const u8, max_chars: usize) []const u8 {
     return text[0..end];
 }
 
+/// Characters in `text`; a bad byte is one character.
+pub fn count(text: []const u8) usize {
+    var total: usize = 0;
+    var pos: usize = 0;
+    while (pos < text.len) : (total += 1) pos = next(text, pos);
+    return total;
+}
+
 /// Non-ASCII characters count as word characters.
 pub fn isWord(cp: u21) bool {
     return cp == '_' or cp >= 0x80 or std.ascii.isAlphanumeric(@intCast(cp));
@@ -75,6 +83,12 @@ test "prefix cuts between characters" {
     try testing.expectEqualStrings("h\u{E9}", prefix("h\u{E9}llo", 2));
     try testing.expectEqualStrings("", prefix("abc", 0));
     try testing.expectEqualStrings("abc", prefix("abc", 9));
+}
+
+test "count counts characters, a bad byte as one" {
+    try testing.expectEqual(@as(usize, 5), count("h\u{E9}llo"));
+    try testing.expectEqual(@as(usize, 2), count("a\xff"));
+    try testing.expectEqual(@as(usize, 0), count(""));
 }
 
 test "isWord" {

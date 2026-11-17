@@ -32,9 +32,8 @@ test "Ctrl+` starts a shell in the folder; keys and text go to it" {
     try session.init();
     defer session.deinit();
     const editor = &session.editor;
+    // Made after the file tree was read, so only the shell shows it.
     try session.write("only-here.txt", "");
-    // The file tree would show the file names too.
-    _ = session.press("ctrl+b");
 
     _ = session.press("ctrl+`");
     try testing.expectEqual(Area.bottom, editor.focus);

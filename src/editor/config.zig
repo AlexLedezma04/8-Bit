@@ -66,6 +66,16 @@ pub const Loader = struct {
         return result;
     }
 
+    /// Writes `value` to the user's `name.zon`. Does nothing without a config folder.
+    pub fn save(self: Loader, name: []const u8, value: anytype) !void {
+        var buffer: [std.fs.max_path_bytes]u8 = undefined;
+        const file = self.path(&buffer, name) orelse return;
+        var text: std.Io.Writer.Allocating = .init(self.gpa);
+        defer text.deinit();
+        try std.zon.stringify.serialize(value, .{}, &text.writer);
+        try fs.write(self.io, file, &.{ text.written(), "\n" });
+    }
+
     /// Names of the files in a folder, built-in and the user's, sorted.
     pub fn names(self: Loader, arena: std.mem.Allocator, folder: []const u8) ![]const []const u8 {
         var list: std.ArrayList([]const u8) = .empty;
@@ -275,6 +285,25 @@ test "names lists built-in and user files once each" {
     const names = try loader.names(arena.allocator(), "themes");
     try testing.expectEqual(@as(usize, 3), names.len);
     for ([_][]const u8{ "blue", "dark", "light" }, names) |expected, name| try testing.expectEqualStrings(expected, name);
+}
+
+test "save writes a file that load reads back" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const loader = try testLoader(arena.allocator(), &tmp);
+    const saved: Sample = .{ .size = 7, .name = "kept", .color = .{ .value = 0 }, .inner = .{ .a = true, .b = false } };
+    try loader.save("sample", .{ .size = saved.size, .name = saved.name, .inner = saved.inner });
+
+    var notifier: TestNotifier = .{};
+    const loaded = loader.load(Sample, arena.allocator(), "sample", sample_base, &notifier);
+    try testing.expectEqual(@as(u8, 7), loaded.size);
+    try testing.expectEqualStrings("kept", loaded.name);
+    try testing.expect(loaded.inner.a);
+    try testing.expectEqualStrings("", notifier.message);
+    // Without a config folder nothing is written.
+    try (Loader{ .io = testing.io, .gpa = testing.allocator }).save("sample", saved.size);
 }
 
 test "setField changes one field and keeps the rest" {

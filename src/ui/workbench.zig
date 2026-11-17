@@ -1,8 +1,9 @@
 //! The whole window: places the panels, draws them, and routes input. A key
-//! goes to the prompt if it is open, else to the focused panel, else to the
+//! goes to the open menu or prompt, else to the focused panel, else to the
 //! key bindings. A click gives its panel focus. Each dock has a tab bar of
 //! its panels, and its edge can be dragged. Prompts that commands ask for
-//! are opened here.
+//! are opened here. While nothing is open the editor area is the welcome
+//! screen.
 const std = @import("std");
 const editor_zig = @import("../editor/editor.zig");
 const Editor = editor_zig.Editor;
@@ -20,6 +21,8 @@ const Look = panel.Look;
 const theme_zig = @import("theme.zig");
 const prompt_zig = @import("widgets/prompt.zig");
 const Prompt = prompt_zig.Prompt;
+const menu_zig = @import("widgets/menu.zig");
+const Menu = menu_zig.Menu;
 const Find = @import("../editor/find.zig").Find;
 const EditorView = @import("panels/editor_view.zig").EditorView;
 const FileTree = @import("panels/file_tree.zig").FileTree;
@@ -27,6 +30,7 @@ const Messages = @import("panels/messages.zig").Messages;
 const Search = @import("panels/search.zig").Search;
 const GitPanel = @import("panels/git.zig").GitPanel;
 const TerminalPanel = @import("panels/terminal.zig").TerminalPanel;
+const Welcome = @import("panels/welcome.zig").Welcome;
 const tabs = @import("widgets/tabs.zig");
 const status_bar = @import("panels/status_bar.zig");
 const event = @import("../platform/event.zig");
@@ -47,6 +51,8 @@ pub const Workbench = struct {
     /// The `config_version` of the editor that `theme` was loaded for.
     theme_version: ?u32 = null,
     prompt: Prompt,
+    menu: Menu = .{},
+    welcome: Welcome,
     view: EditorView,
     files: FileTree,
     messages: Messages,
@@ -71,8 +77,9 @@ pub const Workbench = struct {
         self.* = .{
             .editor = editor,
             .prompt = .init(editor.allocator),
-            .view = .{ .editor = editor },
-            .files = .{ .editor = editor, .prompt = &self.prompt },
+            .welcome = .{ .editor = editor },
+            .view = .{ .editor = editor, .menu = &self.menu },
+            .files = .{ .editor = editor, .prompt = &self.prompt, .menu = &self.menu },
             .messages = .{ .editor = editor },
             .search = .{ .editor = editor },
             .git = .{ .editor = editor, .prompt = &self.prompt },
@@ -106,7 +113,7 @@ pub const Workbench = struct {
     fn panelOf(self: *Workbench, area: Area) Panel {
         return switch (area) {
             .sidebar => self.sidePanel(self.editor.side_panel),
-            .editor => .of(EditorView, &self.view),
+            .editor => if (self.editor.welcome()) .of(Welcome, &self.welcome) else .of(EditorView, &self.view),
             .bottom => self.bottomPanel(self.editor.bottom_panel),
         };
     }
@@ -200,10 +207,50 @@ pub const Workbench = struct {
         var notes: [3]prompt_zig.Note = undefined;
         self.prompt.draw(canvas, style, target.editor, self.promptNotes(&buffer, &notes, theme));
         status_bar.draw(canvas, style, self.editor.status(), target.status);
+        self.menu.draw(canvas, style, self.window());
+    }
+
+    fn window(self: *const Workbench) Rect {
+        return .{ .w = self.width, .h = self.height };
+    }
+
+    /// Takes every input event while the menu is open.
+    fn toMenu(self: *Workbench, ev: Event) Outcome {
+        if (ev == .mouse_up) self.captured = null;
+        const outcome = switch (ev) {
+            .key => |press| blk: {
+                self.swallow_text = true;
+                break :blk self.menu.key(press);
+            },
+            .mouse_down => |mouse| self.menu.click(self.metrics(), self.window(), mouse.x * self.density, mouse.y * self.density),
+            .mouse_move => |mouse| blk: {
+                self.menu.mouseMove(self.metrics(), self.window(), mouse.x * self.density, mouse.y * self.density);
+                break :blk .open;
+            },
+            else => .open,
+        };
+        return switch (outcome) {
+            .chosen => |request| self.fulfilHere(request),
+            else => .{},
+        };
+    }
+
+    /// A prompt is opened here; anything else goes to `main.zig`.
+    fn fulfilHere(self: *Workbench, request: ?Request) Outcome {
+        const found = request orelse return .{};
+        if (found == .prompt) {
+            self.ask(found.prompt);
+            return .{};
+        }
+        return .{ .request = found };
     }
 
     pub fn handle(self: *Workbench, ev: Event) Outcome {
         const editor = self.editor;
+        if (self.menu.isOpen()) switch (ev) {
+            .key, .text, .mouse_down, .mouse_move, .mouse_up, .wheel => return self.toMenu(ev),
+            else => {},
+        };
         switch (ev) {
             .quit => return self.run(.quit),
             .redraw, .wake => {},
@@ -217,8 +264,6 @@ pub const Workbench = struct {
                 if (self.prompt.kind != null) {
                     self.prompt.typeText(text);
                     self.promptChanged();
-                } else if (editor.focus == .editor) {
-                    editor.typeText(text);
                 } else return self.toPanel(editor.focus, ev);
             },
             .mouse_down => |mouse| return self.onMouseDown(mouse),
@@ -291,12 +336,7 @@ pub const Workbench = struct {
 
     /// Runs a command. A prompt it asks for is opened here.
     fn run(self: *Workbench, command: commands.Command) Outcome {
-        const request = commands.run(self.editor, command) orelse return .{};
-        if (request == .prompt) {
-            self.ask(request.prompt);
-            return .{};
-        }
-        return .{ .request = request };
+        return self.fulfilHere(commands.run(self.editor, command));
     }
 
     /// Commands that work while find, replace or find in project is open.

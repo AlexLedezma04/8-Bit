@@ -73,7 +73,7 @@ test "open settings with Ctrl+, , change them, save, and they apply at once" {
 
     session.retype(".{ .tab_width = 2, .use_spaces = false, .wrap = true, .zoom = 3, .line_numbers = false, .undo_limit_mb = 1 }");
     _ = session.press("ctrl+s");
-    try testing.expectEqualStrings("Saved settings.zon", editor.currentMessage().?);
+    try testing.expectEqualStrings("Saved settings.zon", editor.lastMessage().?);
     try testing.expectEqual(@as(usize, 2), editor.doc().tab_width);
     try testing.expect(!editor.doc().soft_tabs);
     try testing.expect(editor.view().wrap);
@@ -97,7 +97,7 @@ test "a bad settings file reports its line and keeps the defaults" {
 
     try session.write("settings.zon", ".{\n    .tab_width = 2,\n    .wrap = \"yes\",\n}");
     editor.reloadConfig();
-    try testing.expectStringStartsWith(editor.currentMessage().?, "settings.zon:3: ");
+    try testing.expectStringStartsWith(editor.lastMessage().?, "settings.zon:3: ");
     try testing.expectEqual(@as(usize, 4), editor.doc().tab_width);
     try testing.expect(!editor.view().wrap);
 }
@@ -110,7 +110,7 @@ test "Alt+T switches themes, the settings file remembers it, and user themes joi
 
     try testing.expectEqual(app.ui.theme.Color.rgb(0x1e1f22), session.loadTheme().background);
     _ = session.press("alt+t");
-    try testing.expectEqualStrings("Theme: light", editor.currentMessage().?);
+    try testing.expectEqualStrings("Theme: light", editor.lastMessage().?);
     try testing.expectEqualStrings("light", editor.settings.theme);
     try testing.expectEqual(app.ui.theme.Color.rgb(0xf8f8f4), session.loadTheme().background);
     const text = try session.read("settings.zon");
@@ -134,7 +134,7 @@ test "Alt+T switches themes, the settings file remembers it, and user themes joi
     try session.write("settings.zon", ".{ .theme = \"gone\" }");
     editor.reloadConfig();
     try testing.expectEqual(app.ui.theme.Color.rgb(0x1e1f22), session.loadTheme().background);
-    try testing.expectEqualStrings("No themes/gone.zon", editor.currentMessage().?);
+    try testing.expectEqualStrings("No themes/gone.zon", editor.lastMessage().?);
 }
 
 test "keymap.zon bindings win over the defaults; bad names show a message" {
@@ -162,10 +162,10 @@ test "keymap.zon bindings win over the defaults; bad names show a message" {
 
     try session.write("keymap.zon", ".{ .{ .key = \"hyper+x\", .command = \"save\" } }");
     editor.reloadConfig();
-    try testing.expectEqualStrings("keymap.zon: unknown key \"hyper+x\"", editor.currentMessage().?);
+    try testing.expectEqualStrings("keymap.zon: unknown key \"hyper+x\"", editor.lastMessage().?);
     try session.write("keymap.zon", ".{ .{ .key = \"f5\", .command = \"fly\" } }");
     editor.reloadConfig();
-    try testing.expectEqualStrings("keymap.zon: unknown command \"fly\"", editor.currentMessage().?);
+    try testing.expectEqualStrings("keymap.zon: unknown command \"fly\"", editor.lastMessage().?);
     try testing.expectEqual(keymap.default.len, editor.bindings.len);
     try expectText(&editor.doc().buffer, "one\ntwo");
 }

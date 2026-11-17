@@ -48,6 +48,7 @@ pub const Command = enum {
     paste,
     open,
     open_folder,
+    close_folder,
     save,
     save_as,
     quit,
@@ -78,7 +79,6 @@ pub const Command = enum {
     split_down,
     next_pane,
     prev_pane,
-    toggle_sidebar,
     toggle_bottom,
     focus_sidebar,
     focus_editor,
@@ -153,6 +153,7 @@ fn execute(editor: *Editor, command: Command) !?Request {
         .paste => return .paste,
         .open => return .{ .pick = .open_file },
         .open_folder => return .{ .pick = .open_folder },
+        .close_folder => editor.closeFolder(),
         .save => return editor.save(),
         .save_as => return .{ .pick = .save_file },
         .quit => return editor.quit(),
@@ -188,7 +189,6 @@ fn execute(editor: *Editor, command: Command) !?Request {
         .split_down => try editor.split(.down),
         .next_pane => try editor.cyclePane(1),
         .prev_pane => try editor.cyclePane(-1),
-        .toggle_sidebar => editor.toggleDock(.sidebar),
         .toggle_bottom => editor.toggleDock(.bottom),
         .focus_sidebar => editor.focusArea(.sidebar),
         .focus_editor => editor.focusArea(.editor),
@@ -280,7 +280,7 @@ test "zoom and wrap commands" {
 
     _ = run(&editor, .toggle_wrap);
     try testing.expect(editor.view().wrap);
-    try testing.expectEqualStrings("Line wrap on", editor.currentMessage().?);
+    try testing.expectEqualStrings("Line wrap on", editor.lastMessage().?);
 }
 
 test "tab and pane commands" {
@@ -302,8 +302,8 @@ test "tab and pane commands" {
     try testing.expectEqual(panes.Axis.down, editor.root.kind.split.axis);
     _ = run(&editor, .prev_pane);
     try testing.expectEqual(editor.root.kind.split.first, editor.pane);
-    _ = run(&editor, .focus_sidebar);
-    try testing.expect(editor.sidebar.shown);
-    _ = run(&editor, .toggle_sidebar);
+    _ = run(&editor, .focus_bottom);
+    try testing.expect(editor.bottom.shown);
+    _ = run(&editor, .toggle_bottom);
     try testing.expectEqual(@import("editor.zig").Area.editor, editor.focus);
 }

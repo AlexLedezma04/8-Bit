@@ -17,12 +17,13 @@ src/
     workbench.zig the whole window: places panels, routes input, focus
     theme.zig     the color struct; theme files live in assets/themes
     layout.zig    where the parts of the window are; all sizes come from the cell
-    widgets/      reusable controls (list, tabs, prompt)
-    panels/       one view per feature (editor_view, file_tree, messages, status_bar, ...)
+    widgets/      reusable controls (list, tabs, prompt, menu)
+    panels/       one view per feature (editor_view, welcome, file_tree, messages, status_bar, ...)
   font/           bitmap font
 assets/           built-in ZON files, embedded in the exe (assets.zig lists them)
   settings.zon    default settings
   keymap.zon      user key bindings (empty: the defaults are in keymap.zig)
+  state.zon       what the app remembers between runs (written by the app)
   themes/         theme data files
   grammars/       one grammar file per language (docs/GRAMMARS.md)
 tests/            integration tests (unit tests stay next to the code)
@@ -71,12 +72,22 @@ third_party/      vendored C dependencies (SDL3)
 
 - **Input.** `platform/input.zig` turns SDL events into the plain events of
   `platform/event.zig`, and `main.zig` hands them to `ui/workbench.zig`. A
-  key goes to the prompt if it is open, else to the focused panel, else it
+  key goes to the open menu or prompt, else to the focused panel, else it
   is looked up in the `editor/keymap.zig` table and becomes a `Command`.
+  Typed text goes to the focused panel too.
 - **Panels.** The sidebar (file tree), the editor area and the bottom panel
   (messages) follow `ui/panel.zig`: `title`, `draw(rect)` and `handle(event)`.
   One area has focus; a click gives focus. The workbench draws and routes
-  without knowing what a panel is.
+  without knowing what a panel is. The sidebar is shown whenever a folder
+  is open. While nothing is open (`Editor.welcome`) the editor area is the
+  welcome screen with the recent folders.
+- **Menus.** A panel opens the one `ui/widgets/menu.zig` on a right click with
+  its items and itself as the target; the workbench gives the menu every
+  input event while it is open and the target gets the chosen index.
+- **Folders.** `Editor.openFolder` keeps the folder at the top of `recent`
+  and writes `state.zon` (`Loader.save`) with the folder, the recent list and
+  the sidebar view, whenever one changes. `main.zig` calls `Editor.restore`,
+  which reopens the folder when no path is given.
 - **Files, panes and tabs.** `Editor.files` holds the open files
   (`editor/file.zig`: document, path, time on disk). The editor area is a
   tree of splits (`editor/panes.zig`) whose leaves are panes of tabs. A tab
@@ -107,8 +118,8 @@ third_party/      vendored C dependencies (SDL3)
 - **Questions.** The flag for unsaved changes comes from the undo history
   (`History.isModified`). Quit and closing a tab ask Save / Don't save /
   Cancel with an `ask` request; the answer comes back to `Editor.answer`.
-- **Messages.** Everything reports through `Editor.notify`; the status bar
-  shows the message for a few seconds and the messages panel keeps it.
+- **Messages.** Everything reports through `Editor.notify`; the messages
+  panel keeps it. The status bar shows only the git branch and the language.
 - **Sizes.** `ui/layout.zig` derives every size from the cell size, which is
   the 8x16 font times the zoom (1x to 4x).
 

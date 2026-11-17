@@ -130,5 +130,5 @@ test "the window draws colors, the language, brackets; comments and languages by
     _ = session.press("alt+l");
     session.typeKeys("nope");
     _ = session.press("enter");
-    try testing.expect(session.shows("No language named nope"));
+    try testing.expectEqualStrings("No language named nope", session.editor.lastMessage().?);
 }

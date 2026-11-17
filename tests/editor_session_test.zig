@@ -67,8 +67,8 @@ test "open a file, edit it with keys, save it, and the bytes on disk are right" 
     try session.write("main.zig", "fn main() void {\r\n}");
 
     editor.open(session.path("main.zig"));
-    try testing.expectEqualStrings("main.zig", editor.status().name);
-    try testing.expectEqualStrings("CRLF", editor.status().line_ending);
+    try testing.expectEqualStrings("main.zig", editor.name());
+    try testing.expectEqualStrings("CRLF", editor.doc().line_ending.name());
     try testing.expect(!editor.isModified());
 
     _ = session.press(.end, .{});
@@ -76,12 +76,12 @@ test "open a file, edit it with keys, save it, and the bytes on disk are right" 
     _ = session.press(.tab, .{});
     editor.typeText("return;");
     try testing.expect(editor.isModified());
-    try testing.expectEqual(@as(usize, 2), editor.status().line);
-    try testing.expectEqual(@as(usize, 12), editor.status().column);
+    try testing.expectEqual(@as(usize, 2), editor.doc().buffer.lineOf(editor.doc().cursor.pos) + 1);
+    try testing.expectEqual(@as(usize, 12), editor.doc().columnOf(editor.doc().cursor.pos) + 1);
 
     try testing.expectEqual(@as(?Request, null), session.press(.char('s'), ctrl));
     try testing.expect(!editor.isModified());
-    try testing.expectEqualStrings("Saved main.zig", editor.currentMessage().?);
+    try testing.expectEqualStrings("Saved main.zig", editor.lastMessage().?);
     try session.expectFile("main.zig", "fn main() void {\r\n    return;\r\n}");
 }
 
@@ -132,14 +132,14 @@ test "a new document is saved through the save dialog, also on the way out" {
     defer session.deinit();
     const editor = &session.editor;
     editor.typeText("hello");
-    try testing.expectEqualStrings("untitled", editor.status().name);
+    try testing.expectEqualStrings("untitled", editor.name());
 
     // Quit -> Save -> no file yet -> save dialog -> file picked -> saved -> quit.
     try expectAsk(.save, "untitled", session.press(.char('q'), ctrl));
     try testing.expectEqual(Request{ .pick = .save_file }, editor.answer(.yes).?);
     try testing.expectEqual(Request.quit, (try session.pick(.save_file, "new.txt")).?);
     try session.expectFile("new.txt", "hello");
-    try testing.expectEqualStrings("new.txt", editor.status().name);
+    try testing.expectEqualStrings("new.txt", editor.name());
 }
 
 test "cancelling the save dialog cancels the quit" {
@@ -175,19 +175,19 @@ test "many files: open in tabs, switch to an open one, close with a question" {
 
     // Already open: switch to it. Its cursor and changes are still there.
     editor.open(session.path("a.txt"));
-    try testing.expectEqualStrings("a.txt", editor.status().name);
+    try testing.expectEqualStrings("a.txt", editor.name());
     try testing.expectEqual(@as(usize, 1), editor.doc().cursor.pos);
     try testing.expectEqual(@as(usize, 2), editor.files.items.len);
 
     try expectAsk(.save, "a.txt", session.press(.char('w'), ctrl));
     try testing.expectEqual(@as(?Request, null), editor.answer(.no));
-    try testing.expectEqualStrings("b.txt", editor.status().name);
+    try testing.expectEqualStrings("b.txt", editor.name());
     try testing.expectEqual(@as(usize, 1), editor.files.items.len);
     try session.expectFile("a.txt", "aaa");
 
     // Closing the last tab leaves an empty file.
     _ = session.press(.char('w'), ctrl);
-    try testing.expectEqualStrings("untitled", editor.status().name);
+    try testing.expectEqualStrings("untitled", editor.name());
     try testing.expectEqual(@as(usize, 1), editor.files.items.len);
 }
 
@@ -227,7 +227,7 @@ test "a file that does not exist opens empty and is created by save" {
     defer session.deinit();
     const editor = &session.editor;
     editor.open(session.path("fresh.txt"));
-    try testing.expectEqualStrings("fresh.txt", editor.status().name);
+    try testing.expectEqualStrings("fresh.txt", editor.name());
     editor.typeText("first");
     _ = session.press(.char('s'), ctrl);
     try session.expectFile("fresh.txt", "first");
@@ -239,17 +239,17 @@ test "errors are reported with notify" {
     const editor = &session.editor;
     // A folder cannot be opened as a file.
     editor.open(session.path(""));
-    try testing.expect(std.mem.startsWith(u8, editor.currentMessage().?, "Could not open"));
-    try testing.expectEqualStrings("untitled", editor.status().name);
+    try testing.expect(std.mem.startsWith(u8, editor.lastMessage().?, "Could not open"));
+    try testing.expectEqualStrings("untitled", editor.name());
 
     _ = editor.receive(.dialog_failed);
-    try testing.expectEqualStrings("No file dialog: install zenity", editor.currentMessage().?);
+    try testing.expectEqualStrings("No file dialog: install zenity", editor.lastMessage().?);
 
     // Saving under a file, as if it were a folder, fails and keeps the changes.
     try session.write("plain.txt", "");
     editor.typeText("x");
     _ = try session.pick(.save_file, "plain.txt/file.txt");
-    try testing.expect(std.mem.startsWith(u8, editor.currentMessage().?, "Could not save"));
+    try testing.expect(std.mem.startsWith(u8, editor.lastMessage().?, "Could not save"));
     try testing.expect(editor.isModified());
 }
 
@@ -290,7 +290,7 @@ test "a big file: only the lines on screen are touched when moving around" {
     editor.view().* = .{ .cols = 80, .rows = 40 };
 
     _ = session.press(.end, ctrl);
-    try testing.expectEqual(@as(usize, line_count + 1), editor.status().line);
+    try testing.expectEqual(@as(usize, line_count + 1), editor.doc().buffer.lineOf(editor.doc().cursor.pos) + 1);
     // The cursor keeps its margin of two rows above the bottom edge.
     try testing.expectEqual(@as(usize, line_count - 37), editor.view().top.line);
     _ = run(editor, .toggle_wrap);

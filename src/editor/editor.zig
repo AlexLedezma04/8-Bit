@@ -79,16 +79,18 @@ pub const Mailbox = @import("../platform/mailbox.zig").Mailbox(Posted);
 
 /// What the status bar shows.
 pub const Status = struct {
-    name: []const u8,
-    modified: bool,
-    /// One-based.
-    line: usize,
-    column: usize,
-    line_ending: []const u8,
-    language: []const u8,
     /// Empty outside a repository.
     branch: []const u8,
-    message: ?[]const u8,
+    language: []const u8,
+};
+
+/// What the app remembers between runs, in `state.zon`.
+pub const State = struct {
+    /// Empty when no folder was open.
+    folder: []const u8,
+    /// Newest first.
+    recent: []const []const u8,
+    side_panel: SidePanel,
 };
 
 /// The parts of the window that can have focus.
@@ -136,11 +138,10 @@ pub const Editor = struct {
     config_arena: std.heap.ArenaAllocator,
     /// Goes up on every `reloadConfig`, so the UI knows to load the theme again.
     config_version: u32 = 0,
+    /// Folders opened before, newest first; the open one is the first.
+    recent: std.ArrayList([]u8) = .empty,
     /// Current time. The main loop sets it before it passes on input.
     now_ms: u64 = 0,
-    message: [160]u8 = undefined,
-    message_len: usize = 0,
-    message_until_ms: u64 = 0,
     /// Every message, oldest first, for the messages panel.
     log: std.ArrayList([]u8) = .empty,
     /// Waits for an answer, or for a file name, before it can go on.
@@ -160,8 +161,9 @@ pub const Editor = struct {
 
     pub const min_zoom = 1;
     pub const max_zoom = 4;
-    const message_ms = 4000;
     const max_log = 200;
+    const max_message = 160;
+    const max_recent = 10;
 
     const Pending = union(enum) {
         /// Quitting; the files before this index are done.
@@ -205,6 +207,8 @@ pub const Editor = struct {
         for (self.files.items) |item| item.destroy();
         self.files.deinit(self.allocator);
         if (self.folder) |folder| self.allocator.free(folder);
+        for (self.recent.items) |path| self.allocator.free(path);
+        self.recent.deinit(self.allocator);
         for (self.log.items) |line| self.allocator.free(line);
         self.log.deinit(self.allocator);
         self.clipboard.deinit(self.allocator);
@@ -266,25 +270,18 @@ pub const Editor = struct {
 
     // Messages
 
-    /// Shows a short message in the status bar for a few seconds and keeps it
-    /// in the log. Every feature reports errors and info through here.
+    /// Adds a message to the log of the messages panel. Every feature
+    /// reports errors and info through here.
     pub fn notify(self: *Editor, comptime format: []const u8, args: anytype) void {
-        const text = std.fmt.bufPrint(&self.message, format, args) catch &self.message;
-        self.message_len = text.len;
-        self.message_until_ms = self.now_ms + message_ms;
+        var buffer: [max_message]u8 = undefined;
+        const text = std.fmt.bufPrint(&buffer, format, args) catch &buffer;
         const line = self.allocator.dupe(u8, text) catch return;
         self.log.append(self.allocator, line) catch return self.allocator.free(line);
         if (self.log.items.len > max_log) self.allocator.free(self.log.orderedRemove(0));
     }
 
-    pub fn currentMessage(self: *const Editor) ?[]const u8 {
-        const active = self.message_len > 0 and self.now_ms < self.message_until_ms;
-        return if (active) self.message[0..self.message_len] else null;
-    }
-
-    /// Milliseconds until the message must disappear, if one is showing.
-    pub fn messageTimeLeft(self: *const Editor) ?u64 {
-        return if (self.currentMessage() != null) self.message_until_ms - self.now_ms else null;
+    pub fn lastMessage(self: *const Editor) ?[]const u8 {
+        return if (self.log.items.len > 0) self.log.items[self.log.items.len - 1] else null;
     }
 
     // Input that is not a command
@@ -837,11 +834,74 @@ pub const Editor = struct {
 
     pub fn openFolder(self: *Editor, path: []const u8) void {
         const copy_ = self.allocator.dupe(u8, path) catch return;
-        if (self.folder) |old| self.allocator.free(old);
-        self.folder = copy_;
-        self.folder_version +%= 1;
-        self.sidebar.shown = true;
+        self.setFolder(copy_);
         self.git.open(copy_);
+        const real = std.Io.Dir.cwd().realPathFileAlloc(self.io, path, self.allocator) catch return;
+        defer self.allocator.free(real);
+        self.addRecent(real) catch {};
+        self.remember();
+    }
+
+    /// The next start shows the welcome screen.
+    pub fn closeFolder(self: *Editor) void {
+        if (self.folder == null) return;
+        self.setFolder(null);
+        self.git.close();
+        if (self.focus == .sidebar) self.focus = .editor;
+        self.remember();
+    }
+
+    /// The sidebar is shown whenever a folder is open.
+    fn setFolder(self: *Editor, folder: ?[]u8) void {
+        if (self.folder) |old| self.allocator.free(old);
+        self.folder = folder;
+        self.folder_version +%= 1;
+        self.sidebar.shown = folder != null;
+    }
+
+    fn addRecent(self: *Editor, path: []const u8) !void {
+        for (self.recent.items, 0..) |old, i| if (std.mem.eql(u8, old, path)) {
+            self.allocator.free(self.recent.orderedRemove(i));
+            break;
+        };
+        if (self.recent.items.len == max_recent) self.allocator.free(self.recent.pop().?);
+        const copy_ = try self.allocator.dupe(u8, path);
+        self.recent.insert(self.allocator, 0, copy_) catch |err| {
+            self.allocator.free(copy_);
+            return err;
+        };
+    }
+
+    pub fn forgetRecent(self: *Editor, index: usize) void {
+        self.allocator.free(self.recent.orderedRemove(index));
+        self.remember();
+    }
+
+    /// Loads what the last run remembered. Opens its folder when `reopen`.
+    pub fn restore(self: *Editor, reopen: bool) void {
+        var arena: std.heap.ArenaAllocator = .init(self.allocator);
+        defer arena.deinit();
+        const base = config.builtin(State, self.allocator, arena.allocator(), "state");
+        const state = self.loader.load(State, arena.allocator(), "state", base, self);
+        self.side_panel = state.side_panel;
+        var i = state.recent.len;
+        while (i > 0) : (i -= 1) self.addRecent(state.recent[i - 1]) catch {};
+        if (reopen and state.folder.len > 0 and fs.isDir(self.io, state.folder)) self.openFolder(state.folder);
+    }
+
+    /// Writes `state.zon`. Without a config folder nothing is kept.
+    fn remember(self: *Editor) void {
+        const state: State = .{
+            .folder = if (self.folder != null and self.recent.items.len > 0) self.recent.items[0] else "",
+            .recent = self.recent.items,
+            .side_panel = self.side_panel,
+        };
+        self.loader.save("state", state) catch |err| self.notify("Could not save state.zon: {t}", .{err});
+    }
+
+    /// Nothing is open yet: no folder, and one blank tab.
+    pub fn welcome(self: *const Editor) bool {
+        return self.folder == null and self.root.kind == .pane and self.pane.pane().tabs.items.len == 1 and self.file().isBlank();
     }
 
     // Focus and docks
@@ -855,7 +915,10 @@ pub const Editor = struct {
     }
 
     pub fn showSide(self: *Editor, panel: SidePanel) void {
-        self.side_panel = panel;
+        if (self.side_panel != panel) {
+            self.side_panel = panel;
+            self.remember();
+        }
         self.focusArea(.sidebar);
         if (panel == .git) self.git.refresh();
     }
@@ -867,7 +930,9 @@ pub const Editor = struct {
         if (panel == .terminal and self.terminals.list.items.len == 0) self.openTerminal();
     }
 
+    /// The sidebar can only have focus while a folder is open.
     pub fn focusArea(self: *Editor, area: Area) void {
+        if (area == .sidebar and self.folder == null) return self.notify("Open a folder first", .{});
         if (area != .editor) self.dock(area).shown = true;
         self.focus = area;
     }
@@ -1008,7 +1073,7 @@ pub const Editor = struct {
 
     /// Milliseconds until the screen must change by itself, if ever.
     pub fn timeLeft(self: *const Editor) ?u64 {
-        var left = self.messageTimeLeft();
+        var left: ?u64 = null;
         for (self.files.items) |item| if (item.tracking.timeLeft(self.now_ms)) |ms| {
             left = @min(ms, left orelse ms);
         };
@@ -1116,22 +1181,15 @@ pub const Editor = struct {
     // Display
 
     pub fn status(self: *const Editor) Status {
-        const doc_ = self.doc();
-        const pos = doc_.cursor.pos;
         return .{
-            .name = self.name(),
-            .modified = self.isModified(),
-            .line = doc_.buffer.lineOf(pos) + 1,
-            .column = doc_.columnOf(pos) + 1,
-            .line_ending = doc_.line_ending.name(),
-            .language = if (self.file().highlighter.rules) |rules| rules.grammar.name else plain_text,
             .branch = if (self.git.ready()) self.git.status.branch else "",
-            .message = self.currentMessage(),
+            .language = if (self.welcome()) "" else if (self.file().highlighter.rules) |rules| rules.grammar.name else plain_text,
         };
     }
 
     /// Window title: the file name, with a dot when there are unsaved changes.
     pub fn title(self: *const Editor, buffer: []u8) []const u8 {
+        if (self.welcome()) return "8-Bit";
         const dot = if (self.isModified()) "\u{25CF} " else "";
         return std.fmt.bufPrint(buffer, "{s}{s} - 8-Bit", .{ dot, self.name() }) catch "8-Bit";
     }
@@ -1151,29 +1209,15 @@ fn testEditor(text: []const u8) !Editor {
     return editor;
 }
 
-test "notify shows a message until its time is over, and logs it" {
+test "notify logs a message; a message that is too long is cut" {
     var editor = try testEditor("");
     defer editor.deinit();
-    try testing.expectEqual(@as(?[]const u8, null), editor.currentMessage());
-
-    editor.now_ms = 1000;
+    try testing.expectEqual(@as(?[]const u8, null), editor.lastMessage());
     editor.notify("Saved {s}", .{"a.txt"});
-    try testing.expectEqualStrings("Saved a.txt", editor.currentMessage().?);
-    try testing.expectEqual(@as(?u64, 4000), editor.messageTimeLeft());
-    editor.now_ms = 4999;
-    try testing.expectEqual(@as(?u64, 1), editor.messageTimeLeft());
-    editor.now_ms = 5000;
-    try testing.expectEqual(@as(?[]const u8, null), editor.currentMessage());
-    try testing.expectEqual(@as(?u64, null), editor.messageTimeLeft());
-    try testing.expectEqualStrings("Saved a.txt", editor.log.items[editor.log.items.len - 1]);
-}
-
-test "a message that is too long is cut" {
-    var editor = try testEditor("");
-    defer editor.deinit();
+    try testing.expectEqualStrings("Saved a.txt", editor.lastMessage().?);
     const long: [300]u8 = @splat('x');
     editor.notify("{s}", .{&long});
-    try testing.expectEqual(editor.message.len, editor.currentMessage().?.len);
+    try testing.expectEqual(@as(usize, Editor.max_message), editor.lastMessage().?.len);
 }
 
 test "copy and cut use the selection, or the whole line without one" {
@@ -1223,21 +1267,15 @@ test "mouse: click, shift+click, double and triple click, drag" {
 }
 
 test "status and title" {
-    var editor = try testEditor("a\r\n\tb");
+    var editor = try testEditor("");
     defer editor.deinit();
-    editor.doc().cursor.pos = 4;
-    var status = editor.status();
-    try testing.expectEqualStrings("untitled", status.name);
-    try testing.expectEqualStrings("CRLF", status.line_ending);
-    try testing.expectEqual(@as(usize, 2), status.line);
-    try testing.expectEqual(@as(usize, 5), status.column);
-    try testing.expect(!status.modified);
+    try testing.expectEqualStrings("", editor.status().language);
+    try testing.expectEqualStrings("", editor.status().branch);
 
     var buffer: [64]u8 = undefined;
-    try testing.expectEqualStrings("untitled - 8-Bit", editor.title(&buffer));
+    try testing.expectEqualStrings("8-Bit", editor.title(&buffer));
     editor.typeText("x");
-    status = editor.status();
-    try testing.expect(status.modified);
+    try testing.expectEqualStrings(plain_text, editor.status().language);
     try testing.expectEqualStrings("\u{25CF} untitled - 8-Bit", editor.title(&buffer));
 }
 
@@ -1279,4 +1317,8 @@ test "focus and docks" {
     editor.toggleDock(.bottom);
     try testing.expect(!editor.bottom.shown);
     try testing.expectEqual(Area.editor, editor.focus);
+    // No folder, no sidebar.
+    editor.focusArea(.sidebar);
+    try testing.expectEqual(Area.editor, editor.focus);
+    try testing.expect(!editor.sidebar.shown);
 }

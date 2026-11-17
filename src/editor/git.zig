@@ -246,7 +246,7 @@ pub const Git = struct {
     }
 
     /// Forgets the repository.
-    fn close(self: *Git) void {
+    pub fn close(self: *Git) void {
         if (self.root) |root| self.allocator.free(root);
         self.allocator.free(self.prefix);
         self.root = null;

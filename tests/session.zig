@@ -37,10 +37,7 @@ pub const Session = struct {
             .workbench = undefined,
             .recorder = .{ .allocator = testing.allocator },
         };
-        self.editor.mailbox = &self.mailbox;
-        self.editor.environ = &self.env;
-        self.editor.settings.shell = shell;
-        self.workbench.init(&self.editor);
+        self.start();
         const folder = try std.fmt.bufPrint(&self.folder, ".zig-cache/tmp/{s}", .{self.tmp.sub_path});
         self.folder_len = folder.len;
         try self.write("b.txt", "bee\n");
@@ -54,6 +51,27 @@ pub const Session = struct {
             try self.git(&.{ "config", pair[0], pair[1] });
         }
         self.editor.openFolder(folder);
+        self.draw();
+    }
+
+    fn start(self: *Session) void {
+        self.editor.mailbox = &self.mailbox;
+        self.editor.environ = &self.env;
+        self.editor.settings.shell = shell;
+        self.workbench.init(&self.editor);
+    }
+
+    /// Quits and starts again, as `main.zig` does without arguments: what
+    /// the config folder remembers comes back.
+    pub fn restart(self: *Session) !void {
+        const dir = self.editor.loader.dir;
+        self.workbench.deinit();
+        self.editor.deinit();
+        self.editor = try .init(testing.allocator, testing.io);
+        self.editor.loader.dir = dir;
+        self.editor.reloadConfig();
+        self.editor.restore(true);
+        self.start();
         self.draw();
     }
 
@@ -144,6 +162,34 @@ pub const Session = struct {
         return request;
     }
 
+    pub fn rightClick(self: *Session, x: f32, y: f32) ?Request {
+        const request = self.send(.{ .mouse_down = .{ .x = x, .y = y, .button = .right, .clicks = 1, .mods = .{} } });
+        _ = self.send(.{ .mouse_up = .{ .x = x, .y = y, .button = .right } });
+        return request;
+    }
+
+    /// Right-clicks the middle of a text on screen.
+    pub fn rightClickText(self: *Session, part: []const u8) ?Request {
+        const found = self.recorder.find(part) orelse std.debug.panic("not on screen: {s}", .{part});
+        return self.rightClick(found.x + 4, found.y + 8);
+    }
+
+    /// The last text drawn that is exactly `text`: the menu is drawn last.
+    pub fn last(self: *const Session, text: []const u8) ?Recorder.Text {
+        var i = self.recorder.texts.items.len;
+        while (i > 0) : (i -= 1) {
+            const item = self.recorder.texts.items[i - 1];
+            if (std.mem.eql(u8, item.text, text)) return item;
+        }
+        return null;
+    }
+
+    /// Clicks an item of the open menu.
+    pub fn clickMenu(self: *Session, label: []const u8) ?Request {
+        const found = self.last(label) orelse std.debug.panic("no menu item: {s}", .{label});
+        return self.click(found.x + 4, found.y + 8);
+    }
+
     /// Clicks the middle of a text on screen.
     pub fn clickText(self: *Session, part: []const u8) ?Request {
         const found = self.recorder.find(part) orelse std.debug.panic("not on screen: {s}", .{part});
@@ -158,6 +204,21 @@ pub const Session = struct {
 
     pub fn shows(self: *const Session, part: []const u8) bool {
         return self.recorder.find(part) != null;
+    }
+
+    /// Text drawn in the status bar, the last row of the window.
+    pub fn inStatusBar(self: *const Session, part: []const u8) bool {
+        const bottom = self.workbench.height - 16;
+        for (self.recorder.texts.items) |item| {
+            if (item.y >= bottom and std.mem.indexOf(u8, item.text, part) != null) return true;
+        }
+        return false;
+    }
+
+    /// The line and column of the cursor, one-based.
+    pub fn cursor(self: *const Session) [2]usize {
+        const doc = self.editor.doc();
+        return .{ doc.buffer.lineOf(doc.cursor.pos) + 1, doc.columnOf(doc.cursor.pos) + 1 };
     }
 
     /// Takes what the shells of terminals write until `part` is on screen.
