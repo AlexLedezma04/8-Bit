@@ -204,6 +204,9 @@ third_party/      vendored C dependencies (SDL3, stb_truetype)
   markers come from: a click in the gutter of a changed line opens Previous
   Change, Next Change, Show Diff and Revert, which puts the HEAD lines back
   (`Tracking.revert`, Ctrl+Alt+Z) while the markers are of the current text.
+  Show Diff (Ctrl+Alt+D) is `Tab.peek`: the HEAD lines drawn over the rows
+  under the change, its new lines in green, until the next command, click
+  or edit.
 - A diff view and the commit message are files with a `role`: a diff view is
   read-only (`Document.read_only`) with its lines as `File.marks`; the commit
   message is committed with Ctrl+Enter and is never "modified".

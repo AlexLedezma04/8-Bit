@@ -5,6 +5,7 @@ const Cursor = @import("../core/cursor.zig").Cursor;
 const View = @import("view.zig").View;
 const Decoration = @import("decoration.zig").Decoration;
 const File = @import("file.zig").File;
+const Hunk = @import("../git/diff.zig").Hunk;
 
 pub const Tab = struct {
     file: *File,
@@ -14,6 +15,8 @@ pub const Tab = struct {
     view: View = .{},
     /// Sorted by position. The editor view draws them.
     decorations: std.ArrayList(Decoration) = .empty,
+    /// A change shown inline, until the text changes.
+    peek: ?struct { line: usize, revision: u64 } = null,
 
     pub fn create(allocator: std.mem.Allocator, file: *File) !*Tab {
         const tab = try allocator.create(Tab);
@@ -21,6 +24,13 @@ pub const Tab = struct {
         tab.* = .{ .file = file };
         try file.doc.follow(&tab.cursor);
         return tab;
+    }
+
+    /// The change shown inline, if any.
+    pub fn peeked(self: *const Tab) ?Hunk {
+        const peek = self.peek orelse return null;
+        if (peek.revision != self.file.doc.revision) return null;
+        return self.file.tracking.hunkAt(&self.file.doc, peek.line);
     }
 
     pub fn destroy(self: *Tab, allocator: std.mem.Allocator) void {

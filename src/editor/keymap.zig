@@ -98,6 +98,7 @@ const others = [_]Binding{
     .{ .key = .char('d'), .mods = alt, .command = .show_changes },
     .{ .key = .f7, .command = .next_change },
     .{ .key = .f7, .mods = shift, .command = .prev_change },
+    .{ .key = .char('d'), .mods = ctrl_alt, .command = .peek_change },
     .{ .key = .char('z'), .mods = ctrl_alt, .command = .revert_change },
     .{ .key = .char('b'), .mods = alt, .command = .toggle_blame },
     .{ .key = .char('h'), .mods = alt, .command = .file_history },

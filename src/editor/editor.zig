@@ -292,6 +292,7 @@ pub const Editor = struct {
     /// A click on a cell of the active text area. Two clicks select a word,
     /// three a line.
     pub fn mouseDown(self: *Editor, cell_x: isize, cell_y: isize, clicks: u8, extend: bool) void {
+        self.tab().peek = null;
         const doc_ = self.doc();
         const pos = self.view().posAt(doc_, cell_x, cell_y);
         switch (clicks) {
@@ -357,6 +358,10 @@ pub const Editor = struct {
         const tracking = &item.file.tracking;
         list.appendSlice(self.allocator, item.file.marks.items) catch {};
         list.appendSlice(self.allocator, tracking.markers.items) catch {};
+        if (item.peeked()) |hunk| if (hunk.new_len > 0) list.append(self.allocator, .{
+            .range = .{ .start = doc_.buffer.lineStart(hunk.new_start), .end = doc_.buffer.lineStart(hunk.new_start + hunk.new_len - 1) },
+            .kind = .{ .line_background = .diff_added },
+        }) catch {};
         // Blame of saved text only: edits move the lines.
         if (self.git.blame and tracking.blame == .ready and !item.file.doc.history.isModified()) list.appendSlice(self.allocator, tracking.blame.ready.marks) catch {};
         std.mem.sort(Decoration, list.items, {}, byStart);
@@ -1132,6 +1137,14 @@ pub const Editor = struct {
         }
         const found = target orelse return self.notify("No more changes", .{});
         active.doc.cursor = .{ .pos = buffer.lineStart(found) };
+    }
+
+    /// Shows the text at HEAD of the change at the cursor, inline.
+    pub fn peekChange(self: *Editor) void {
+        const doc_ = self.doc();
+        const line = doc_.buffer.lineOf(doc_.cursor.pos);
+        if (self.file().tracking.hunkAt(doc_, line) == null) return self.notify("No change here", .{});
+        self.tab().peek = .{ .line = line, .revision = doc_.revision };
     }
 
     /// Puts the text at HEAD back over the change at the cursor.

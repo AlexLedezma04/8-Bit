@@ -28,6 +28,7 @@ const Color = @import("../theme.zig").Color;
 const Event = @import("../../platform/event.zig").Event;
 const syntax = @import("../../syntax/syntax.zig");
 const Style = @import("../../syntax/grammar.zig").Style;
+const diff = @import("../../git/diff.zig");
 
 pub const EditorView = struct {
     editor: *Editor,
@@ -227,7 +228,7 @@ pub const EditorView = struct {
     }
 
     const edit_actions = [_]commands.Command{ .copy, .cut, .paste };
-    const change_actions = [_]commands.Command{ .prev_change, .next_change, .show_changes, .revert_change };
+    const change_actions = [_]commands.Command{ .prev_change, .next_change, .peek_change, .revert_change };
 
     /// A right click outside the selection moves the cursor first.
     fn openMenu(self: *EditorView, cell: layout.Cell, x: f32, y: f32) Handled {
@@ -252,7 +253,7 @@ pub const EditorView = struct {
         self.menu.open(&.{
             .{ .label = "Previous Change", .shortcut = "Shift+F7" },
             .{ .label = "Next Change", .shortcut = "F7" },
-            .{ .label = "Show Diff", .shortcut = "Alt+D" },
+            .{ .label = "Show Diff", .shortcut = "Ctrl+Alt+D" },
             .{ .label = "Revert", .shortcut = "Ctrl+Alt+Z" },
         }, x, y, .of(EditorView, self));
         return .yes;
@@ -442,6 +443,29 @@ const Painter = struct {
         self.canvas.fillRect(bar, self.look.theme.cursor);
     }
 
+    /// The text at HEAD of a change, over the rows from `row`.
+    fn drawPeek(self: Painter, hunk: diff.Hunk, row: usize) void {
+        const text_layout = self.layout;
+        const view = &self.tab.view;
+        const tab_width = self.tab.file.doc.tab_width;
+        var lines = std.mem.splitScalar(u8, diff.lineSpan(self.tab.file.tracking.head.ready, hunk.old_start, hunk.old_len), '\n');
+        for (row..@min(row + hunk.old_len, view.rows)) |y| {
+            var rect = self.gutterRows(.{ .line = 0, .first_wrap = 0, .rows = 1, .y = y });
+            rect.w += text_layout.text.w;
+            self.canvas.fillRect(rect, self.look.theme.diff_removed);
+            // Tabs as spaces, as the text draws them.
+            var buffer: [1024]u8 = undefined;
+            var len: usize = 0;
+            for (std.mem.trimEnd(u8, lines.next() orelse "", "\r")) |byte| {
+                const spaces = if (byte == '\t') tab_width - len % tab_width else 1;
+                if (len + spaces > buffer.len) break;
+                @memset(buffer[len..][0..spaces], if (byte == '\t') ' ' else byte);
+                len += spaces;
+            }
+            self.canvas.drawText(text_layout.text.x, rect.y, buffer[@min(view.left, len)..len], self.look.theme.text);
+        }
+    }
+
     fn color(self: Painter, style: decoration.Style) Color {
         return self.look.theme.styleColor(style);
     }
@@ -470,10 +494,15 @@ fn drawTab(canvas: Canvas, look: Look, editor: *const Editor, tab: *const Tab, t
         }),
     };
 
+    const peek = tab.peeked();
+    // The old lines go where the line after the change starts.
+    const below = if (peek) |hunk| hunk.new_start + hunk.new_len else null;
+    var peek_row: ?usize = null;
     var line = top.line;
     var first_wrap = top.wrap;
     var y: usize = 0;
     while (y < view.rows and line < line_count) : (line += 1) {
+        if (line == below) peek_row = y;
         const rows = @min(view.rowsOf(doc, line) - first_wrap, view.rows - y);
         tab.file.highlighter.spans(&tab.file.doc, line, spans);
         painter.spans = spans.items;
@@ -481,4 +510,6 @@ fn drawTab(canvas: Canvas, look: Look, editor: *const Editor, tab: *const Tab, t
         y += rows;
         first_wrap = 0;
     }
+    if (line == below) peek_row = y;
+    if (peek_row) |row| painter.drawPeek(peek.?, row);
 }

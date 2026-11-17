@@ -590,7 +590,7 @@ fn clickMarker(session: *Session, color: app.ui.theme.Color) void {
     std.debug.panic("no marker", .{});
 }
 
-test "a click on a git marker: next change, its diff, revert" {
+test "a click on a changed line's gutter: next change, its diff inline, revert" {
     var session: Session = undefined;
     try session.init();
     defer session.deinit();
@@ -609,12 +609,18 @@ test "a click on a git marker: next change, its diff, revert" {
     _ = session.press("ctrl+alt+z");
     try testing.expect(!docHas(&session, "five"));
 
+    // Show Diff: the line at HEAD under the changed one, in the same tab,
+    // until the next key.
     settle(&session);
     clickMarker(&session, theme.git_changed);
     _ = session.clickMenu("Show Diff");
-    try testing.expectEqualStrings("c.txt (changes)", session.editor.name());
-    try testing.expect(docHas(&session, "TWO"));
-    _ = session.press("ctrl+w");
+    try testing.expectEqualStrings("c.txt", session.editor.name());
+    const old = session.recorder.find("two").?;
+    try testing.expect(old.y > session.recorder.find("TWO").?.y);
+    try testing.expectEqual(@as(usize, 1), session.recorder.filled(theme.diff_removed));
+    try testing.expectEqual(@as(usize, 1), session.recorder.filled(theme.diff_added));
+    _ = session.press("up");
+    try testing.expect(!session.shows("two"));
 
     clickMarker(&session, theme.git_changed);
     _ = session.clickMenu("Revert");

@@ -87,6 +87,7 @@ pub const Command = enum {
     show_changes,
     next_change,
     prev_change,
+    peek_change,
     revert_change,
     toggle_blame,
     file_history,
@@ -100,6 +101,7 @@ pub const Command = enum {
 
 /// Runs `command`. Returns what `main.zig` must do for it, if anything.
 pub fn run(editor: *Editor, command: Command) ?Request {
+    if (command != .peek_change) editor.tab().peek = null;
     const request = execute(editor, command) catch |err| blk: {
         editor.notify("{t} failed: {t}", .{ command, err });
         break :blk null;
@@ -195,6 +197,7 @@ fn execute(editor: *Editor, command: Command) !?Request {
         .show_changes => try editor.git.showFileChanges(editor.file()),
         .next_change => editor.jumpToChange(true),
         .prev_change => editor.jumpToChange(false),
+        .peek_change => editor.peekChange(),
         .revert_change => try editor.revertChange(),
         .toggle_blame => editor.toggleBlame(),
         .file_history => editor.fileHistory(),
