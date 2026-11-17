@@ -128,8 +128,9 @@ test "a shell that exits says so, Enter closes it, Ctrl+` starts a new one" {
     try testing.expect(!editor.bottom.shown);
     try testing.expectEqual(Area.editor, editor.focus);
 
+    // The number of a closed terminal is free again.
     _ = session.press("ctrl+`");
-    try testing.expect(session.shows("Terminal 2"));
+    try testing.expect(session.shows("Terminal 1"));
     run(&session, echo("new", "shell"));
     try session.waitForTerminal("new-shell");
 }
@@ -217,4 +218,33 @@ test "a repository made or deleted in the terminal shows up once its output rest
     try testing.expect(editor.git.ready());
     try testing.expect(session.last("Git") != null);
     try testing.expect(session.inStatusBar("main"));
+}
+
+test "the + button opens more terminals; numbers are reused, smallest first" {
+    var session: Session = undefined;
+    try session.init();
+    defer session.deinit();
+    const terminals = &session.editor.terminals;
+    _ = session.press("alt+t");
+
+    // The + comes right after the last tab.
+    for (0..2) |_| {
+        const bottom = session.workbench.frame().bottom.?;
+        const last = session.last(terminals.list.items[terminals.list.items.len - 1].name()).?;
+        const plus_x = last.x + app.ui.layout.Metrics.init(1).labelWidth("Terminal 1") + 3 * 8 + 12;
+        try testing.expect(plus_x < bottom.x + bottom.w);
+        _ = session.click(plus_x, bottom.y + 12);
+    }
+    try testing.expectEqual(@as(usize, 3), terminals.list.items.len);
+    try testing.expectEqual(@as(usize, 2), terminals.active);
+    try testing.expect(session.shows("Terminal 3"));
+
+    // Close Terminal 2: the next one is Terminal 2 again, then 4.
+    session.editor.closeTerminal(1);
+    session.editor.openTerminal();
+    try testing.expectEqualStrings("Terminal 2", terminals.list.items[2].name());
+    session.editor.openTerminal();
+    try testing.expectEqualStrings("Terminal 4", terminals.list.items[3].name());
+    session.draw();
+    for ([_][]const u8{ "Terminal 1", "Terminal 3", "Terminal 2", "Terminal 4" }) |name| try testing.expect(session.shows(name));
 }

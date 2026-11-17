@@ -85,6 +85,14 @@ const Places = struct {
     }
 };
 
+/// Pixels from the left of the bar to the end of the last tab drawn.
+pub fn end(rect: Rect, metrics: Metrics, style: Style, items: []const Item, active: usize) f32 {
+    var places = Places.init(items, metrics, style, active, rect.w);
+    var x: f32 = 0;
+    while (places.next()) |place| x = place.x + place.w;
+    return @min(x, rect.w);
+}
+
 /// Where the close button of a tab is.
 fn buttonX(place: Place, metrics: Metrics, style: Style) f32 {
     return place.x + place.w - (padOf(style) + button) * metrics.cell;

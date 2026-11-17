@@ -15,7 +15,10 @@ pub const Output = struct { id: u32, bytes: ?[]u8 };
 pub const Terminal = struct {
     allocator: std.mem.Allocator,
     mailbox: *Mailbox,
+    /// Never used again, so late output of a closed terminal is dropped.
     id: u32,
+    /// In its name; the smallest free one when it opens.
+    number: u32,
     pty: *Pty,
     session: Session,
     name_buffer: [24]u8 = undefined,
@@ -66,13 +69,23 @@ pub const Terminals = struct {
         return if (self.active < self.list.items.len) self.list.items[self.active] else null;
     }
 
+    /// The smallest number no open terminal's name has.
+    fn freeNumber(self: *const Terminals) u32 {
+        var number: u32 = 1;
+        while (true) : (number += 1) {
+            for (self.list.items) |item| {
+                if (item.number == number) break;
+            } else return number;
+        }
+    }
+
     /// Starts a shell in a new terminal and shows it.
     pub fn open(self: *Terminals, mailbox: *Mailbox, start: Start) !void {
         try self.list.ensureUnusedCapacity(self.allocator, 1);
         const created = try self.allocator.create(Terminal);
         errdefer self.allocator.destroy(created);
-        created.* = .{ .allocator = self.allocator, .mailbox = mailbox, .id = self.next_id, .pty = undefined, .session = undefined };
-        created.name_len = (std.fmt.bufPrint(&created.name_buffer, "Terminal {d}", .{created.id}) catch unreachable).len;
+        created.* = .{ .allocator = self.allocator, .mailbox = mailbox, .id = self.next_id, .number = self.freeNumber(), .pty = undefined, .session = undefined };
+        created.name_len = (std.fmt.bufPrint(&created.name_buffer, "Terminal {d}", .{created.number}) catch unreachable).len;
         created.pty = try Pty.spawn(self.allocator, .{
             .shell = start.shell,
             .cwd = start.cwd,

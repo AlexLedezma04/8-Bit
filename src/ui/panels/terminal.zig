@@ -67,6 +67,27 @@ pub const TerminalPanel = struct {
         return rect.splitTop(tabs.height(metrics, .compact));
     }
 
+    /// The tabs leave room for the + button, which comes right after them.
+    fn tabsRect(bar: Rect) Rect {
+        return .{ .x = bar.x, .y = bar.y, .w = @max(0, bar.w - bar.h), .h = bar.h };
+    }
+
+    fn plusButton(self: *TerminalPanel, bar: Rect, metrics: Metrics) Rect {
+        const room = tabsRect(bar);
+        const x = room.x + tabs.end(room, metrics, .compact, self.tabItems(), self.editor.terminals.active);
+        return .{ .x = x, .y = bar.y, .w = bar.h, .h = bar.h - 1 };
+    }
+
+    /// A plus in the middle of `button`, in font pixels.
+    fn drawPlus(canvas: Canvas, metrics: Metrics, button: Rect, color: Color) void {
+        const px = metrics.cell / 8;
+        const arm = 9 * px;
+        const x = button.x + @floor((button.w - arm) / 2);
+        const y = button.y + @floor((button.h - arm) / 2);
+        canvas.fillRect(.{ .x = x, .y = y + 4 * px, .w = arm, .h = px }, color);
+        canvas.fillRect(.{ .x = x + 4 * px, .y = y, .w = px, .h = arm }, color);
+    }
+
     fn tabItems(self: *TerminalPanel) []const tabs.Item {
         self.items.clearRetainingCapacity();
         for (self.editor.terminals.list.items) |item| {
@@ -115,7 +136,11 @@ pub const TerminalPanel = struct {
                 self.typed();
             },
             .mouse_down => |mouse| {
-                if (tabs.hit(bar, metrics, .compact, self.tabItems(), self.editor.terminals.active, mouse.x, mouse.y)) |hit| {
+                if (self.plusButton(bar, metrics).contains(mouse.x, mouse.y)) {
+                    self.editor.openTerminal();
+                    return .yes;
+                }
+                if (tabs.hit(tabsRect(bar), metrics, .compact, self.tabItems(), self.editor.terminals.active, mouse.x, mouse.y)) |hit| {
                     if (hit.close) self.editor.closeTerminal(hit.index) else self.editor.terminals.active = hit.index;
                     return .yes;
                 }
@@ -215,7 +240,14 @@ pub const TerminalPanel = struct {
             canvas.drawLabel(rect.x + metrics.cell, rect.y + metrics.row / 2, "No terminal: Ctrl+` starts one", look.theme.line_number);
             return;
         };
-        tabs.draw(canvas, look, bar, .compact, self.tabItems(), self.editor.terminals.active, focused);
+        // The strip right of the tabs looks like the rest of the bar.
+        const room = tabsRect(bar);
+        canvas.fillRect(.{ .x = room.x + room.w, .y = bar.y, .w = bar.w - room.w, .h = bar.h }, look.theme.background);
+        canvas.fillRect(.{ .x = room.x + room.w, .y = bar.y + bar.h - 1, .w = bar.w - room.w, .h = 1 }, look.theme.border);
+        tabs.draw(canvas, look, room, .compact, self.tabItems(), self.editor.terminals.active, focused);
+        const plus = self.plusButton(bar, metrics);
+        if (look.hovered(plus)) canvas.fillRect(plus, look.theme.hover);
+        drawPlus(canvas, metrics, plus, look.theme.line_number_current);
         const session = &shown.session;
         const cols: u16 = @intCast(std.math.clamp(metrics.cols(area.w), 2, 1000));
         const rows: u16 = @intCast(std.math.clamp(List.rowsIn(area, metrics), 2, 1000));

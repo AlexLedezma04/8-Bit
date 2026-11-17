@@ -223,6 +223,8 @@ third_party/      vendored C dependencies (SDL3, stb_truetype)
   so its tests use a fake one.
 - `editor/terminals.zig` owns the terminals. The pty thread posts output
   through the mailbox with the terminal's id; output of a closed one is dropped.
+  A new terminal is named with the smallest number no open one has; the +
+  after the terminal tabs opens one.
 - `ui/panels/terminal.zig` draws each run of one color with `drawText`. The
   16 colors come from the theme's `terminal` colors; 256 and true colors
   are computed. Keys go to the shell, except a few window commands. The
