@@ -200,7 +200,7 @@ pub const Editor = struct {
         // Results that came too late.
         if (self.mailbox) |mailbox| while (mailbox.take()) |posted| self.drop(posted);
         self.find.deinit();
-        self.destroyTabs(self.root);
+        self.destroyTabs();
         self.root.destroy(self.allocator);
         for (self.files.items) |item| item.destroy();
         self.files.deinit(self.allocator);
@@ -211,14 +211,9 @@ pub const Editor = struct {
         self.config_arena.deinit();
     }
 
-    fn destroyTabs(self: *Editor, node: *Node) void {
-        switch (node.kind) {
-            .pane => |pane| for (pane.tabs.items) |item| item.destroy(self.allocator),
-            .split => |halves| {
-                self.destroyTabs(halves.first);
-                self.destroyTabs(halves.second);
-            },
-        }
+    fn destroyTabs(self: *Editor) void {
+        var leaves = self.root.leaves();
+        while (leaves.next()) |node| for (node.pane().tabs.items) |item| item.destroy(self.allocator);
     }
 
     // The active tab
@@ -300,7 +295,7 @@ pub const Editor = struct {
             2 => doc_.selectWord(pos),
             else => doc_.selectLine(pos),
         }
-        self.refreshVisible(self.root);
+        self.refreshVisible();
     }
 
     /// The mouse moved with the button down. Past an edge, the view scrolls.
@@ -310,7 +305,7 @@ pub const Editor = struct {
         const cols: isize = @intCast(view_.cols);
         view_.scrollBy(self.doc(), edgeStep(cell_y, rows), edgeStep(cell_x, cols));
         self.doc().cursor.moveTo(view_.posAt(self.doc(), cell_x, cell_y), true);
-        self.refreshVisible(self.root);
+        self.refreshVisible();
     }
 
     fn edgeStep(cell: isize, size: isize) isize {
@@ -325,18 +320,13 @@ pub const Editor = struct {
     pub fn afterEdit(self: *Editor) void {
         if (self.find.shown) self.find.refresh(self.doc());
         self.view().scrollToCursor(self.doc());
-        self.refreshVisible(self.root);
+        self.refreshVisible();
     }
 
     /// The decorations of the tab shown in every pane.
-    fn refreshVisible(self: *Editor, node: *Node) void {
-        switch (node.kind) {
-            .pane => |pane| self.refreshDecorations(pane.tab()),
-            .split => |halves| {
-                self.refreshVisible(halves.first);
-                self.refreshVisible(halves.second);
-            },
-        }
+    fn refreshVisible(self: *Editor) void {
+        var leaves = self.root.leaves();
+        while (leaves.next()) |node| self.refreshDecorations(node.pane().tab());
     }
 
     /// The cursor line, the selection, the find matches and the marks of
@@ -444,15 +434,13 @@ pub const Editor = struct {
     }
 
     /// Number of tabs that show `target`.
-    fn tabCount(node: *Node, target: *const File) usize {
-        return switch (node.kind) {
-            .pane => |pane| blk: {
-                var count: usize = 0;
-                for (pane.tabs.items) |item| count += @intFromBool(item.file == target);
-                break :blk count;
-            },
-            .split => |halves| tabCount(halves.first, target) + tabCount(halves.second, target),
+    fn tabCount(self: *const Editor, target: *const File) usize {
+        var count: usize = 0;
+        var leaves = self.root.leaves();
+        while (leaves.next()) |node| for (node.pane().tabs.items) |item| {
+            count += @intFromBool(item.file == target);
         };
+        return count;
     }
 
     /// Adds a tab for `target` after the active tab and makes it active.
@@ -473,10 +461,8 @@ pub const Editor = struct {
             self.switchTo(self.pane, index);
             return true;
         }
-        var list: std.ArrayList(*Node) = .empty;
-        defer list.deinit(self.allocator);
-        self.root.leaves(self.allocator, &list) catch return false;
-        for (list.items) |node| if (node.pane().find(target)) |index| {
+        var leaves = self.root.leaves();
+        while (leaves.next()) |node| if (node.pane().find(target)) |index| {
             self.switchTo(node, index);
             return true;
         };
@@ -496,23 +482,23 @@ pub const Editor = struct {
             opened.destroy();
             return;
         };
-        self.place(opened, true) catch |err| {
-            self.dropFile(opened);
-            self.notify("Could not open {s}: {t}", .{ std.fs.path.basename(path), err });
-        };
+        self.place(opened, true) catch |err| self.notify("Could not open {s}: {t}", .{ std.fs.path.basename(path), err });
     }
 
     /// Adds a tab for a new open file, in place of the placeholder, or of the
     /// preview of the active pane when `over_preview`. A preview with unsaved
-    /// changes stays.
+    /// changes stays. On failure the file is closed.
     fn place(self: *Editor, target: *File, over_preview: bool) !void {
         const pane = self.pane.pane();
         const old: ?*File = for (pane.tabs.items) |item| {
             const file_ = item.file;
             const spare = (file_.placeholder and file_.isBlank()) or (over_preview and file_.preview and !file_.isModified());
-            if (spare and tabCount(self.root, file_) == 1) break file_;
+            if (spare and self.tabCount(file_) == 1) break file_;
         } else null;
-        try self.addTab(target);
+        self.addTab(target) catch |err| {
+            self.dropFile(target);
+            return err;
+        };
         if (old) |gone| self.removeTab(pane.find(gone).?);
     }
 
@@ -520,10 +506,7 @@ pub const Editor = struct {
     fn addPlaceholder(self: *Editor) !void {
         const blank = try self.newFile();
         blank.placeholder = true;
-        self.addTab(blank) catch |err| {
-            self.dropFile(blank);
-            return err;
-        };
+        try self.place(blank, false);
     }
 
     /// No file is open: one pane with only the placeholder.
@@ -542,10 +525,7 @@ pub const Editor = struct {
             created.language = self.allocator.dupe(u8, rules.grammar.name) catch null;
         };
         self.applyLanguage(created);
-        self.place(created, false) catch {
-            self.dropFile(created);
-            return null;
-        };
+        self.place(created, false) catch return null;
         self.focus = .editor;
         return created;
     }
@@ -561,7 +541,7 @@ pub const Editor = struct {
             const created = self.newFile() catch return;
             created.language = self.allocator.dupe(u8, "Git Commit") catch null;
             self.applyLanguage(created);
-            self.place(created, false) catch return self.dropFile(created);
+            self.place(created, false) catch return;
             break :blk created;
         };
         message.role = .{ .commit = amend };
@@ -598,11 +578,15 @@ pub const Editor = struct {
     /// Removes a tab of the active pane that is not the active one.
     fn removeTab(self: *Editor, index: usize) void {
         const pane = self.pane.pane();
-        const gone = pane.tabs.orderedRemove(index);
+        self.destroyTab(pane.tabs.orderedRemove(index));
         if (pane.active > index) pane.active -= 1;
+    }
+
+    /// Destroys a tab taken out of its pane, and its file when no tab shows it.
+    fn destroyTab(self: *Editor, gone: *Tab) void {
         const shown = gone.file;
         gone.destroy(self.allocator);
-        if (tabCount(self.root, shown) == 0) self.dropFile(shown);
+        if (self.tabCount(shown) == 0) self.dropFile(shown);
     }
 
     /// Closes a tab of the active pane, after asking about unsaved changes.
@@ -610,7 +594,7 @@ pub const Editor = struct {
         self.dropPending();
         if (index != self.pane.pane().active) self.switchTo(self.pane, index);
         const active = self.file();
-        if (active.isModified() and tabCount(self.root, active) == 1) {
+        if (active.isModified() and self.tabCount(active) == 1) {
             self.pending = .close;
             return .{ .ask = .{ .question = .save, .name = active.name() } };
         }
@@ -623,10 +607,7 @@ pub const Editor = struct {
     fn closeActive(self: *Editor) void {
         const node = self.pane;
         const pane = node.pane();
-        const gone = pane.tabs.orderedRemove(pane.active);
-        const shown = gone.file;
-        gone.destroy(self.allocator);
-        if (tabCount(self.root, shown) == 0) self.dropFile(shown);
+        self.destroyTab(pane.tabs.orderedRemove(pane.active));
         if (pane.tabs.items.len > 0) return self.enter(node, @min(pane.active, pane.tabs.items.len - 1));
         if (node.parent == null) return self.addPlaceholder() catch {};
         const next = node.remove(self.allocator).firstLeaf();
@@ -634,11 +615,7 @@ pub const Editor = struct {
     }
 
     pub fn newTab(self: *Editor) !void {
-        const created = try self.newFile();
-        self.place(created, false) catch |err| {
-            self.dropFile(created);
-            return err;
-        };
+        try self.place(try self.newFile(), false);
     }
 
     /// Moves to the next tab of the active pane, or the previous one.
@@ -665,12 +642,17 @@ pub const Editor = struct {
     }
 
     /// Moves focus to the next pane, or the previous one.
-    pub fn cyclePane(self: *Editor, step: isize) !void {
-        var list: std.ArrayList(*Node) = .empty;
-        defer list.deinit(self.allocator);
-        try self.root.leaves(self.allocator, &list);
-        const at: isize = @intCast(std.mem.indexOfScalar(*Node, list.items, self.pane).?);
-        const next = list.items[@intCast(@mod(at + step, @as(isize, @intCast(list.items.len))))];
+    pub fn cyclePane(self: *Editor, step: isize) void {
+        var count: usize = 0;
+        var at: usize = 0;
+        var leaves = self.root.leaves();
+        while (leaves.next()) |node| : (count += 1) {
+            if (node == self.pane) at = count;
+        }
+        const target: usize = @intCast(@mod(@as(isize, @intCast(at)) + step, @as(isize, @intCast(count))));
+        leaves = self.root.leaves();
+        for (0..target) |_| _ = leaves.next();
+        const next = leaves.next().?;
         self.switchTo(next, next.pane().active);
         self.focus = .editor;
     }
@@ -762,7 +744,7 @@ pub const Editor = struct {
                 self.disk_check_ms = self.now_ms + disk_rest_ms;
             },
             .git => |job| {
-                defer self.refreshVisible(self.root);
+                defer self.refreshVisible();
                 return self.git.receive(job);
             },
             .cancelled => self.dropPending(),
@@ -867,7 +849,7 @@ pub const Editor = struct {
 
     fn closeAll(self: *Editor) void {
         const root = Node.create(self.allocator) catch return self.notify("Could not close the folder", .{});
-        self.destroyTabs(self.root);
+        self.destroyTabs();
         self.root.destroy(self.allocator);
         for (self.files.items) |item| item.destroy();
         self.files.clearRetainingCapacity();
@@ -1016,7 +998,8 @@ pub const Editor = struct {
         self.settings = self.loader.load(config.Settings, arena, "settings", base, self);
         self.loadLanguages(arena);
         for (self.files.items) |item| self.applySettings(item);
-        self.applyWrap(self.root);
+        var leaves = self.root.leaves();
+        while (leaves.next()) |node| for (node.pane().tabs.items) |item| item.view.setWrap(self.settings.wrap);
         self.setZoom(if (self.settings.zoom == 0) self.screen_zoom else self.settings.zoom);
         self.default_zoom = self.zoom;
         const entries = self.loader.load([]const keymap.Entry, arena, "keymap", &.{}, self);
@@ -1106,7 +1089,7 @@ pub const Editor = struct {
             }
             if (tracking.tick(self.allocator, &item.doc, self.now_ms)) changed = true;
         }
-        if (changed) self.refreshVisible(self.root);
+        if (changed) self.refreshVisible();
         return changed;
     }
 
@@ -1188,16 +1171,6 @@ pub const Editor = struct {
         self.git.loadHistory(path);
         self.git.page = .history;
         self.showSide(.git);
-    }
-
-    fn applyWrap(self: *Editor, node: *Node) void {
-        switch (node.kind) {
-            .pane => |pane| for (pane.tabs.items) |item| item.view.setWrap(self.settings.wrap),
-            .split => |halves| {
-                self.applyWrap(halves.first);
-                self.applyWrap(halves.second);
-            },
-        }
     }
 
     /// Opens the user's settings file, made from the built-in one if missing.
@@ -1354,10 +1327,10 @@ test "two panes of one file: each has its own cursor and both follow edits" {
     editor.doc().cursor.pos = 0;
     editor.typeText(">> ");
 
-    try editor.cyclePane(1);
+    editor.cyclePane(1);
     try testing.expectEqual(@as(usize, 8), editor.doc().cursor.pos);
     try expectText(&editor.doc().buffer, ">> one\ntwo");
-    try editor.cyclePane(1);
+    editor.cyclePane(1);
     try testing.expectEqual(@as(usize, 3), editor.doc().cursor.pos);
 
     // Closing the only tab of a pane closes the pane.
