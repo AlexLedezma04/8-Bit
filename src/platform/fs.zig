@@ -13,11 +13,6 @@ pub fn read(io: Io, allocator: std.mem.Allocator, path: []const u8) ![:0]u8 {
     return Io.Dir.cwd().readFileAllocOptions(io, path, allocator, .unlimited, .of(u8), 0);
 }
 
-/// Like `read`, but fails with `error.StreamTooLong` past `max` bytes.
-pub fn readAtMost(io: Io, allocator: std.mem.Allocator, path: []const u8, max: usize) ![]u8 {
-    return Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(max));
-}
-
 /// Writes `parts` one after another to a temporary file next to `path`, then
 /// renames it over `path`, so a crash never leaves half a file. An existing
 /// file keeps its permissions. Missing folders are created.

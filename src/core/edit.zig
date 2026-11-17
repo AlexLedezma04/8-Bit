@@ -79,6 +79,8 @@ pub const Document = struct {
     read_only: bool = false,
 
     pub const max_tab_width = 16;
+    /// What a soft tab inserts, cut to its width.
+    const spaces: [max_tab_width]u8 = @splat(' ');
 
     pub fn init(allocator: std.mem.Allocator) Document {
         return .{ .buffer = .init(allocator), .history = .init(allocator) };
@@ -151,7 +153,6 @@ pub const Document = struct {
     /// The Tab key: indents the selected lines, or moves to the next tab stop.
     pub fn indent(self: *Document) !void {
         if (self.cursor.selection().len() > 0) return self.shiftLines(.in);
-        const spaces: [max_tab_width]u8 = @splat(' ');
         const to_stop = self.tab_width - self.columnOf(self.cursor.pos) % self.tab_width;
         try self.insert(if (self.soft_tabs) spaces[0..to_stop] else "\t");
     }
@@ -326,7 +327,6 @@ pub const Document = struct {
         var last = self.buffer.lineOf(selection.end);
         if (last > first and selection.end == self.buffer.lineStart(last)) last -= 1;
 
-        const spaces: [max_tab_width]u8 = @splat(' ');
         const unit = if (self.soft_tabs) spaces[0..self.tab_width] else "\t";
 
         self.history.beginGroup();
