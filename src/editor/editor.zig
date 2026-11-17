@@ -693,10 +693,7 @@ pub const Editor = struct {
         active.preview = false;
         active.tracking.forgetBlame(self.allocator);
         self.git.refresh();
-        if (self.loader.dir) |dir| {
-            const inside = path.len > dir.len and std.mem.startsWith(u8, path, dir) and std.fs.path.isSep(path[dir.len]);
-            if (inside) self.reloadConfig();
-        }
+        if (self.loader.dir) |dir| if (fs.within(path, dir)) self.reloadConfig();
         return self.goOn(.yes);
     }
 
@@ -808,8 +805,7 @@ pub const Editor = struct {
     pub fn renamed(self: *Editor, old: []const u8, new: []const u8) void {
         for (self.files.items) |item| {
             const path = item.path orelse continue;
-            const inside = path.len > old.len and std.fs.path.isSep(path[old.len]);
-            if (!std.mem.startsWith(u8, path, old) or !(path.len == old.len or inside)) continue;
+            if (!fs.within(path, old)) continue;
             const moved = std.mem.concat(self.allocator, u8, &.{ new, path[old.len..] }) catch continue;
             defer self.allocator.free(moved);
             item.setPath(moved) catch {};

@@ -257,8 +257,7 @@ pub const FileTree = struct {
         const source = self.clip orelse return;
         const folder = self.folderOf(entry) orelse return;
         const name = std.fs.path.basename(source);
-        const inside = std.mem.startsWith(u8, folder, source) and (folder.len == source.len or std.fs.path.isSep(folder[source.len]));
-        if (inside) return editor.notify("Cannot paste {s} into itself", .{name});
+        if (fs.within(folder, source)) return editor.notify("Cannot paste {s} into itself", .{name});
         const target = if (self.clip_cut)
             std.fs.path.join(editor.allocator, &.{ folder, name }) catch return
         else

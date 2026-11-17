@@ -62,6 +62,11 @@ pub fn modTime(io: Io, path: []const u8) ?i96 {
     return stat.mtime.nanoseconds;
 }
 
+/// `path` is `folder` or something in it.
+pub fn within(path: []const u8, folder: []const u8) bool {
+    return std.mem.startsWith(u8, path, folder) and (path.len == folder.len or std.fs.path.isSep(path[folder.len]));
+}
+
 pub fn isDir(io: Io, path: []const u8) bool {
     const stat = Io.Dir.cwd().statFile(io, path, .{}) catch return false;
     return stat.kind == .directory;
@@ -218,6 +223,14 @@ test "copy a folder with everything in it; free names for copies" {
     const third = try freePath(testing.io, testing.allocator, folder, "x.txt");
     defer testing.allocator.free(third);
     try testing.expect(std.mem.endsWith(u8, third, "x copy 2.txt"));
+}
+
+test "within: the folder itself and what is in it" {
+    const sep = std.fs.path.sep_str;
+    try testing.expect(within("a" ++ sep ++ "b", "a"));
+    try testing.expect(within("a", "a"));
+    try testing.expect(!within("ab", "a"));
+    try testing.expect(!within("a", "a" ++ sep ++ "b"));
 }
 
 test "the config folder comes from the environment" {
