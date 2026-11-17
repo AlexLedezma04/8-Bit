@@ -13,7 +13,6 @@
 
     .status_bar = 0xf7f8fa,
     .status_bar_text = 0x6c707e,
-    .unsaved = 0x3574f0,
 
     .panel = 0xf7f8fa,
     .tab_text = 0x6c707e,

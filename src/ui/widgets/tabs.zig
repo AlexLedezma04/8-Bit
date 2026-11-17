@@ -1,5 +1,5 @@
-//! A bar of tabs. Each tab has a title and, after it, a close button, or a
-//! dot while it has unsaved changes. File tabs are as wide as their title
+//! A bar of tabs. Each tab has a title and, after it, a close button. The
+//! window title shows unsaved changes. File tabs are as wide as their title
 //! and scroll so the active one is in view; dock tabs share the whole bar.
 //! Used by editor panes, the dock bars, the pages of the git panel and the
 //! terminal.
@@ -12,7 +12,6 @@ const Look = @import("../panel.zig").Look;
 
 pub const Item = struct {
     title: []const u8,
-    modified: bool = false,
     /// A preview, drawn dimmer until it is kept.
     preview: bool = false,
     /// Has a close button.
@@ -138,13 +137,8 @@ pub fn draw(canvas: Canvas, look: Look, rect: Rect, style: Style, items: []const
         canvas.drawLabel(title_x, text_y, item.title, color);
         if (!item.closable) continue;
         const button_x = rect.x + buttonX(place, metrics, style);
-        if (item.modified) {
-            const dot = @floor(metrics.cell * 0.75);
-            canvas.fillRect(.{ .x = button_x + (button * metrics.cell - dot) / 2, .y = text_y + (metrics.row - dot) / 2, .w = dot, .h = dot }, theme.unsaved);
-        } else {
-            const cross = "\u{D7}";
-            canvas.drawLabel(button_x + (button * metrics.cell - metrics.labelWidth(cross)) / 2, text_y, cross, theme.line_number);
-        }
+        const cross = "\u{D7}";
+        canvas.drawLabel(button_x + (button * metrics.cell - metrics.labelWidth(cross)) / 2, text_y, cross, theme.line_number);
     }
 }
 
@@ -152,7 +146,7 @@ const testing = std.testing;
 
 test "clicks find the tab and its close button" {
     const metrics = Metrics.init(1);
-    const items = [_]Item{ .{ .title = "a.zig" }, .{ .title = "bb.txt", .modified = true } };
+    const items = [_]Item{ .{ .title = "a.zig" }, .{ .title = "bb.txt" } };
     const rect: Rect = .{ .x = 100, .w = 400, .h = 24 };
     const first = width(items[0], metrics, .files);
     try testing.expectEqual(metrics.labelWidth("a.zig") + 5 * 8, first);

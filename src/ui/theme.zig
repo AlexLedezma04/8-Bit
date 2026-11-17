@@ -14,6 +14,11 @@ pub const Color = struct {
     }
 
     pub const fromZon = rgb;
+
+    /// Darker than middle gray, by perceived brightness.
+    pub fn isDark(self: Color) bool {
+        return @as(u32, self.r) * 299 + @as(u32, self.g) * 587 + @as(u32, self.b) * 114 < 128 * 1000;
+    }
 };
 
 pub const Theme = struct {
@@ -31,7 +36,6 @@ pub const Theme = struct {
 
     status_bar: Color,
     status_bar_text: Color,
-    unsaved: Color,
 
     /// Background of the sidebar, the bottom panel and their tab bars.
     panel: Color,

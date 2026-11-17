@@ -41,7 +41,7 @@ const Parts = struct {
     list: Rect,
 
     const max_cols = 60;
-    const logo_rows = 5;
+    const logo_rows = 10;
     const max_recent_rows = 8;
 
     fn of(rect: Rect, metrics: Metrics, actions: usize, recent: usize) Parts {
@@ -149,11 +149,11 @@ pub const Welcome = struct {
         const theme = look.theme;
         const metrics = look.metrics;
         const at = self.parts(rect, metrics);
-        canvas.drawLogo(at.logo, theme.line_number_current);
+        canvas.drawLogo(at.logo, if (theme.background.isDark()) .dark_mode else .light_mode);
         for (at.actions[0..self.actions().len], self.actions()) |line, action| {
             if (look.hovered(line)) canvas.fillRect(line, theme.hover);
             const y = metrics.center(line.y, line.h);
-            canvas.drawLabel(line.x + metrics.cell, y, action.label, theme.accent);
+            canvas.drawLabel(line.x + metrics.cell, y, action.label, theme.text);
             canvas.drawLabel(line.x + line.w - metrics.cell - metrics.labelWidth(action.shortcut), y, action.shortcut, theme.line_number);
         }
         if (self.count() == 0) return;

@@ -83,10 +83,16 @@ pub fn main(init: std.process.Init) !void {
 
     var window = try Window.init(.{});
     defer window.deinit();
-    const logo = try png.decode(init.gpa, @import("assets").logo);
-    defer logo.deinit(init.gpa);
-    window.setIcon(logo);
-    var renderer = try Renderer.init(&window, logo);
+    const assets = @import("assets");
+    // Desktops show icons at most 256 pixels wide; a smaller one costs less.
+    const full = try png.decode(init.gpa, assets.icon);
+    const icon = full.shrink(init.gpa, 256, 256);
+    full.deinit(init.gpa);
+    if (icon) |small| {
+        window.setIcon(small);
+        small.deinit(init.gpa);
+    } else |_| {}
+    var renderer = try Renderer.init(&window, assets.logos);
     defer renderer.deinit();
 
     var app: App = .{

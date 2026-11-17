@@ -6,10 +6,11 @@ const Color = @import("../ui/theme.zig").Color;
 const Rect = @import("../ui/layout.zig").Rect;
 const fonts = @import("../font/fonts.zig");
 const Atlas = @import("../font/atlas.zig").Atlas;
-const Image = @import("png.zig").Image;
+const png = @import("png.zig");
 const canvas_zig = @import("../ui/canvas.zig");
 const Canvas = canvas_zig.Canvas;
 const Font = canvas_zig.Font;
+const Logo = canvas_zig.Logo;
 
 /// Glyphs sent to SDL in one call.
 const batch_size = 128;
@@ -30,20 +31,24 @@ pub const Renderer = struct {
     /// The glyphs at `zoom`, and their texture.
     atlas: Atlas,
     font: *c.SDL_Texture,
-    logo: *c.SDL_Texture,
+    /// The PNG files of the logos, in the order of `Logo`, and each one at
+    /// the size it was last drawn, made when needed.
+    logo_files: [2][]const u8,
+    logos: [2]?Sized = .{ null, null },
     zoom: u8 = 1,
 
     const allocator = std.heap.c_allocator;
 
-    pub fn init(window: *const Window, logo: Image) !Renderer {
+    const Sized = struct { texture: *c.SDL_Texture, w: u32, h: u32 };
+
+    pub fn init(window: *const Window, logo_files: [2][]const u8) !Renderer {
         const handle = c.SDL_CreateRenderer(window.handle, null) orelse return sdlError("SDL_CreateRenderer");
         errdefer c.SDL_DestroyRenderer(handle);
         _ = c.SDL_SetRenderVSync(handle, 1);
         var atlas: Atlas = try .init(allocator, 1);
         errdefer atlas.deinit(allocator);
         const font = try createFontTexture(handle, &atlas);
-        errdefer c.SDL_DestroyTexture(font);
-        return .{ .handle = handle, .atlas = atlas, .font = font, .logo = try createTexture(handle, logo.width, logo.height, logo.pixels, c.SDL_SCALEMODE_LINEAR) };
+        return .{ .handle = handle, .atlas = atlas, .font = font, .logo_files = logo_files };
     }
 
     /// Draws the glyphs again for a new zoom, so text stays sharp.
@@ -63,7 +68,7 @@ pub const Renderer = struct {
     }
 
     pub fn deinit(self: *Renderer) void {
-        c.SDL_DestroyTexture(self.logo);
+        for (self.logos) |logo| if (logo) |made| c.SDL_DestroyTexture(made.texture);
         c.SDL_DestroyTexture(self.font);
         self.atlas.deinit(allocator);
         c.SDL_DestroyRenderer(self.handle);
@@ -135,10 +140,26 @@ pub const Renderer = struct {
         _ = c.SDL_RenderFillRect(self.handle, &fr);
     }
 
-    pub fn drawLogo(self: *Renderer, r: Rect, col: Color) void {
-        _ = c.SDL_SetTextureColorMod(self.logo, col.r, col.g, col.b);
-        const fr: c.SDL_FRect = .{ .x = r.x, .y = r.y, .w = r.w, .h = r.h };
-        _ = c.SDL_RenderTexture(self.handle, self.logo, null, &fr);
+    /// The logo is shrunk to the size drawn, so it stays smooth at any size.
+    pub fn drawLogo(self: *Renderer, r: Rect, logo: Logo) void {
+        const w: u32 = @intFromFloat(@max(1, @round(r.w)));
+        const h: u32 = @intFromFloat(@max(1, @round(r.h)));
+        const slot = &self.logos[@backingInt(logo)];
+        if (slot.* == null or slot.*.?.w != w or slot.*.?.h != h) {
+            const texture = self.logoTexture(self.logo_files[@backingInt(logo)], w, h) catch return;
+            if (slot.*) |old| c.SDL_DestroyTexture(old.texture);
+            slot.* = .{ .texture = texture, .w = w, .h = h };
+        }
+        const fr: c.SDL_FRect = .{ .x = @round(r.x), .y = @round(r.y), .w = @floatFromInt(w), .h = @floatFromInt(h) };
+        _ = c.SDL_RenderTexture(self.handle, slot.*.?.texture, null, &fr);
+    }
+
+    fn logoTexture(self: *Renderer, file: []const u8, w: u32, h: u32) !*c.SDL_Texture {
+        const full = try png.decode(allocator, file);
+        defer full.deinit(allocator);
+        const shrunk = try full.shrink(allocator, w, h);
+        defer shrunk.deinit(allocator);
+        return createTexture(self.handle, w, h, shrunk.pixels, c.SDL_SCALEMODE_LINEAR);
     }
 
     /// Restricts drawing to `r`; null removes the clip.
