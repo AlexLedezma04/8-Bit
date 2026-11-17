@@ -153,7 +153,7 @@ pub const Welcome = struct {
         for (at.actions[0..self.actions().len], self.actions()) |line, action| {
             if (look.hovered(line)) canvas.fillRect(line, theme.hover);
             const y = metrics.center(line.y, line.h);
-            canvas.drawLabel(line.x + metrics.cell, y, action.label, theme.accent);
+            canvas.drawLabel(line.x + metrics.cell, y, action.label, theme.text);
             canvas.drawLabel(line.x + line.w - metrics.cell - metrics.labelWidth(action.shortcut), y, action.shortcut, theme.line_number);
         }
         if (self.count() == 0) return;

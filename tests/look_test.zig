@@ -59,3 +59,12 @@ test "the logo shows while no file is open" {
     session.draw();
     try testing.expectEqual(@as(usize, 1), session.recorder.logos);
 }
+
+test "the actions next to the logo are in the text color" {
+    var session: Session = undefined;
+    try session.init();
+    defer session.deinit();
+    for ([_][]const u8{ "New File", "Open File...", "Close Folder" }) |label| {
+        try testing.expectEqual(session.workbench.theme.text, session.last(label).?.color);
+    }
+}
