@@ -13,7 +13,8 @@ const size_targets = [_]struct { name: []const u8, query: std.Target.Query }{
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{});
+    // `zig build` is a debug build; `zig build --release` the small release exe.
+    const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .small });
 
     const assets = addAssets(b);
     const exe = addEditor(b, target, optimize, assets);

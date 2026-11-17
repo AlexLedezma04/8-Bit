@@ -34,6 +34,15 @@ tools/            small build helpers (size_check: `zig build size`,
 third_party/      vendored C dependencies (SDL3, stb_truetype)
 ```
 
+## Building
+
+- `zig build` makes a debug exe in `zig-out/bin`: safety checks and full
+  debug info, so about 40 MB. `zig build run` runs it.
+- `zig build --release` makes the release exe, optimized for size
+  (ReleaseSmall, stripped): about 1.2 MB.
+- `zig build size` builds the Linux and Windows release exes and fails if
+  one is over 2 MiB.
+
 ## Dependency rules
 
 - `platform/` is the only place that touches SDL or OS-specific APIs.
