@@ -69,7 +69,7 @@ const Parts = struct {
 
 pub const Welcome = struct {
     editor: *Editor,
-    list: List = .{},
+    list: List = .{ .show_selection = false },
 
     pub fn title(_: *Welcome) []const u8 {
         return "Welcome";

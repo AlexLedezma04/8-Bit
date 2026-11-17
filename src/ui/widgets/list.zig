@@ -1,7 +1,7 @@
 //! A scrollable list of rows: text, color, indent, a one-character icon and
 //! a mark at the right end. Only the visible rows are asked for and drawn,
-//! so the number of rows does not matter. Used by the file tree, messages,
-//! search results and the git panel.
+//! so the number of rows does not matter. Used by the file tree, the git
+//! panel and the recent folders of the welcome screen.
 const std = @import("std");
 const Canvas = @import("../canvas.zig").Canvas;
 const layout = @import("../layout.zig");
@@ -35,6 +35,8 @@ pub const List = struct {
     /// First visible row.
     top: usize = 0,
     selected: usize = 0,
+    /// The selected row has a background; without it only hover shows.
+    show_selection: bool = true,
     /// Where the scrollbar thumb is held while it is dragged.
     grabbed: ?f32 = null,
 
@@ -121,7 +123,7 @@ pub const List = struct {
         var top = rect.y;
         for (self.top..@min(count, self.top + rows)) |index| {
             const line: Rect = .{ .x = rect.x, .y = top, .w = rect.w, .h = metrics.item() };
-            const fill = if (index == self.selected) (if (focused) look.theme.list_selection else look.theme.list_inactive) else if (look.hovered(line)) look.theme.hover else null;
+            const fill = if (index == self.selected and self.show_selection) (if (focused) look.theme.list_selection else look.theme.list_inactive) else if (look.hovered(line)) look.theme.hover else null;
             if (fill) |color| canvas.fillRect(line, color);
             const row: Row = source.row(index);
             const x = rect.x + @as(f32, @floatFromInt(1 + 2 * row.indent)) * metrics.cell;

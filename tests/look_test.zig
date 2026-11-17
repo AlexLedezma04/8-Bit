@@ -81,3 +81,15 @@ test "the actions next to the logo are in the text color" {
         try testing.expectEqual(session.workbench.theme.text, session.last(label).?.color);
     }
 }
+
+test "the recent folders of the welcome screen have no selected row" {
+    var session: Session = undefined;
+    try session.init();
+    defer session.deinit();
+    _ = session.editor.closeFolder();
+    session.draw();
+    try testing.expect(session.editor.welcome() and session.editor.recent.items.len > 0);
+    const theme = &session.workbench.theme;
+    try testing.expectEqual(@as(usize, 0), session.recorder.filled(theme.list_selection));
+    try testing.expectEqual(@as(usize, 0), session.recorder.filled(theme.list_inactive));
+}
