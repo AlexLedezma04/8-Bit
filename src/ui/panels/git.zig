@@ -89,7 +89,7 @@ pub const GitPanel = struct {
 
     /// The files of a section that are listed: none while it is collapsed.
     fn shown(self: *const GitPanel, section: Section) []const u32 {
-        if (self.collapsed[@intFromEnum(section)]) return &.{};
+        if (self.collapsed[@backingInt(section)]) return &.{};
         return if (section == .staged) self.staged.items else self.changed.items;
     }
 
@@ -212,7 +212,7 @@ pub const GitPanel = struct {
             .changes => {
                 const item = self.itemAt(index);
                 const entry = item.entry orelse {
-                    const collapsed = &self.collapsed[@intFromEnum(item.section)];
+                    const collapsed = &self.collapsed[@backingInt(item.section)];
                     collapsed.* = !collapsed.*;
                     return .yes;
                 };
@@ -247,7 +247,7 @@ pub const GitPanel = struct {
                     const item = self.panel.itemAt(index);
                     const entry = item.entry orelse {
                         const name, const size = if (item.section == .staged) .{ "Staged", self.panel.staged.items.len } else .{ "Changes", self.panel.changed.items.len };
-                        const icon: u21 = if (self.panel.collapsed[@intFromEnum(item.section)]) 0x25B6 else 0x25BC;
+                        const icon: u21 = if (self.panel.collapsed[@backingInt(item.section)]) 0x25B6 else 0x25BC;
                         return .{ .text = std.fmt.bufPrint(&self.buffer, "{s} ({d})", .{ name, size }) catch name, .color = theme.line_number_current, .icon = icon };
                     };
                     const kind = if (item.section == .staged) entry.stagedKind() else entry.changedKind();

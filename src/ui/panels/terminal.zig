@@ -22,7 +22,6 @@ const Handled = panel.Handled;
 const tabs = @import("../widgets/tabs.zig");
 const List = @import("../widgets/list.zig").List;
 const theme_zig = @import("../theme.zig");
-const Theme = theme_zig.Theme;
 const Color = theme_zig.Color;
 const event = @import("../../platform/event.zig");
 const Event = event.Event;

@@ -48,7 +48,7 @@ pub const Window = struct {
         const which = cursor orelse return {
             _ = c.SDL_SetCursor(c.SDL_GetDefaultCursor());
         };
-        const slot = &self.cursors[@intFromEnum(which)];
+        const slot = &self.cursors[@backingInt(which)];
         if (slot.* == null) slot.* = c.SDL_CreateSystemCursor(if (which == .resize_x) c.SDL_SYSTEM_CURSOR_EW_RESIZE else c.SDL_SYSTEM_CURSOR_NS_RESIZE);
         _ = c.SDL_SetCursor(slot.* orelse return);
     }

@@ -15,7 +15,6 @@ const Editor = editor_zig.Editor;
 const Request = editor_zig.Request;
 const Mailbox = editor_zig.Mailbox;
 const File = @import("file.zig").File;
-const Decoration = @import("decoration.zig").Decoration;
 
 /// Bigger files are left out of diff views.
 const max_diff_file = 4 << 20;

@@ -279,7 +279,7 @@ pub const FileTree = struct {
     /// What the right-click menu chose, for the entry it was opened on.
     pub fn choose(self: *FileTree, index: usize) ?Request {
         const entry = if (self.context) |at| if (at < self.entries.items.len) self.entries.items[at] else null else null;
-        return self.run(@enumFromInt(index), entry);
+        return self.run(@fromBackingInt(@intCast(index)), entry);
     }
 
     fn run(self: *FileTree, action: Action, entry: ?Entry) ?Request {

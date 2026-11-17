@@ -30,12 +30,6 @@ pub const Scrollbar = struct {
         return .{ .x = rect.x + rect.w - w, .y = rect.y, .w = w, .h = rect.h };
     }
 
-    /// The strip at the bottom edge of `rect`.
-    pub fn bottomOf(rect: Rect, metrics: Metrics) Rect {
-        const h = width(metrics);
-        return .{ .x = rect.x, .y = rect.y + rect.h - h, .w = rect.w, .h = h };
-    }
-
     pub fn visible(self: Scrollbar) bool {
         return self.last > 0 and self.length() > 0;
     }

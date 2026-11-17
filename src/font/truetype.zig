@@ -1,5 +1,4 @@
 //! One TrueType font through stb_truetype: metrics and glyph coverage.
-const std = @import("std");
 const c = @import("stb");
 
 pub const Face = struct {

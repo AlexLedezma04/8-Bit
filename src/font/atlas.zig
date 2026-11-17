@@ -51,7 +51,7 @@ pub const Atlas = struct {
             const font = fonts.face(kind);
             const s = fonts.scale(kind, zoom);
             const top = fonts.baseline(kind, zoom);
-            for (&atlas.glyphs[@intFromEnum(kind)], 0..) |*entry, i| {
+            for (&atlas.glyphs[@backingInt(kind)], 0..) |*entry, i| {
                 const box = font.box(glyphAt(kind, i), s);
                 const w: usize = @intCast(box.x1 - box.x0);
                 const h: usize = @intCast(box.y1 - box.y0);
@@ -71,7 +71,7 @@ pub const Atlas = struct {
         @memset(coverage, 0);
         for (std.enums.values(Kind)) |kind| {
             const s = fonts.scale(kind, zoom);
-            for (atlas.glyphs[@intFromEnum(kind)], 0..) |entry, i| {
+            for (atlas.glyphs[@backingInt(kind)], 0..) |entry, i| {
                 if (entry.w == 0) continue;
                 const at = @as(usize, entry.y) * atlas.width + entry.x;
                 fonts.face(kind).render(glyphAt(kind, i), s, coverage[at..], entry.w, entry.h, atlas.width);
@@ -87,7 +87,7 @@ pub const Atlas = struct {
     }
 
     pub fn glyph(self: *const Atlas, kind: Kind, cp: u21) Glyph {
-        return self.glyphs[@intFromEnum(kind)][slot(cp)];
+        return self.glyphs[@backingInt(kind)][slot(cp)];
     }
 
     /// The font's glyph for a slot.

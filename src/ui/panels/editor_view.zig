@@ -27,7 +27,6 @@ const Event = @import("../../platform/event.zig").Event;
 const syntax = @import("../../syntax/syntax.zig");
 const Style = @import("../../syntax/grammar.zig").Style;
 
-
 pub const EditorView = struct {
     editor: *Editor,
     menu: *menu_zig.Menu,
@@ -169,7 +168,7 @@ pub const EditorView = struct {
                 },
                 .scroll => |scroll| for (self.placed.items) |item| if (item.node == editor.pane) {
                     const tab = item.node.pane().tab();
-                    const bar_ = self.scrollbars(item.rect, metrics, tab)[@intFromEnum(scroll.axis)];
+                    const bar_ = self.scrollbars(item.rect, metrics, tab)[@backingInt(scroll.axis)];
                     scrollTo(tab, bar_, bar_.along(mouse.x, mouse.y), scroll.grabbed);
                 },
             },
