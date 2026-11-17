@@ -164,9 +164,13 @@ test "the terminal button in the status bar and Alt+T show and hide the terminal
     const editor = &session.editor;
     editor.open(session.path("b.txt"));
     session.draw();
-    try testing.expect(session.inStatusBar("Terminal"));
+    // An icon, not a word; its frame is drawn in the status bar text color.
+    try testing.expect(!session.inStatusBar("Terminal"));
+    const button = app.ui.status_bar.terminalButton(.init(1), session.workbench.frame().status);
+    const icon_color = session.workbench.theme.status_bar_text;
+    try testing.expect(session.recorder.filled(icon_color) >= 4);
 
-    _ = session.clickText("Terminal");
+    _ = session.click(button.x + button.w / 2, button.y + button.h / 2);
     try testing.expect(editor.bottom.shown);
     // The tabs of the terminals take one compact row.
     const bottom = session.workbench.frame().bottom.?;
@@ -176,8 +180,7 @@ test "the terminal button in the status bar and Alt+T show and hide the terminal
     // Hidden again even when the editor has focus.
     _ = session.click(500, 100);
     try testing.expectEqual(Area.editor, editor.focus);
-    const button = session.last("Terminal").?;
-    _ = session.click(button.x + 4, button.y + 8);
+    _ = session.click(button.x + button.w / 2, button.y + button.h / 2);
     try testing.expect(!editor.bottom.shown);
 
     _ = session.press("alt+t");

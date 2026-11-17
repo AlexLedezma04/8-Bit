@@ -153,3 +153,37 @@ test "split panes: their own tabs, click to focus, drag the line, close the last
     try testing.expect(editor.root.kind == .pane);
     try testing.expectEqual(@as(usize, 2), editor.root.pane().tabs.items.len);
 }
+
+test "resize: the terminal's top edge and the sidebar's edge, with a resize cursor" {
+    var session: Session = undefined;
+    try session.init();
+    defer session.deinit();
+    const editor = &session.editor;
+    editor.open(session.path("b.txt"));
+    _ = session.press("alt+t");
+    const before = session.workbench.frame();
+    const bottom = before.bottom.?;
+    const side = before.sidebar.?;
+    const edge = side.x + side.w;
+
+    // Hovering an edge shows the resize cursor; elsewhere the arrow.
+    _ = session.send(.{ .mouse_move = .{ .x = 400, .y = bottom.y + 5, .left_down = false } });
+    try testing.expectEqual(@as(?app.ui.layout.Frame.Edge, .bottom), session.workbench.edgeCursor());
+    _ = session.send(.{ .mouse_move = .{ .x = edge + 5, .y = 200, .left_down = false } });
+    try testing.expectEqual(@as(?app.ui.layout.Frame.Edge, .sidebar), session.workbench.edgeCursor());
+    _ = session.send(.{ .mouse_move = .{ .x = 500, .y = 200, .left_down = false } });
+    try testing.expectEqual(@as(?app.ui.layout.Frame.Edge, null), session.workbench.edgeCursor());
+
+    // The terminal grows when its edge is dragged up, from just inside its tabs.
+    session.drag(400, bottom.y + 5, 400, bottom.y - 160);
+    try testing.expectEqual(@as(u16, editor.bottom.size), @as(u16, @intFromFloat(@round((before.status.y - (bottom.y - 160)) / 16))));
+    try testing.expect(session.workbench.frame().bottom.?.h > bottom.h + 150);
+    // The sidebar grows when its edge is dragged right, from the editor side.
+    session.drag(edge + 5, 200, edge + 165, 200);
+    try testing.expect(session.workbench.frame().sidebar.?.w > side.w + 150);
+    // Below the grip the terminal tabs are clicked, not dragged.
+    const size = editor.bottom.size;
+    const tabs = session.workbench.frame().bottom.?;
+    session.drag(tabs.x + 30, tabs.y + 12, tabs.x + 30, tabs.y - 88);
+    try testing.expectEqual(size, editor.bottom.size);
+}

@@ -493,6 +493,13 @@ pub const Workbench = struct {
         } else editor.paste(text);
     }
 
+    /// The dock edge being dragged, or under the mouse: it gets a resize cursor.
+    pub fn edgeCursor(self: *const Workbench) ?Frame.Edge {
+        if (self.dragging) |edge| return edge;
+        const at = self.mouse orelse return null;
+        return self.frame().edgeAt(at[0], at[1]);
+    }
+
     /// Milliseconds until the screen must change by itself, if ever.
     pub fn timeLeft(self: *const Workbench) ?u64 {
         return self.editor.timeLeft();

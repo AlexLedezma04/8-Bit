@@ -23,6 +23,10 @@ const App = struct {
     fn draw(self: *App) void {
         var title: [128]u8 = undefined;
         self.window.setTitle(self.editor.title(&title));
+        self.window.setCursor(if (self.workbench.edgeCursor()) |edge| switch (edge) {
+            .sidebar => .resize_x,
+            .bottom => .resize_y,
+        } else null);
         const size = self.renderer.outputSize();
         self.renderer.setZoom(self.editor.zoom);
         self.workbench.width = size.w;

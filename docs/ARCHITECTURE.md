@@ -103,6 +103,10 @@ third_party/      vendored C dependencies (SDL3, stb_truetype)
   SDL's Linux build config). Files and lists show `ui/widgets/scrollbar.zig`
   when they do not fit: lines at the right, and below the text the columns
   of the widest line on screen, unless lines wrap.
+- **Resizing.** The sidebar's edge and the terminal's top edge can be
+  dragged. Each grip reaches 2 pixels into its dock and 6 out of it, so the
+  scrollbars beside it stay free; `Workbench.edgeCursor` gives the resize
+  cursor that `main.zig` shows over it.
 - **Menus.** A panel opens the one `ui/widgets/menu.zig` on a right click with
   its items and itself as the target; the workbench gives the menu every
   input event while it is open and the target gets the chosen index.
@@ -222,7 +226,7 @@ third_party/      vendored C dependencies (SDL3, stb_truetype)
 - `ui/panels/terminal.zig` draws each run of one color with `drawText`. The
   16 colors come from the theme's `terminal` colors; 256 and true colors
   are computed. Keys go to the shell, except a few window commands. The
-  Terminal button at the right of the status bar, Alt+T and Ctrl+` show or
+  terminal icon at the right of the status bar, Alt+T and Ctrl+` show or
   hide it.
 
 ## Config (`editor/config.zig`)

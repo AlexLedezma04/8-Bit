@@ -86,8 +86,11 @@ pub const Frame = struct {
     /// Space the editor area always keeps, in cells and rows.
     const min_editor_cols = 12;
     const min_editor_rows = 4;
-    /// Pixels on each side of an edge where a drag can start.
+    /// Pixels on each side of a split line where a drag can start.
     pub const grip = 4;
+    /// A dock edge can be grabbed a little on the dock's side and more on
+    /// the other, so scrollbars next to it stay free.
+    const dock_grip = .{ 2, 6 };
 
     /// `sidebar` is a width in cells, `bottom` a height in rows.
     pub fn init(width: f32, height: f32, metrics: Metrics, sidebar: ?u16, bottom: ?u16) Frame {
@@ -111,15 +114,15 @@ pub const Frame = struct {
 
     pub const Edge = enum { sidebar, bottom };
 
-    /// The dock edge under a pixel, for resizing. The sidebar's grip is
-    /// outside it, so its scrollbar stays free.
+    /// The dock edge under a pixel, for resizing: the sidebar's reaches
+    /// into the editor, the bottom panel's into the terminal tabs.
     pub fn edgeAt(self: Frame, x: f32, y: f32) ?Edge {
         if (self.sidebar) |side| {
             const edge = side.x + side.w;
-            if (x >= edge and x <= edge + grip and y < side.h) return .sidebar;
+            if (x >= edge - dock_grip[0] and x <= edge + dock_grip[1] and y < side.h) return .sidebar;
         }
         if (self.bottom) |bottom| {
-            if (@abs(y - bottom.y) <= grip and x >= bottom.x) return .bottom;
+            if (y >= bottom.y - dock_grip[0] and y <= bottom.y + dock_grip[1] and x >= bottom.x) return .bottom;
         }
         return null;
     }
@@ -273,6 +276,14 @@ test "dock edges can be found and dragged" {
     try testing.expectEqual(@as(?Frame.Edge, .sidebar), frame.edgeAt(242, 100));
     try testing.expectEqual(@as(?Frame.Edge, .bottom), frame.edgeAt(400, 414));
     try testing.expectEqual(@as(?Frame.Edge, null), frame.edgeAt(400, 300));
+    // Two pixels into the sidebar, six into the editor; the same into the
+    // editor and the terminal tabs for the bottom edge.
+    try testing.expectEqual(@as(?Frame.Edge, .sidebar), frame.edgeAt(238, 100));
+    try testing.expectEqual(@as(?Frame.Edge, null), frame.edgeAt(237, 100));
+    try testing.expectEqual(@as(?Frame.Edge, .sidebar), frame.edgeAt(246, 100));
+    try testing.expectEqual(@as(?Frame.Edge, null), frame.edgeAt(247, 100));
+    try testing.expectEqual(@as(?Frame.Edge, .bottom), frame.edgeAt(400, 422));
+    try testing.expectEqual(@as(?Frame.Edge, null), frame.edgeAt(400, 413));
     try testing.expectEqual(@as(u16, 40), frame.sizeAt(.sidebar, metrics, 320, 0));
     try testing.expectEqual(@as(u16, 20), frame.sizeAt(.bottom, metrics, 0, 576 - 320));
 }
