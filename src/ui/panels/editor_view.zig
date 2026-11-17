@@ -22,6 +22,7 @@ const tabs = @import("../widgets/tabs.zig");
 const menu_zig = @import("../widgets/menu.zig");
 const scrollbar_zig = @import("../widgets/scrollbar.zig");
 const Scrollbar = scrollbar_zig.Scrollbar;
+const Minimap = @import("../widgets/minimap.zig").Minimap;
 const commands = @import("../../editor/commands.zig");
 const Color = @import("../theme.zig").Color;
 const Event = @import("../../platform/event.zig").Event;
@@ -39,7 +40,7 @@ pub const EditorView = struct {
     spans: std.ArrayList(syntax.Span) = .empty,
     /// What the left mouse button is doing since it went down.
     /// `scroll` holds which scrollbar, and where its thumb was grabbed.
-    drag: union(enum) { none, select, split: *panes.Split, scroll: struct { axis: scrollbar_zig.Axis, grabbed: f32 } } = .none,
+    drag: union(enum) { none, select, split: *panes.Split, scroll: struct { axis: scrollbar_zig.Axis, grabbed: f32 }, minimap } = .none,
     /// The commands of the open menu, by item.
     actions: []const commands.Command = &.{},
 
@@ -61,11 +62,12 @@ pub const EditorView = struct {
         layout.placePanes(self.editor.allocator, self.editor.root, rect, &self.placed, &self.splitters) catch {};
     }
 
-    /// The text layout of a pane, for the tab it shows, inside the scrollbars.
+    /// The text layout of a pane, for the tab it shows, inside the minimap
+    /// and the scrollbars.
     fn textLayout(self: *const EditorView, rect: Rect, metrics: Metrics, tab: *const Tab) TextLayout {
         const lines: ?usize = if (self.editor.settings.line_numbers) tab.file.doc.buffer.lineCount() else null;
         var area = rect.splitTop(metrics.bar())[1];
-        area.w = @max(0, area.w - Scrollbar.width(metrics));
+        area.w = @max(0, area.w - Scrollbar.width(metrics) - Minimap.width(metrics));
         area.h = @max(0, area.h - Scrollbar.width(metrics));
         return .init(area, metrics, lines, decoration.gutterTextWidth(tab.decorations.items));
     }
@@ -90,6 +92,16 @@ pub const EditorView = struct {
                 .shown = view.cols,
             },
         };
+    }
+
+    fn minimap(self: *const EditorView, rect: Rect, metrics: Metrics, tab: *const Tab) Minimap {
+        const text = self.textLayout(rect, metrics, tab).text;
+        return .init(.{ .x = text.x + text.w, .y = text.y, .w = Minimap.width(metrics), .h = text.h }, metrics, tab.file.doc.buffer.lineCount());
+    }
+
+    /// Centers the line under the mouse.
+    fn scrollToMinimap(tab: *Tab, map: Minimap, y: f32) void {
+        tab.view.top = .{ .line = map.lineAt(y) -| tab.view.rows / 2 };
     }
 
     /// Scrolls a tab to what a scrollbar was dragged to.
@@ -119,6 +131,7 @@ pub const EditorView = struct {
             drawTab(canvas, look, self.editor, tab, &text, focused and active, &self.spans);
             canvas.setClip(null);
             for (self.scrollbars(item.rect, look.metrics, tab)) |bar| bar.draw(canvas, look);
+            self.minimap(item.rect, look.metrics, tab).draw(canvas, look, &tab.file.doc, tab.file.changes(), tab.view.top.line, tab.view.rows);
         }
         for (self.splitters.items) |splitter| canvas.fillRect(splitter.line, look.theme.border);
     }
@@ -154,6 +167,12 @@ pub const EditorView = struct {
                     scrollTo(pane.tab(), bar_, at, self.drag.scroll.grabbed);
                     return .yes;
                 }
+                const map = self.minimap(item.rect, metrics, pane.tab());
+                if (map.rect.contains(mouse.x, mouse.y)) {
+                    self.drag = .minimap;
+                    scrollToMinimap(pane.tab(), map, mouse.y);
+                    return .yes;
+                }
                 const cell = self.textLayout(item.rect, metrics, pane.tab()).cellAt(mouse.x, mouse.y);
                 if (mouse.button == .right) return self.openMenu(cell, mouse.x, mouse.y);
                 editor.mouseDown(cell.x, cell.y, mouse.clicks, mouse.mods.shift);
@@ -177,6 +196,10 @@ pub const EditorView = struct {
                     const tab = item.node.pane().tab();
                     const bar_ = self.scrollbars(item.rect, metrics, tab)[@backingInt(scroll.axis)];
                     scrollTo(tab, bar_, bar_.along(mouse.x, mouse.y), scroll.grabbed);
+                },
+                .minimap => for (self.placed.items) |item| if (item.node == editor.pane) {
+                    const tab = item.node.pane().tab();
+                    scrollToMinimap(tab, self.minimap(item.rect, metrics, tab), mouse.y);
                 },
             },
             .mouse_up => {
@@ -420,19 +443,7 @@ const Painter = struct {
     }
 
     fn color(self: Painter, style: decoration.Style) Color {
-        const theme = self.look.theme;
-        return switch (style) {
-            .selection => theme.selection,
-            .current_line => theme.current_line,
-            .match => theme.search_match,
-            .bracket => theme.matching_bracket,
-            .added => theme.git_added,
-            .changed => theme.git_changed,
-            .removed => theme.git_removed,
-            .diff_added => theme.diff_added,
-            .diff_removed => theme.diff_removed,
-            .diff_header => theme.panel,
-        };
+        return self.look.theme.styleColor(style);
     }
 };
 

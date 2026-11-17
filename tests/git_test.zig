@@ -464,7 +464,7 @@ test "blame: gutter text per line, hidden while edited, a click opens the commit
     try committed(&session);
     defer session.deinit();
     const editor = &session.editor;
-    try session.write("b.txt", "bee\nsecond line, long enough to scroll when blame takes room\n");
+    try session.write("b.txt", "bee\nsecond line, long enough to scroll with blame\n");
     try session.git(&.{ "commit", "-q", "-am", "Second line" });
     editorOpen(&session, "b.txt");
     _ = session.send(.{ .focus = true });

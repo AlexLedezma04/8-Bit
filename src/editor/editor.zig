@@ -1116,15 +1116,10 @@ pub const Editor = struct {
         const active = self.file();
         const buffer = &active.doc.buffer;
         const line = buffer.lineOf(active.doc.cursor.pos);
-        const marks = if (active.role == .diff) active.marks.items else active.tracking.markers.items;
         var target: ?usize = null;
         var last: ?usize = null;
-        for (marks) |mark| {
-            const style = switch (mark.kind) {
-                .gutter_marker, .line_background => |style| style,
-                else => continue,
-            };
-            if (style == .diff_header) continue;
+        for (active.changes()) |mark| {
+            if (mark.changeStyle() == null) continue;
             const first = buffer.lineOf(mark.range.start);
             const starts = if (last) |end| first > end + 1 else true;
             last = buffer.lineOf(mark.range.end);

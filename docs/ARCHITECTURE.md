@@ -17,7 +17,7 @@ src/
     workbench.zig the whole window: places panels, routes input, focus
     theme.zig     the color struct; theme files live in assets/themes
     layout.zig    where the parts of the window are; all sizes come from the cell
-    widgets/      reusable controls (list, tabs, prompt, menu, scrollbar)
+    widgets/      reusable controls (list, tabs, prompt, menu, scrollbar, minimap)
     panels/       one view per feature (editor_view, welcome, file_tree, git, terminal, status_bar)
   font/           the built-in fonts (stb_truetype), their metrics, the glyph atlas
 assets/           built-in ZON files, embedded in the exe (assets.zig lists them)
@@ -103,6 +103,11 @@ third_party/      vendored C dependencies (SDL3, stb_truetype)
   SDL's Linux build config). Files and lists show `ui/widgets/scrollbar.zig`
   when they do not fit: lines at the right, and below the text the columns
   of the widest line on screen, unless lines wrap.
+- **Minimap.** Left of a file's scrollbar, `ui/widgets/minimap.zig` draws
+  the whole file: a bar per word, two pixels a line, fewer when it does not
+  fit (lines are skipped, changes never). Its left edge has the changes
+  (`File.changes`) and the part on screen is shaded; a press or a drag
+  centers the line under the mouse.
 - **Resizing.** The sidebar's edge and the terminal's top edge can be
   dragged. Each grip reaches 2 pixels into its dock and 6 out of it, so the
   scrollbars beside it stay free; `Workbench.edgeCursor` gives the resize
