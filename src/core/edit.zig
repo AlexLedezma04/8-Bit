@@ -384,7 +384,8 @@ pub const Document = struct {
 const testing = std.testing;
 const expectText = @import("buffer.zig").expectText;
 
-fn testDocument(text: []const u8) !Document {
+/// A document with `text`, for tests.
+pub fn testDocument(text: []const u8) !Document {
     var doc = Document.init(testing.allocator);
     errdefer doc.deinit();
     try doc.load(text);

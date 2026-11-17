@@ -12,6 +12,7 @@ const list_zig = @import("list.zig");
 const List = list_zig.List;
 const KeyPress = @import("../../platform/event.zig").KeyPress;
 const keymap = @import("../../editor/keymap.zig");
+const commands = @import("../../editor/commands.zig");
 const Color = @import("../theme.zig").Color;
 const utf8 = @import("../../core/utf8.zig");
 
@@ -124,30 +125,12 @@ pub const Prompt = struct {
     }
 
     /// The editing commands that make sense on one line.
-    fn edit(self: *Prompt, command: @import("../../editor/commands.zig").Command) !void {
-        const doc = &self.doc;
-        switch (command) {
-            .move_left => doc.move(.left, false),
-            .move_right => doc.move(.right, false),
-            .move_word_left => doc.move(.word_left, false),
-            .move_word_right => doc.move(.word_right, false),
-            .move_line_start, .move_file_start => doc.move(.line_start, false),
-            .move_line_end, .move_file_end => doc.move(.line_end, false),
-            .select_left => doc.move(.left, true),
-            .select_right => doc.move(.right, true),
-            .select_word_left => doc.move(.word_left, true),
-            .select_word_right => doc.move(.word_right, true),
-            .select_line_start => doc.move(.line_start, true),
-            .select_line_end => doc.move(.line_end, true),
-            .select_all => doc.selectAll(),
-            .delete_left => try doc.delete(.left),
-            .delete_right => try doc.delete(.right),
-            .delete_word_left => try doc.delete(.word_left),
-            .delete_word_right => try doc.delete(.word_right),
-            .undo => _ = try doc.undo(),
-            .redo => _ = try doc.redo(),
-            else => {},
-        }
+    fn edit(self: *Prompt, command: commands.Command) !void {
+        _ = try commands.editLine(&self.doc, switch (command) {
+            .move_file_start => .move_line_start,
+            .move_file_end => .move_line_end,
+            else => command,
+        });
     }
 
     fn submit(self: *Prompt) Outcome {
