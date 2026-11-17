@@ -31,26 +31,31 @@ test "hover: the row and the tab under the mouse light up until it leaves" {
     var session: Session = undefined;
     try session.init();
     defer session.deinit();
-    session.draw();
-    const plain = session.recorder.fills;
+    // x.txt is a tab that is not active, and not in the closed folder a.
+    session.editor.open(session.path("a/x.txt"));
+    _ = session.press("ctrl+n");
+    _ = session.send(.{ .mouse_move = .{ .x = -1, .y = -1, .left_down = false } });
+    const plain = session.recorder.fills.items.len;
 
     const row = session.last("b.txt").?;
     _ = session.send(.{ .mouse_move = .{ .x = row.x, .y = row.y + 4, .left_down = false } });
-    try testing.expectEqual(plain + 1, session.recorder.fills);
-    const tab = session.last("untitled").?;
+    try testing.expectEqual(plain + 1, session.recorder.fills.items.len);
+    const tab = session.last("x.txt").?;
     _ = session.send(.{ .mouse_move = .{ .x = tab.x, .y = tab.y, .left_down = false } });
-    try testing.expectEqual(plain + 1, session.recorder.fills);
+    try testing.expectEqual(plain + 1, session.recorder.fills.items.len);
     _ = session.send(.{ .mouse_move = .{ .x = -1, .y = -1, .left_down = false } });
-    try testing.expectEqual(plain, session.recorder.fills);
+    try testing.expectEqual(plain, session.recorder.fills.items.len);
 }
 
-test "the logo is on the welcome screen only" {
+test "the logo shows while no file is open" {
     var session: Session = undefined;
     try session.init();
     defer session.deinit();
+    try testing.expectEqual(@as(usize, 1), session.recorder.logos);
+    session.editor.open(session.path("b.txt"));
+    session.draw();
     try testing.expectEqual(@as(usize, 0), session.recorder.logos);
-    session.editor.closeFolder();
+    _ = session.editor.closeFolder();
     session.draw();
     try testing.expectEqual(@as(usize, 1), session.recorder.logos);
-    try testing.expect(session.shows("8-Bit"));
 }

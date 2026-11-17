@@ -43,7 +43,7 @@ pub const FileTree = struct {
     const Naming = enum { new_file, new_folder, rename };
 
     /// The menu items, in order.
-    const Action = enum { new_file, new_folder, copy, cut, paste, delete };
+    const Action = enum { new_file, new_folder, copy, cut, paste, delete, close_folder };
 
     const Entry = struct { path: []u8, depth: usize, is_dir: bool, open: bool = false };
 
@@ -282,6 +282,7 @@ pub const FileTree = struct {
             .new_folder => self.ask(.new_folder, entry),
             .copy, .cut => if (entry) |found| self.setClip(found.path, action == .cut),
             .paste => self.paste(entry),
+            .close_folder => return self.editor.closeFolder(),
             .delete => {
                 const found = entry orelse return null;
                 self.setTarget(found.path);
@@ -303,6 +304,7 @@ pub const FileTree = struct {
             .{ .label = "Cut", .shortcut = "Ctrl+X", .enabled = on_entry },
             .{ .label = "Paste", .shortcut = "Ctrl+V", .enabled = self.clip != null },
             .{ .label = "Delete", .shortcut = "Delete", .enabled = on_entry },
+            .{ .label = "Close Folder", .shortcut = "Ctrl+Shift+W" },
         }, x, y, .of(FileTree, self));
     }
 
@@ -321,6 +323,7 @@ pub const FileTree = struct {
         self.sync();
         const count = self.entries.items.len;
         const rows = List.rowsIn(rect, metrics);
+        if (self.list.scrollbarEvent(event, rect, metrics, count)) return .yes;
         switch (event) {
             .key => |press| {
                 if (press.mods.ctrl and !press.mods.shift and !press.mods.alt) switch (press.key) {
@@ -361,7 +364,7 @@ pub const FileTree = struct {
                 .right => self.openMenu(mouse.x, mouse.y, rect, metrics),
                 .middle => {},
             },
-            .wheel => |wheel| self.list.scroll(@intFromFloat(-wheel.dy * 3), count, rows),
+            .wheel => |wheel| self.list.scroll(@intFromFloat(-wheel.dy), count, rows),
             else => return .no,
         }
         return .yes;

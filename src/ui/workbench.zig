@@ -2,8 +2,8 @@
 //! goes to the open menu or prompt, else to the focused panel, else to the
 //! key bindings. A click gives its panel focus. Each dock has a tab bar of
 //! its panels, and its edge can be dragged. Prompts that commands ask for
-//! are opened here. While nothing is open the editor area is the welcome
-//! screen.
+//! are opened here. While no file is open the editor area shows what to do
+//! next, and the recent folders while no folder is open either.
 const std = @import("std");
 const editor_zig = @import("../editor/editor.zig");
 const Editor = editor_zig.Editor;
@@ -39,6 +39,9 @@ const Area = editor_zig.Area;
 const SidePanel = editor_zig.SidePanel;
 const BottomPanel = editor_zig.BottomPanel;
 
+/// Rows scrolled per step of the mouse wheel.
+const wheel_rows = 3;
+
 pub const Outcome = struct {
     request: ?Request = null,
     /// False when nothing on screen can have changed.
@@ -73,6 +76,8 @@ pub const Workbench = struct {
     swallow_text: bool = false,
     /// Where the mouse is, in window pixels, for hover colors.
     mouse: ?[2]f32 = null,
+    /// Wheel rows not scrolled yet: x, y.
+    wheel_rest: [2]f32 = .{ 0, 0 },
 
     /// In place, because the panels point into it.
     pub fn init(self: *Workbench, editor: *Editor) void {
@@ -101,7 +106,7 @@ pub const Workbench = struct {
         return .init(self.editor.zoom);
     }
 
-    fn frame(self: *const Workbench) Frame {
+    pub fn frame(self: *const Workbench) Frame {
         const editor = self.editor;
         return .init(
             self.width,
@@ -115,7 +120,7 @@ pub const Workbench = struct {
     fn panelOf(self: *Workbench, area: Area) Panel {
         return switch (area) {
             .sidebar => self.sidePanel(self.editor.side_panel),
-            .editor => if (self.editor.welcome()) .of(Welcome, &self.welcome) else .of(EditorView, &self.view),
+            .editor => if (self.editor.empty()) .of(Welcome, &self.welcome) else .of(EditorView, &self.view),
             .bottom => self.bottomPanel(self.editor.bottom_panel),
         };
     }
@@ -199,7 +204,7 @@ pub const Workbench = struct {
             if (area != .editor) {
                 var items: [max_dock_panels]tabs.Item = undefined;
                 const shown, const active = self.dockTabs(area, &items);
-                tabs.draw(canvas, style, rect.splitTop(style.metrics.bar())[0], shown, active, focused, theme.panel);
+                tabs.draw(canvas, style, rect.splitTop(style.metrics.bar())[0], .dock, shown, active, focused);
             }
             canvas.setClip(content);
             item.draw(canvas, style, content, focused);
@@ -294,13 +299,14 @@ pub const Workbench = struct {
                 return self.toPanel(area, .{ .mouse_up = scaled });
             },
             .wheel => |wheel| {
-                if (wheel.mods.ctrl) {
-                    if (wheel.dy == 0) return .{ .redraw = false };
-                    return self.run(if (wheel.dy > 0) .zoom_in else .zoom_out);
-                }
+                const rows = self.wheelRows(wheel);
+                if (rows[0] == 0 and rows[1] == 0) return .{ .redraw = false };
+                if (wheel.mods.ctrl) return self.run(if (rows[1] > 0) .zoom_in else .zoom_out);
                 var scaled = wheel;
                 scaled.x *= self.density;
                 scaled.y *= self.density;
+                scaled.dx = rows[0];
+                scaled.dy = rows[1];
                 const area = self.areaAt(scaled.x, scaled.y) orelse return .{ .redraw = false };
                 return self.toPanel(area, .{ .wheel = scaled });
             },
@@ -463,7 +469,7 @@ pub const Workbench = struct {
             if (bar.contains(scaled.x, scaled.y)) {
                 var items: [max_dock_panels]tabs.Item = undefined;
                 const shown, const active = self.dockTabs(area, &items);
-                const hit = tabs.hit(bar, self.metrics(), shown, active, scaled.x, scaled.y);
+                const hit = tabs.hit(bar, self.metrics(), .dock, shown, active, scaled.x, scaled.y);
                 if (hit) |found| self.selectDock(area, found.index) else self.editor.focus = area;
                 return .{};
             }
@@ -483,11 +489,25 @@ pub const Workbench = struct {
         return null;
     }
 
+    /// Wheel steps as whole rows. Smooth wheels and touchpads send parts of
+    /// a step; they add up until they make a row.
+    fn wheelRows(self: *Workbench, wheel: event.Wheel) [2]f32 {
+        var rows: [2]f32 = undefined;
+        for (&self.wheel_rest, &rows, [2]f32{ wheel.dx, wheel.dy }) |*rest, *whole, steps| {
+            rest.* += steps * wheel_rows;
+            whole.* = @trunc(rest.*);
+            rest.* -= whole.*;
+        }
+        return rows;
+    }
+
     /// Passes an event to a panel. `redraw` tells whether it used it.
     fn toPanel(self: *Workbench, area: Area, ev: Event) Outcome {
         const content = self.contentOf(self.frame(), area) orelse return .{ .redraw = false };
         const handled = self.panelOf(area).handle(ev, self.metrics(), content);
-        return .{ .request = handled.request, .redraw = handled.used };
+        var outcome = self.fulfilHere(handled.request);
+        outcome.redraw = handled.used or outcome.request != null;
+        return outcome;
     }
 
     /// The answer to an `ask` request.

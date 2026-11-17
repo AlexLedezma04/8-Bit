@@ -9,7 +9,10 @@ const Rect = layout.Rect;
 const Metrics = layout.Metrics;
 const Look = @import("../panel.zig").Look;
 const Color = @import("../theme.zig").Color;
-const KeyPress = @import("../../platform/event.zig").KeyPress;
+const event_zig = @import("../../platform/event.zig");
+const KeyPress = event_zig.KeyPress;
+const Event = event_zig.Event;
+const Scrollbar = @import("scrollbar.zig").Scrollbar;
 
 pub const Row = struct {
     text: []const u8,
@@ -32,6 +35,31 @@ pub const List = struct {
     /// First visible row.
     top: usize = 0,
     selected: usize = 0,
+    /// Where the scrollbar thumb is held while it is dragged.
+    grabbed: ?f32 = null,
+
+    fn scrollbar(self: *const List, rect: Rect, metrics: Metrics, count: usize) Scrollbar {
+        const rows = rowsIn(rect, metrics);
+        return .{ .track = Scrollbar.trackOf(rect, metrics), .first = self.top, .last = count -| rows, .shown = rows };
+    }
+
+    /// Presses, drags and releases of the scrollbar. True when it used the event.
+    pub fn scrollbarEvent(self: *List, event: Event, rect: Rect, metrics: Metrics, count: usize) bool {
+        const bar = self.scrollbar(rect, metrics, count);
+        switch (event) {
+            .mouse_down => |mouse| {
+                if (!bar.visible() or !bar.track.contains(mouse.x, mouse.y)) return false;
+                self.grabbed = bar.grab(mouse.y);
+                self.top = bar.firstAt(mouse.y, self.grabbed.?);
+            },
+            .mouse_move => |mouse| self.top = bar.firstAt(mouse.y, self.grabbed orelse return false),
+            .mouse_up => if (self.grabbed == null) return false else {
+                self.grabbed = null;
+            },
+            else => return false,
+        }
+        return true;
+    }
 
     /// Rows that fit in `rect`.
     pub fn rowsIn(rect: Rect, metrics: Metrics) usize {
@@ -108,6 +136,7 @@ pub const List = struct {
             if (row.mark) |mark| canvas.drawLabel(rect.x + rect.w - 2 * metrics.cell, y, encode(mark.char, &bytes), mark.color);
             top += line.h;
         }
+        self.scrollbar(rect, metrics, count).draw(canvas, look);
     }
 };
 
@@ -174,5 +203,6 @@ test "only the visible rows of a huge list are drawn" {
     try testing.expectEqual(@as(usize, 10), source.asked);
     // One cell of margin, two of indent, two for the icon.
     try testing.expectEqual(@as(f32, 5 * 8), recorder.find("row 99981").?.x);
-    try testing.expectEqual(@as(usize, 1), recorder.fills);
+    // The selected row and the scrollbar thumb.
+    try testing.expectEqual(@as(usize, 2), recorder.fills.items.len);
 }

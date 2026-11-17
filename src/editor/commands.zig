@@ -153,7 +153,7 @@ fn execute(editor: *Editor, command: Command) !?Request {
         .paste => return .paste,
         .open => return .{ .pick = .open_file },
         .open_folder => return .{ .pick = .open_folder },
-        .close_folder => editor.closeFolder(),
+        .close_folder => return editor.closeFolder(),
         .save => return editor.save(),
         .save_as => return .{ .pick = .save_file },
         .quit => return editor.quit(),
@@ -286,6 +286,8 @@ test "zoom and wrap commands" {
 test "tab and pane commands" {
     var editor = try Editor.init(testing.allocator, testing.io);
     defer editor.deinit();
+    // The first new file takes the place of the placeholder.
+    _ = run(&editor, .new_file);
     _ = run(&editor, .new_file);
     _ = run(&editor, .new_file);
     const pane = editor.pane.pane();

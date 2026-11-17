@@ -111,10 +111,12 @@ pub const Frame = struct {
 
     pub const Edge = enum { sidebar, bottom };
 
-    /// The dock edge under a pixel, for resizing.
+    /// The dock edge under a pixel, for resizing. The sidebar's grip is
+    /// outside it, so its scrollbar stays free.
     pub fn edgeAt(self: Frame, x: f32, y: f32) ?Edge {
         if (self.sidebar) |side| {
-            if (@abs(x - (side.x + side.w)) <= grip and y < side.h) return .sidebar;
+            const edge = side.x + side.w;
+            if (x >= edge and x <= edge + grip and y < side.h) return .sidebar;
         }
         if (self.bottom) |bottom| {
             if (@abs(y - bottom.y) <= grip and x >= bottom.x) return .bottom;

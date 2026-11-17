@@ -21,6 +21,8 @@ pub const File = struct {
     /// Stays the same while the file is open; background work finds it by this.
     id: u32 = 0,
     role: Role = .text,
+    /// The hidden blank file of a pane that has nothing else open.
+    placeholder: bool = false,
     /// The name of a view or a commit message.
     title: ?[]u8 = null,
     doc: Document,

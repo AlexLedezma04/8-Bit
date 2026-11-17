@@ -97,6 +97,7 @@ test "docks: the sidebar while a folder is open, Ctrl+J, and their edges can be 
     _ = session.press("alt+1");
     try testing.expectEqual(app.editor.editor.Area.editor, editor.focus);
     editor.openFolder(session.folderPath());
+    editor.open(session.path("a/x.txt"));
     session.draw();
     try testing.expect(session.shows("Files"));
     _ = session.press("ctrl+j");
@@ -106,7 +107,7 @@ test "docks: the sidebar while a folder is open, Ctrl+J, and their edges can be 
     session.drag(240, 300, 320, 300);
     try testing.expectEqual(@as(u16, 40), editor.sidebar.size);
     // The tab title starts a cell and a half after the sidebar and its line.
-    try testing.expectEqual(@as(f32, 320 + 1 + 12), session.recorder.find("untitled").?.x);
+    try testing.expectEqual(@as(f32, 320 + 1 + 12), session.recorder.find("x.txt").?.x);
     // The bottom edge, from 14 rows to 20.
     session.drag(400, 576 - 224, 400, 576 - 320);
     try testing.expectEqual(@as(u16, 20), editor.bottom.size);
@@ -114,7 +115,7 @@ test "docks: the sidebar while a folder is open, Ctrl+J, and their edges can be 
     // Zoom doubles every size, because sizes are in cells.
     session.drag(320, 300, 240, 300);
     _ = session.press("ctrl+=");
-    try testing.expectEqual(@as(f32, 30 * 16 + 1 + 24), session.recorder.find("untitled").?.x);
+    try testing.expectEqual(@as(f32, 30 * 16 + 1 + 24), session.recorder.find("x.txt").?.x);
 }
 
 test "split panes: their own tabs, click to focus, drag the line, close the last tab" {

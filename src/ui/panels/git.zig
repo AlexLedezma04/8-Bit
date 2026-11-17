@@ -129,6 +129,7 @@ pub const GitPanel = struct {
         const rows = List.rowsIn(area, metrics);
         const items = self.count();
         const list_ = self.list();
+        if (list_.scrollbarEvent(ev, area, metrics, items)) return .yes;
         switch (ev) {
             .key => |press| {
                 if (press.key == .tab and !press.mods.ctrl and !press.mods.alt) {
@@ -144,14 +145,14 @@ pub const GitPanel = struct {
             },
             .mouse_down => |mouse| {
                 var buffer: [3]tabs.Item = undefined;
-                if (tabs.hit(bar, metrics, self.pageItems(&buffer), @backingInt(self.page()), mouse.x, mouse.y)) |hit| {
+                if (tabs.hit(bar, metrics, .dock, self.pageItems(&buffer), @backingInt(self.page()), mouse.x, mouse.y)) |hit| {
                     self.open(@fromBackingInt(@intCast(hit.index)));
                     return .yes;
                 }
                 const action = list_.click(mouse.y, area, metrics, items, mouse.clicks) orelse return .yes;
                 if (action == .activate) return self.activate(list_.selected);
             },
-            .wheel => |wheel| list_.scroll(@intFromFloat(-wheel.dy * 3), items, rows),
+            .wheel => |wheel| list_.scroll(@intFromFloat(-wheel.dy), items, rows),
             else => return .no,
         }
         if (self.page() == .history and list_.top + rows + history_ahead >= items) self.editor.git.moreHistory();
@@ -261,7 +262,7 @@ pub const GitPanel = struct {
         self.sync();
         const bar, const area = split(rect, look.metrics);
         var buffer: [3]tabs.Item = undefined;
-        tabs.draw(canvas, look, bar, self.pageItems(&buffer), @backingInt(self.page()), focused, look.theme.panel);
+        tabs.draw(canvas, look, bar, .dock, self.pageItems(&buffer), @backingInt(self.page()), focused);
         var rows: Rows = .{ .panel = self, .theme = look.theme };
         self.list().draw(canvas, look, area, self.count(), &rows, focused);
         if (self.page() == .history and git.history.loading and self.count() == 0) {

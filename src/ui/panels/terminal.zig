@@ -27,9 +27,6 @@ const Color = theme_zig.Color;
 const event = @import("../../platform/event.zig");
 const Event = event.Event;
 
-/// Rows scrolled per step of the mouse wheel.
-const wheel_rows = 3;
-
 /// A cell of the lines that can be shown: scrollback, then screen.
 const Point = struct { line: usize, col: usize };
 
@@ -118,7 +115,7 @@ pub const TerminalPanel = struct {
                 self.typed();
             },
             .mouse_down => |mouse| {
-                if (tabs.hit(bar, metrics, self.tabItems(), self.editor.terminals.active, mouse.x, mouse.y)) |hit| {
+                if (tabs.hit(bar, metrics, .files, self.tabItems(), self.editor.terminals.active, mouse.x, mouse.y)) |hit| {
                     if (hit.close) self.editor.closeTerminal(hit.index) else self.editor.terminals.active = hit.index;
                     return .yes;
                 }
@@ -138,7 +135,7 @@ pub const TerminalPanel = struct {
                 };
             },
             .wheel => |wheel| {
-                const rows: isize = @intFromFloat(wheel.dy * wheel_rows);
+                const rows: isize = @intFromFloat(wheel.dy);
                 const offset = @as(isize, @intCast(self.offset)) + rows;
                 self.offset = @intCast(std.math.clamp(offset, 0, @as(isize, @intCast(session.grid.scrollbackCount()))));
             },
@@ -218,7 +215,7 @@ pub const TerminalPanel = struct {
             canvas.drawLabel(rect.x + metrics.cell, rect.y + metrics.row / 2, "No terminal: Ctrl+` starts one", look.theme.line_number);
             return;
         };
-        tabs.draw(canvas, look, bar, self.tabItems(), self.editor.terminals.active, focused, look.theme.panel);
+        tabs.draw(canvas, look, bar, .files, self.tabItems(), self.editor.terminals.active, focused);
         const session = &shown.session;
         const cols: u16 = @intCast(std.math.clamp(metrics.cols(area.w), 2, 1000));
         const rows: u16 = @intCast(std.math.clamp(List.rowsIn(area, metrics), 2, 1000));

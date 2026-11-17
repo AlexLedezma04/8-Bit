@@ -50,8 +50,9 @@ test "Ctrl+` starts a shell in the folder; keys and text go to it" {
     try testing.expect(!editor.bottom.shown);
     try testing.expectEqual(Area.editor, editor.focus);
     // Typing in the editor does not reach the shell.
+    editor.open(session.path("b.txt"));
     session.typeKeys("abc");
-    try testing.expect(session.shows("abc"));
+    try testing.expect(session.shows("abcbee"));
     _ = session.press("ctrl+`");
     try testing.expectEqual(@as(usize, 1), editor.terminals.list.items.len);
     try testing.expect(session.shows("8bit-ok"));

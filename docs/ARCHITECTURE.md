@@ -17,7 +17,7 @@ src/
     workbench.zig the whole window: places panels, routes input, focus
     theme.zig     the color struct; theme files live in assets/themes
     layout.zig    where the parts of the window are; all sizes come from the cell
-    widgets/      reusable controls (list, tabs, prompt, menu)
+    widgets/      reusable controls (list, tabs, prompt, menu, scrollbar)
     panels/       one view per feature (editor_view, welcome, file_tree, messages, status_bar, ...)
   font/           the built-in fonts (stb_truetype), their metrics, the glyph atlas
 assets/           built-in ZON files, embedded in the exe (assets.zig lists them)
@@ -91,8 +91,15 @@ third_party/      vendored C dependencies (SDL3, stb_truetype)
   (messages) follow `ui/panel.zig`: `title`, `draw(rect)` and `handle(event)`.
   One area has focus; a click gives focus. The workbench draws and routes
   without knowing what a panel is. The sidebar is shown whenever a folder
-  is open. While nothing is open (`Editor.welcome`) the editor area is the
-  welcome screen with the recent folders.
+  is open; dock tabs share the bar's width. A pane always has a tab: with
+  nothing open it holds a hidden blank `placeholder` file, which the next
+  file opened replaces. While only that is open (`Editor.empty`) the editor
+  area shows what to do next, and the recent folders when no folder is
+  open either (`Editor.welcome`). Closing the folder closes every file,
+  asking about unsaved ones like quitting does.
+- **Scrolling.** The workbench turns wheel steps into whole rows, adding up
+  the parts of a step that smooth wheels and touchpads send. Files and
+  lists show `ui/widgets/scrollbar.zig` when they do not fit.
 - **Menus.** A panel opens the one `ui/widgets/menu.zig` on a right click with
   its items and itself as the target; the workbench gives the menu every
   input event while it is open and the target gets the chosen index.

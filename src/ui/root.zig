@@ -8,6 +8,7 @@ pub const theme = @import("theme.zig");
 pub const workbench = @import("workbench.zig");
 pub const list = @import("widgets/list.zig");
 pub const menu = @import("widgets/menu.zig");
+pub const scrollbar = @import("widgets/scrollbar.zig");
 pub const prompt = @import("widgets/prompt.zig");
 pub const tabs = @import("widgets/tabs.zig");
 pub const editor_view = @import("panels/editor_view.zig");

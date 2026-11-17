@@ -42,6 +42,7 @@ pub const Search = struct {
         const hits = project.hits.items;
         const area = hitsRect(rect, metrics);
         const rows = List.rowsIn(area, metrics);
+        if (self.list.scrollbarEvent(event, area, metrics, hits.len)) return .yes;
         const action = switch (event) {
             .key => |press| blk: {
                 if (press.key == .escape and project.running) {
@@ -52,7 +53,7 @@ pub const Search = struct {
             },
             .mouse_down => |mouse| self.list.click(mouse.y, area, metrics, hits.len, mouse.clicks),
             .wheel => |wheel| blk: {
-                self.list.scroll(@intFromFloat(-wheel.dy * 3), hits.len, rows);
+                self.list.scroll(@intFromFloat(-wheel.dy), hits.len, rows);
                 break :blk null;
             },
             else => return .no,

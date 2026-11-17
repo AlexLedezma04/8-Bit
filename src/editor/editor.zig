@@ -166,8 +166,8 @@ pub const Editor = struct {
     const max_recent = 10;
 
     const Pending = union(enum) {
-        /// Quitting; the files before this index are done.
-        quit: usize,
+        /// Quitting or closing the folder; the files before `from` are done.
+        leave: struct { from: usize, then: Leave },
         /// Closing the active tab.
         close,
         reload: *File,
@@ -191,7 +191,7 @@ pub const Editor = struct {
         };
         errdefer editor.deinit();
         editor.reloadConfig();
-        try editor.addTab(try editor.newFile());
+        try editor.addPlaceholder();
         return editor;
     }
 
@@ -499,11 +499,26 @@ pub const Editor = struct {
         };
     }
 
-    /// Adds a tab for a new open file. A blank untitled tab is replaced.
+    /// Adds a tab for a new open file, in place of the placeholder.
     fn place(self: *Editor, target: *File) !void {
-        const blank = self.file().isBlank() and tabCount(self.root, self.file()) == 1;
+        const replace = self.file().placeholder and self.file().isBlank() and tabCount(self.root, self.file()) == 1;
         try self.addTab(target);
-        if (blank) self.removeTab(self.pane.pane().active - 1);
+        if (replace) self.removeTab(self.pane.pane().active - 1);
+    }
+
+    /// The hidden blank file that keeps a pane from having no tab.
+    fn addPlaceholder(self: *Editor) !void {
+        const blank = try self.newFile();
+        blank.placeholder = true;
+        self.addTab(blank) catch |err| {
+            self.dropFile(blank);
+            return err;
+        };
+    }
+
+    /// No file is open: one pane with only the placeholder.
+    pub fn empty(self: *const Editor) bool {
+        return self.root.kind == .pane and self.pane.pane().tabs.items.len == 1 and self.file().placeholder and self.file().isBlank();
     }
 
     /// Opens a read-only tab with `text`, colored like the file `like`.
@@ -593,8 +608,8 @@ pub const Editor = struct {
         return null;
     }
 
-    /// Closes the active tab. An empty pane closes too; the last one gets a
-    /// new empty file instead.
+    /// Closes the active tab. An empty pane closes too; the last one gets
+    /// the placeholder instead.
     fn closeActive(self: *Editor) void {
         const node = self.pane;
         const pane = node.pane();
@@ -603,18 +618,14 @@ pub const Editor = struct {
         gone.destroy(self.allocator);
         if (tabCount(self.root, shown) == 0) self.dropFile(shown);
         if (pane.tabs.items.len > 0) return self.enter(node, @min(pane.active, pane.tabs.items.len - 1));
-        if (node.parent == null) {
-            const blank = self.newFile() catch return;
-            self.addTab(blank) catch return self.dropFile(blank);
-            return;
-        }
+        if (node.parent == null) return self.addPlaceholder() catch {};
         const next = node.remove(self.allocator).firstLeaf();
         self.enter(next, next.pane().active);
     }
 
     pub fn newTab(self: *Editor) !void {
         const created = try self.newFile();
-        self.addTab(created) catch |err| {
+        self.place(created) catch |err| {
             self.dropFile(created);
             return err;
         };
@@ -656,18 +667,25 @@ pub const Editor = struct {
 
     pub fn quit(self: *Editor) ?Request {
         self.dropPending();
-        return self.quitFrom(0);
+        return self.leaveFrom(0, .quit);
     }
 
-    /// Asks about the next file with unsaved changes, or quits.
-    fn quitFrom(self: *Editor, from: usize) ?Request {
+    /// What happens once every file with unsaved changes was asked about.
+    const Leave = enum { quit, close_folder };
+
+    /// Asks about the next file with unsaved changes, or goes on.
+    fn leaveFrom(self: *Editor, from: usize, then: Leave) ?Request {
         for (self.files.items[from..], from..) |item, index| {
             if (!item.isModified()) continue;
             _ = self.show(item);
-            self.pending = .{ .quit = index };
+            self.pending = .{ .leave = .{ .from = index, .then = then } };
             return .{ .ask = .{ .question = .save, .name = item.name() } };
         }
-        return .quit;
+        switch (then) {
+            .quit => return .quit,
+            .close_folder => self.closeAll(),
+        }
+        return null;
     }
 
     /// Saves the active file, or asks for a name if it has none.
@@ -697,7 +715,7 @@ pub const Editor = struct {
             return null;
         }
         return switch (action) {
-            .quit, .close => if (choice == .yes) self.save() else self.goOn(.no),
+            .leave, .close => if (choice == .yes) self.save() else self.goOn(.no),
             .reload => self.goOn(choice),
         };
     }
@@ -707,7 +725,7 @@ pub const Editor = struct {
         const action = self.pending orelse return null;
         self.pending = null;
         switch (action) {
-            .quit => |index| return self.quitFrom(index + 1),
+            .leave => |going| return self.leaveFrom(going.from + 1, going.then),
             .close => self.closeActive(),
             .reload => |target| {
                 if (choice == .yes) {
@@ -842,12 +860,26 @@ pub const Editor = struct {
         self.remember();
     }
 
-    /// The next start shows the welcome screen.
-    pub fn closeFolder(self: *Editor) void {
-        if (self.folder == null) return;
+    /// Closes every file, asking about unsaved changes first, then the
+    /// folder: the welcome screen shows, now and on the next start.
+    pub fn closeFolder(self: *Editor) ?Request {
+        if (self.folder == null) return null;
+        self.dropPending();
+        return self.leaveFrom(0, .close_folder);
+    }
+
+    fn closeAll(self: *Editor) void {
+        const root = Node.create(self.allocator) catch return self.notify("Could not close the folder", .{});
+        self.destroyTabs(self.root);
+        self.root.destroy(self.allocator);
+        for (self.files.items) |item| item.destroy();
+        self.files.clearRetainingCapacity();
+        self.root = root;
+        self.pane = root;
+        self.addPlaceholder() catch {};
         self.setFolder(null);
         self.git.close();
-        if (self.focus == .sidebar) self.focus = .editor;
+        self.focus = .editor;
         self.remember();
     }
 
@@ -899,9 +931,9 @@ pub const Editor = struct {
         self.loader.save("state", state) catch |err| self.notify("Could not save state.zon: {t}", .{err});
     }
 
-    /// Nothing is open yet: no folder, and one blank tab.
+    /// Nothing is open: no folder and no file.
     pub fn welcome(self: *const Editor) bool {
-        return self.folder == null and self.root.kind == .pane and self.pane.pane().tabs.items.len == 1 and self.file().isBlank();
+        return self.folder == null and self.empty();
     }
 
     // Focus and docks
@@ -1183,13 +1215,13 @@ pub const Editor = struct {
     pub fn status(self: *const Editor) Status {
         return .{
             .branch = if (self.git.ready()) self.git.status.branch else "",
-            .language = if (self.welcome()) "" else if (self.file().highlighter.rules) |rules| rules.grammar.name else plain_text,
+            .language = if (self.empty()) "" else if (self.file().highlighter.rules) |rules| rules.grammar.name else plain_text,
         };
     }
 
     /// Window title: the file name, with a dot when there are unsaved changes.
     pub fn title(self: *const Editor, buffer: []u8) []const u8 {
-        if (self.welcome()) return "8-Bit";
+        if (self.empty()) return "8-Bit";
         const dot = if (self.isModified()) "\u{25CF} " else "";
         return std.fmt.bufPrint(buffer, "{s}{s} - 8-Bit", .{ dot, self.name() }) catch "8-Bit";
     }

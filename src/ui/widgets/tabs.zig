@@ -1,14 +1,14 @@
 //! A bar of tabs. Each tab has a title and, after it, a close button, or a
-//! dot while it has unsaved changes. When the tabs do not fit, the bar
-//! scrolls so the active one is in view. Used by editor panes, the dock
-//! bars, the pages of the git panel and the terminal.
+//! dot while it has unsaved changes. File tabs are as wide as their title
+//! and scroll so the active one is in view; dock tabs share the whole bar.
+//! Used by editor panes, the dock bars, the pages of the git panel and the
+//! terminal.
 const std = @import("std");
 const Canvas = @import("../canvas.zig").Canvas;
 const layout = @import("../layout.zig");
 const Rect = layout.Rect;
 const Metrics = layout.Metrics;
 const Look = @import("../panel.zig").Look;
-const Color = @import("../theme.zig").Color;
 
 pub const Item = struct {
     title: []const u8,
@@ -18,6 +18,13 @@ pub const Item = struct {
 };
 
 pub const Hit = struct { index: usize, close: bool };
+
+pub const Style = enum {
+    /// As wide as the title; the active one has the panel color.
+    files,
+    /// The bar shared out; the active one is underlined.
+    dock,
+};
 
 /// Cells of space at each end of a tab, and of its close button.
 const pad = 1.5;
@@ -36,23 +43,32 @@ const Place = struct { index: usize, x: f32, w: f32 };
 const Places = struct {
     items: []const Item,
     metrics: Metrics,
+    style: Style,
     index: usize,
     x: f32 = 0,
     width: f32,
 
-    fn init(items: []const Item, metrics: Metrics, active: usize, w: f32) Places {
+    fn init(items: []const Item, metrics: Metrics, style: Style, active: usize, w: f32) Places {
+        if (style == .dock) return .{ .items = items, .metrics = metrics, .style = style, .index = 0, .width = w };
         var first = @min(active, items.len -| 1);
         var used: f32 = if (items.len > 0) width(items[first], metrics) else 0;
         while (first > 0 and used + width(items[first - 1], metrics) <= w) {
             first -= 1;
             used += width(items[first], metrics);
         }
-        return .{ .items = items, .metrics = metrics, .index = first, .width = w };
+        return .{ .items = items, .metrics = metrics, .style = style, .index = first, .width = w };
+    }
+
+    fn widthOf(self: *const Places, item: Item) f32 {
+        return switch (self.style) {
+            .files => width(item, self.metrics),
+            .dock => @floor(self.width / @as(f32, @floatFromInt(self.items.len))),
+        };
     }
 
     fn next(self: *Places) ?Place {
         if (self.index >= self.items.len or self.x >= self.width) return null;
-        const place: Place = .{ .index = self.index, .x = self.x, .w = width(self.items[self.index], self.metrics) };
+        const place: Place = .{ .index = self.index, .x = self.x, .w = self.widthOf(self.items[self.index]) };
         self.index += 1;
         self.x += place.w;
         return place;
@@ -65,10 +81,10 @@ fn buttonX(place: Place, metrics: Metrics) f32 {
 }
 
 /// The tab, and whether its close button, under a pixel.
-pub fn hit(rect: Rect, metrics: Metrics, items: []const Item, active: usize, x: f32, y: f32) ?Hit {
+pub fn hit(rect: Rect, metrics: Metrics, style: Style, items: []const Item, active: usize, x: f32, y: f32) ?Hit {
     if (!rect.contains(x, y)) return null;
     const at = x - rect.x;
-    var places = Places.init(items, metrics, active, rect.w);
+    var places = Places.init(items, metrics, style, active, rect.w);
     while (places.next()) |place| {
         if (at >= place.x + place.w) continue;
         const start = buttonX(place, metrics);
@@ -77,27 +93,28 @@ pub fn hit(rect: Rect, metrics: Metrics, items: []const Item, active: usize, x: 
     return null;
 }
 
-/// The active tab is underlined, in the accent color when `focused`.
-pub fn draw(canvas: Canvas, look: Look, rect: Rect, items: []const Item, active: usize, focused: bool, background: Color) void {
+/// A dock's active tab is underlined, in the accent color when `focused`.
+pub fn draw(canvas: Canvas, look: Look, rect: Rect, style: Style, items: []const Item, active: usize, focused: bool) void {
     const theme = look.theme;
     const metrics = look.metrics;
-    canvas.fillRect(rect, background);
+    canvas.fillRect(rect, if (style == .dock) theme.panel else theme.background);
     canvas.fillRect(.{ .x = rect.x, .y = rect.y + rect.h - 1, .w = rect.w, .h = 1 }, theme.border);
     canvas.setClip(rect);
     defer canvas.setClip(null);
     const text_y = metrics.barText(rect.y);
-    var places = Places.init(items, metrics, active, rect.w);
+    var places = Places.init(items, metrics, style, active, rect.w);
     while (places.next()) |place| {
         const item = items[place.index];
         const x = rect.x + place.x;
         const is_active = place.index == active;
         const tab: Rect = .{ .x = x, .y = rect.y, .w = place.w, .h = rect.h - 1 };
-        if (look.hovered(tab)) canvas.fillRect(tab, theme.hover);
-        if (is_active) {
+        if (is_active and style == .files) canvas.fillRect(tab, theme.panel) else if (look.hovered(tab)) canvas.fillRect(tab, theme.hover);
+        if (is_active and style == .dock) {
             const line = @floor(metrics.cell / 4);
             canvas.fillRect(.{ .x = x, .y = rect.y + rect.h - line, .w = place.w, .h = line }, if (focused) theme.accent else theme.list_inactive);
         }
-        canvas.drawLabel(x + pad * metrics.cell, text_y, item.title, if (is_active) theme.tab_active_text else theme.tab_text);
+        const title_x = if (style == .dock) x + @floor((place.w - metrics.labelWidth(item.title)) / 2) else x + pad * metrics.cell;
+        canvas.drawLabel(title_x, text_y, item.title, if (is_active) theme.tab_active_text else theme.tab_text);
         if (!item.closable) continue;
         const button_x = rect.x + buttonX(place, metrics);
         if (item.modified) {
@@ -118,34 +135,33 @@ test "clicks find the tab and its close button" {
     const rect: Rect = .{ .x = 100, .w = 400, .h = 24 };
     const first = width(items[0], metrics);
     try testing.expectEqual(metrics.labelWidth("a.zig") + 5 * 8, first);
-    try testing.expectEqual(Hit{ .index = 0, .close = false }, hit(rect, metrics, &items, 0, 100 + 8, 5).?);
+    try testing.expectEqual(Hit{ .index = 0, .close = false }, hit(rect, metrics, .files, &items, 0, 100 + 8, 5).?);
     // The button is the two cells before the last one and a half.
-    try testing.expectEqual(Hit{ .index = 0, .close = true }, hit(rect, metrics, &items, 0, 100 + first - 13, 5).?);
-    try testing.expectEqual(Hit{ .index = 0, .close = false }, hit(rect, metrics, &items, 0, 100 + first - 1, 5).?);
-    try testing.expectEqual(Hit{ .index = 1, .close = false }, hit(rect, metrics, &items, 0, 100 + first + 1, 5).?);
-    try testing.expectEqual(@as(?Hit, null), hit(rect, metrics, &items, 0, 100 + 390, 5));
-    try testing.expectEqual(@as(?Hit, null), hit(rect, metrics, &items, 0, 50, 5));
+    try testing.expectEqual(Hit{ .index = 0, .close = true }, hit(rect, metrics, .files, &items, 0, 100 + first - 13, 5).?);
+    try testing.expectEqual(Hit{ .index = 0, .close = false }, hit(rect, metrics, .files, &items, 0, 100 + first - 1, 5).?);
+    try testing.expectEqual(Hit{ .index = 1, .close = false }, hit(rect, metrics, .files, &items, 0, 100 + first + 1, 5).?);
+    try testing.expectEqual(@as(?Hit, null), hit(rect, metrics, .files, &items, 0, 100 + 390, 5));
+    try testing.expectEqual(@as(?Hit, null), hit(rect, metrics, .files, &items, 0, 50, 5));
 }
 
-test "a tab without a close button is narrower" {
+test "dock tabs share the whole bar" {
     const metrics = Metrics.init(1);
     const items = [_]Item{ .{ .title = "Files", .closable = false }, .{ .title = "Git", .closable = false } };
-    const rect: Rect = .{ .w = 400, .h = 24 };
-    const first = width(items[0], metrics);
-    try testing.expectEqual(metrics.labelWidth("Files") + 3 * 8, first);
-    try testing.expectEqual(Hit{ .index = 0, .close = false }, hit(rect, metrics, &items, 0, first - 1, 5).?);
-    try testing.expectEqual(Hit{ .index = 1, .close = false }, hit(rect, metrics, &items, 0, first, 5).?);
+    const rect: Rect = .{ .w = 240, .h = 40 };
+    try testing.expectEqual(Hit{ .index = 0, .close = false }, hit(rect, metrics, .dock, &items, 0, 119, 5).?);
+    try testing.expectEqual(Hit{ .index = 1, .close = false }, hit(rect, metrics, .dock, &items, 0, 120, 5).?);
+    try testing.expectEqual(Hit{ .index = 1, .close = false }, hit(rect, metrics, .dock, &items, 0, 239, 5).?);
 }
 
 test "too many tabs scroll so the active one is in view" {
     const metrics = Metrics.init(1);
     const items = [_]Item{ .{ .title = "one" }, .{ .title = "two" }, .{ .title = "three" }, .{ .title = "four" } };
     const room = width(items[2], metrics) + width(items[3], metrics);
-    var places = Places.init(&items, metrics, 3, room);
+    var places = Places.init(&items, metrics, .files, 3, room);
     try testing.expectEqual(@as(usize, 2), places.next().?.index);
     try testing.expectEqual(@as(usize, 3), places.next().?.index);
     try testing.expectEqual(@as(?Place, null), places.next());
 
-    places = Places.init(&items, metrics, 0, room);
+    places = Places.init(&items, metrics, .files, 0, room);
     try testing.expectEqual(@as(usize, 0), places.next().?.index);
 }

@@ -6,6 +6,7 @@ test {
     _ = @import("editor_session_test.zig");
     _ = @import("git_test.zig");
     _ = @import("look_test.zig");
+    _ = @import("scroll_test.zig");
     _ = @import("search_test.zig");
     _ = @import("syntax_test.zig");
     _ = @import("terminal_test.zig");

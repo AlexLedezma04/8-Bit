@@ -26,10 +26,11 @@ pub const Messages = struct {
     pub fn handle(self: *Messages, event: Event, metrics: Metrics, rect: Rect) Handled {
         const count = self.editor.log.items.len;
         const rows = List.rowsIn(rect, metrics);
+        if (self.list.scrollbarEvent(event, rect, metrics, count)) return .yes;
         switch (event) {
             .key => |press| _ = self.list.key(press, count, rows) orelse return .no,
             .mouse_down => |mouse| _ = self.list.click(mouse.y, rect, metrics, count, mouse.clicks),
-            .wheel => |wheel| self.list.scroll(@intFromFloat(-wheel.dy * 3), count, rows),
+            .wheel => |wheel| self.list.scroll(@intFromFloat(-wheel.dy), count, rows),
             else => return .no,
         }
         return .yes;

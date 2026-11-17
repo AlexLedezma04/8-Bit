@@ -64,24 +64,26 @@ pub const Canvas = struct {
     }
 };
 
-/// Keeps every text drawn, for tests.
+/// Keeps every text and filled rectangle drawn, for tests.
 pub const Recorder = struct {
     allocator: std.mem.Allocator,
     texts: std.ArrayList(Text) = .empty,
-    fills: usize = 0,
+    fills: std.ArrayList(Fill) = .empty,
     logos: usize = 0,
 
     pub const Text = struct { x: f32, y: f32, text: []u8, color: Color, font: Font };
+    pub const Fill = struct { rect: Rect, color: Color };
 
     pub fn deinit(self: *Recorder) void {
         self.clear();
         self.texts.deinit(self.allocator);
+        self.fills.deinit(self.allocator);
     }
 
     pub fn clear(self: *Recorder) void {
         for (self.texts.items) |item| self.allocator.free(item.text);
         self.texts.clearRetainingCapacity();
-        self.fills = 0;
+        self.fills.clearRetainingCapacity();
         self.logos = 0;
     }
 
@@ -95,8 +97,15 @@ pub const Recorder = struct {
         return null;
     }
 
-    pub fn fillRect(self: *Recorder, _: Rect, _: Color) void {
-        self.fills += 1;
+    pub fn fillRect(self: *Recorder, rect: Rect, color: Color) void {
+        self.fills.append(self.allocator, .{ .rect = rect, .color = color }) catch {};
+    }
+
+    /// Filled rectangles of one color.
+    pub fn filled(self: *const Recorder, color: Color) usize {
+        var count: usize = 0;
+        for (self.fills.items) |fill| count += @intFromBool(std.meta.eql(fill.color, color));
+        return count;
     }
 
     pub fn drawText(self: *Recorder, x: f32, y: f32, text: []const u8, color: Color, font: Font) void {
@@ -118,7 +127,7 @@ test "a recorder keeps the text drawn on it" {
     canvas.fillRect(.{}, .rgb(0));
     canvas.drawText(3, 4, "hello", .rgb(0xffffff));
     canvas.drawLabel(5, 6, "label", .rgb(0xffffff));
-    try std.testing.expectEqual(@as(usize, 1), recorder.fills);
+    try std.testing.expectEqual(@as(usize, 1), recorder.filled(.rgb(0)));
     try std.testing.expectEqual(@as(f32, 3), recorder.find("ell").?.x);
     try std.testing.expectEqual(Font.code, recorder.find("ell").?.font);
     try std.testing.expectEqual(Font.ui, recorder.find("abe").?.font);
