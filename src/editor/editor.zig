@@ -15,8 +15,6 @@ const fs = @import("../platform/fs.zig");
 const config = @import("config.zig");
 const keymap = @import("keymap.zig");
 const Find = @import("find.zig").Find;
-const project_search = @import("project_search.zig");
-const ProjectSearch = project_search.ProjectSearch;
 const Rules = @import("../syntax/grammar.zig").Rules;
 const language = @import("../syntax/language.zig");
 const comment = @import("../core/comment.zig");
@@ -39,7 +37,7 @@ pub const Question = enum {
 };
 
 /// What the prompt asks for.
-pub const PromptKind = enum { new_file, new_folder, rename, find, replace, goto_line, find_in_project, language, branch };
+pub const PromptKind = enum { new_file, new_folder, rename, find, replace, goto_line, language, branch };
 
 /// The language of a file without a grammar.
 pub const plain_text = "Plain Text";
@@ -69,8 +67,6 @@ pub const Posted = union(enum) {
     cancelled,
     /// No native dialog could be shown.
     dialog_failed,
-    found: project_search.Found,
-    search_done: project_search.Done,
     git: *git_zig.Job,
     terminal: terminals_zig.Output,
 };
@@ -82,6 +78,8 @@ pub const Status = struct {
     /// Empty outside a repository.
     branch: []const u8,
     language: []const u8,
+    /// The terminal panel is shown.
+    terminal: bool,
 };
 
 /// What the app remembers between runs, in `state.zon`.
@@ -96,9 +94,8 @@ pub const State = struct {
 /// The parts of the window that can have focus.
 pub const Area = enum { sidebar, editor, bottom };
 
-/// The panels of the sidebar and of the bottom dock.
+/// The panels of the sidebar. The bottom dock is the terminal.
 pub const SidePanel = enum { files, git };
-pub const BottomPanel = enum { messages, search, terminal };
 
 /// A panel at an edge of the window.
 pub const Dock = struct {
@@ -116,12 +113,15 @@ pub const Editor = struct {
     pane: *Node,
     focus: Area = .editor,
     sidebar: Dock = .{ .size = 30 },
-    bottom: Dock = .{ .size = 10 },
+    bottom: Dock = .{ .size = 14 },
     side_panel: SidePanel = .files,
-    bottom_panel: BottomPanel = .messages,
     folder: ?[]u8 = null,
     /// Goes up whenever `folder` changes.
     folder_version: u32 = 0,
+    /// Goes up when files may have changed outside the editor.
+    disk_version: u32 = 0,
+    /// When terminal output has rested long enough to look at the disk.
+    disk_check_ms: ?u64 = null,
     /// Screen pixels per font pixel.
     zoom: u8 = 1,
     default_zoom: u8 = 1,
@@ -142,32 +142,32 @@ pub const Editor = struct {
     recent: std.ArrayList([]u8) = .empty,
     /// Current time. The main loop sets it before it passes on input.
     now_ms: u64 = 0,
-    /// Every message, oldest first, for the messages panel.
-    log: std.ArrayList([]u8) = .empty,
+    /// The last message, cut to `max_message` bytes.
+    message: [max_message]u8 = undefined,
+    message_len: ?usize = null,
     /// Waits for an answer, or for a file name, before it can go on.
     pending: ?Pending = null,
     clipboard: std.ArrayList(u8) = .empty,
     find: Find,
-    project: ProjectSearch,
     git: Git,
     terminals: Terminals,
     /// The environment the shells of terminals get.
     environ: ?*const std.process.Environ.Map = null,
-    /// Where background work posts results. Needed for find in project, git
-    /// and terminals.
+    /// Where background work posts results. Needed for git and terminals.
     mailbox: ?*Mailbox = null,
     /// The id the next file gets.
     next_id: u32 = 1,
 
     pub const min_zoom = 1;
     pub const max_zoom = 4;
-    const max_log = 200;
     const max_message = 160;
     const max_recent = 10;
+    /// A command in a terminal may have changed files or made a repository.
+    const disk_rest_ms = 500;
 
     const Pending = union(enum) {
-        /// Quitting; the files before this index are done.
-        quit: usize,
+        /// Quitting or closing the folder; the files before `from` are done.
+        leave: struct { from: usize, then: Leave },
         /// Closing the active tab.
         close,
         reload: *File,
@@ -185,18 +185,16 @@ pub const Editor = struct {
             .loader = .{ .io = io, .gpa = allocator },
             .config_arena = .init(allocator),
             .find = .{ .allocator = allocator },
-            .project = .{ .allocator = allocator, .io = io },
             .git = .{ .allocator = allocator, .io = io },
             .terminals = .{ .allocator = allocator },
         };
         errdefer editor.deinit();
         editor.reloadConfig();
-        try editor.addTab(try editor.newFile());
+        try editor.addPlaceholder();
         return editor;
     }
 
     pub fn deinit(self: *Editor) void {
-        self.project.deinit();
         self.git.deinit();
         self.terminals.deinit();
         // Results that came too late.
@@ -209,8 +207,6 @@ pub const Editor = struct {
         if (self.folder) |folder| self.allocator.free(folder);
         for (self.recent.items) |path| self.allocator.free(path);
         self.recent.deinit(self.allocator);
-        for (self.log.items) |line| self.allocator.free(line);
-        self.log.deinit(self.allocator);
         self.clipboard.deinit(self.allocator);
         self.config_arena.deinit();
     }
@@ -268,20 +264,16 @@ pub const Editor = struct {
         self.enter(node, index);
     }
 
-    // Messages
+    // Messages, kept for a later notice; nothing shows them now
 
-    /// Adds a message to the log of the messages panel. Every feature
-    /// reports errors and info through here.
+    /// Every feature reports errors and info through here.
     pub fn notify(self: *Editor, comptime format: []const u8, args: anytype) void {
-        var buffer: [max_message]u8 = undefined;
-        const text = std.fmt.bufPrint(&buffer, format, args) catch &buffer;
-        const line = self.allocator.dupe(u8, text) catch return;
-        self.log.append(self.allocator, line) catch return self.allocator.free(line);
-        if (self.log.items.len > max_log) self.allocator.free(self.log.orderedRemove(0));
+        const text = std.fmt.bufPrint(&self.message, format, args) catch self.message[0..];
+        self.message_len = text.len;
     }
 
     pub fn lastMessage(self: *const Editor) ?[]const u8 {
-        return if (self.log.items.len > 0) self.log.items[self.log.items.len - 1] else null;
+        return self.message[0 .. self.message_len orelse return null];
     }
 
     // Input that is not a command
@@ -482,28 +474,52 @@ pub const Editor = struct {
         return false;
     }
 
-    /// Opens `path` in a new tab, or shows it if it is open.
+    /// Opens `path` in a preview tab, or shows it if it is open. The next
+    /// file opened takes the preview's place, until it is saved.
     pub fn open(self: *Editor, path: []const u8) void {
         if (self.findFile(path)) |found| if (self.show(found)) return;
         const opened = File.open(self.allocator, self.io, path) catch |err| {
             self.notify("Could not open {s}: {t}", .{ std.fs.path.basename(path), err });
             return;
         };
+        opened.preview = true;
         self.adopt(opened) catch {
             opened.destroy();
             return;
         };
-        self.place(opened) catch |err| {
+        self.place(opened, true) catch |err| {
             self.dropFile(opened);
             self.notify("Could not open {s}: {t}", .{ std.fs.path.basename(path), err });
         };
     }
 
-    /// Adds a tab for a new open file. A blank untitled tab is replaced.
-    fn place(self: *Editor, target: *File) !void {
-        const blank = self.file().isBlank() and tabCount(self.root, self.file()) == 1;
+    /// Adds a tab for a new open file, in place of the placeholder, or of the
+    /// preview of the active pane when `over_preview`. A preview with unsaved
+    /// changes stays.
+    fn place(self: *Editor, target: *File, over_preview: bool) !void {
+        const pane = self.pane.pane();
+        const old: ?*File = for (pane.tabs.items) |item| {
+            const file_ = item.file;
+            const spare = (file_.placeholder and file_.isBlank()) or (over_preview and file_.preview and !file_.isModified());
+            if (spare and tabCount(self.root, file_) == 1) break file_;
+        } else null;
         try self.addTab(target);
-        if (blank) self.removeTab(self.pane.pane().active - 1);
+        if (old) |gone| self.removeTab(pane.find(gone).?);
+    }
+
+    /// The hidden blank file that keeps a pane from having no tab.
+    fn addPlaceholder(self: *Editor) !void {
+        const blank = try self.newFile();
+        blank.placeholder = true;
+        self.addTab(blank) catch |err| {
+            self.dropFile(blank);
+            return err;
+        };
+    }
+
+    /// No file is open: one pane with only the placeholder.
+    pub fn empty(self: *const Editor) bool {
+        return self.root.kind == .pane and self.pane.pane().tabs.items.len == 1 and self.file().placeholder and self.file().isBlank();
     }
 
     /// Opens a read-only tab with `text`, colored like the file `like`.
@@ -517,7 +533,7 @@ pub const Editor = struct {
             created.language = self.allocator.dupe(u8, rules.grammar.name) catch null;
         };
         self.applyLanguage(created);
-        self.place(created) catch {
+        self.place(created, false) catch {
             self.dropFile(created);
             return null;
         };
@@ -536,7 +552,7 @@ pub const Editor = struct {
             const created = self.newFile() catch return;
             created.language = self.allocator.dupe(u8, "Git Commit") catch null;
             self.applyLanguage(created);
-            self.place(created) catch return self.dropFile(created);
+            self.place(created, false) catch return self.dropFile(created);
             break :blk created;
         };
         message.role = .{ .commit = amend };
@@ -593,8 +609,8 @@ pub const Editor = struct {
         return null;
     }
 
-    /// Closes the active tab. An empty pane closes too; the last one gets a
-    /// new empty file instead.
+    /// Closes the active tab. An empty pane closes too; the last one gets
+    /// the placeholder instead.
     fn closeActive(self: *Editor) void {
         const node = self.pane;
         const pane = node.pane();
@@ -603,18 +619,14 @@ pub const Editor = struct {
         gone.destroy(self.allocator);
         if (tabCount(self.root, shown) == 0) self.dropFile(shown);
         if (pane.tabs.items.len > 0) return self.enter(node, @min(pane.active, pane.tabs.items.len - 1));
-        if (node.parent == null) {
-            const blank = self.newFile() catch return;
-            self.addTab(blank) catch return self.dropFile(blank);
-            return;
-        }
+        if (node.parent == null) return self.addPlaceholder() catch {};
         const next = node.remove(self.allocator).firstLeaf();
         self.enter(next, next.pane().active);
     }
 
     pub fn newTab(self: *Editor) !void {
         const created = try self.newFile();
-        self.addTab(created) catch |err| {
+        self.place(created, false) catch |err| {
             self.dropFile(created);
             return err;
         };
@@ -656,18 +668,25 @@ pub const Editor = struct {
 
     pub fn quit(self: *Editor) ?Request {
         self.dropPending();
-        return self.quitFrom(0);
+        return self.leaveFrom(0, .quit);
     }
 
-    /// Asks about the next file with unsaved changes, or quits.
-    fn quitFrom(self: *Editor, from: usize) ?Request {
+    /// What happens once every file with unsaved changes was asked about.
+    const Leave = enum { quit, close_folder };
+
+    /// Asks about the next file with unsaved changes, or goes on.
+    fn leaveFrom(self: *Editor, from: usize, then: Leave) ?Request {
         for (self.files.items[from..], from..) |item, index| {
             if (!item.isModified()) continue;
             _ = self.show(item);
-            self.pending = .{ .quit = index };
+            self.pending = .{ .leave = .{ .from = index, .then = then } };
             return .{ .ask = .{ .question = .save, .name = item.name() } };
         }
-        return .quit;
+        switch (then) {
+            .quit => return .quit,
+            .close_folder => self.closeAll(),
+        }
+        return null;
     }
 
     /// Saves the active file, or asks for a name if it has none.
@@ -680,6 +699,7 @@ pub const Editor = struct {
             return null;
         };
         self.notify("Saved {s}", .{active.name()});
+        active.preview = false;
         active.tracking.forgetBlame(self.allocator);
         self.git.refresh();
         if (self.loader.dir) |dir| {
@@ -697,7 +717,7 @@ pub const Editor = struct {
             return null;
         }
         return switch (action) {
-            .quit, .close => if (choice == .yes) self.save() else self.goOn(.no),
+            .leave, .close => if (choice == .yes) self.save() else self.goOn(.no),
             .reload => self.goOn(choice),
         };
     }
@@ -707,7 +727,7 @@ pub const Editor = struct {
         const action = self.pending orelse return null;
         self.pending = null;
         switch (action) {
-            .quit => |index| return self.quitFrom(index + 1),
+            .leave => |going| return self.leaveFrom(going.from + 1, going.then),
             .close => self.closeActive(),
             .reload => |target| {
                 if (choice == .yes) {
@@ -728,9 +748,10 @@ pub const Editor = struct {
     /// Takes a result from the mailbox and frees it.
     pub fn receive(self: *Editor, posted: Posted) ?Request {
         switch (posted) {
-            .found => |found| self.project.receive(found),
-            .search_done => |done| self.project.done(done),
-            .terminal => |output| self.terminals.receive(output),
+            .terminal => |output| {
+                self.terminals.receive(output);
+                self.disk_check_ms = self.now_ms + disk_rest_ms;
+            },
             .git => |job| {
                 defer self.refreshVisible(self.root);
                 return self.git.receive(job);
@@ -763,11 +784,17 @@ pub const Editor = struct {
     fn drop(self: *Editor, posted: Posted) void {
         switch (posted) {
             .picked => |picked| self.allocator.free(picked.path),
-            .found => |found| project_search.freeFound(self.allocator, found),
             .terminal => |output| if (output.bytes) |bytes| self.allocator.free(bytes),
             // `Git.deinit` already freed it.
-            .git, .cancelled, .dialog_failed, .search_done => {},
+            .git, .cancelled, .dialog_failed => {},
         }
+    }
+
+    /// Files may have changed outside: the file tree reads the folder again
+    /// and git looks again, also for a repository made or deleted.
+    pub fn diskChanged(self: *Editor) void {
+        self.disk_version +%= 1;
+        self.git.refresh();
     }
 
     /// Reloads files that changed on disk. A file with unsaved changes is
@@ -811,27 +838,6 @@ pub const Editor = struct {
         self.afterEdit();
     }
 
-    /// Opens the file of a search hit and selects the match.
-    pub fn openHit(self: *Editor, hit: project_search.Hit) void {
-        self.open(hit.path);
-        const active = self.file();
-        if (active.path == null or !std.mem.eql(u8, active.path.?, hit.path)) return;
-        const buffer = &active.doc.buffer;
-        const start = @min(buffer.lineStart(@min(hit.line, buffer.lineCount() - 1)) + hit.column, buffer.len());
-        active.doc.cursor = .{ .anchor = start, .pos = @min(start + hit.len, buffer.len()) };
-        self.focus = .editor;
-        self.afterEdit();
-    }
-
-    /// Searches every file of the open folder for `needle`, on a thread.
-    pub fn findInProject(self: *Editor, needle: []const u8) void {
-        const folder = self.folder orelse return self.notify("Open a folder first", .{});
-        const mailbox = self.mailbox orelse return;
-        if (needle.len == 0) return;
-        const query: @import("../core/search.zig").Query = .{ .needle = needle, .options = self.find.options };
-        self.project.start(mailbox, folder, query, self.settings.search_exclude) catch |err| self.notify("Could not search: {t}", .{err});
-    }
-
     pub fn openFolder(self: *Editor, path: []const u8) void {
         const copy_ = self.allocator.dupe(u8, path) catch return;
         self.setFolder(copy_);
@@ -842,12 +848,26 @@ pub const Editor = struct {
         self.remember();
     }
 
-    /// The next start shows the welcome screen.
-    pub fn closeFolder(self: *Editor) void {
-        if (self.folder == null) return;
+    /// Closes every file, asking about unsaved changes first, then the
+    /// folder: the welcome screen shows, now and on the next start.
+    pub fn closeFolder(self: *Editor) ?Request {
+        if (self.folder == null) return null;
+        self.dropPending();
+        return self.leaveFrom(0, .close_folder);
+    }
+
+    fn closeAll(self: *Editor) void {
+        const root = Node.create(self.allocator) catch return self.notify("Could not close the folder", .{});
+        self.destroyTabs(self.root);
+        self.root.destroy(self.allocator);
+        for (self.files.items) |item| item.destroy();
+        self.files.clearRetainingCapacity();
+        self.root = root;
+        self.pane = root;
+        self.addPlaceholder() catch {};
         self.setFolder(null);
         self.git.close();
-        if (self.focus == .sidebar) self.focus = .editor;
+        self.focus = .editor;
         self.remember();
     }
 
@@ -899,9 +919,9 @@ pub const Editor = struct {
         self.loader.save("state", state) catch |err| self.notify("Could not save state.zon: {t}", .{err});
     }
 
-    /// Nothing is open yet: no folder, and one blank tab.
+    /// Nothing is open: no folder and no file.
     pub fn welcome(self: *const Editor) bool {
-        return self.folder == null and self.root.kind == .pane and self.pane.pane().tabs.items.len == 1 and self.file().isBlank();
+        return self.folder == null and self.empty();
     }
 
     // Focus and docks
@@ -914,7 +934,13 @@ pub const Editor = struct {
         };
     }
 
+    /// The sidebar panel shown: the git panel only inside a repository.
+    pub fn sidePanel(self: *const Editor) SidePanel {
+        return if (self.side_panel == .git and !self.git.ready()) .files else self.side_panel;
+    }
+
     pub fn showSide(self: *Editor, panel: SidePanel) void {
+        if (panel == .git and !self.git.ready()) return self.notify("No git repository", .{});
         if (self.side_panel != panel) {
             self.side_panel = panel;
             self.remember();
@@ -923,11 +949,10 @@ pub const Editor = struct {
         if (panel == .git) self.git.refresh();
     }
 
-    /// The terminal panel starts a terminal when it has none.
-    pub fn showBottom(self: *Editor, panel: BottomPanel) void {
-        self.bottom_panel = panel;
+    /// Shows and focuses the terminals, starting one when there is none.
+    pub fn showTerminal(self: *Editor) void {
         self.focusArea(.bottom);
-        if (panel == .terminal and self.terminals.list.items.len == 0) self.openTerminal();
+        if (self.terminals.list.items.len == 0) self.openTerminal();
     }
 
     /// The sidebar can only have focus while a folder is open.
@@ -954,19 +979,19 @@ pub const Editor = struct {
             .env = self.environ,
             .scrollback = self.settings.terminal_scrollback,
         }) catch |err| return self.notify("Could not start a terminal: {t}", .{err});
-        self.showBottom(.terminal);
+        self.showTerminal();
     }
 
     /// Shows the terminal panel, or hides it when it has focus.
     pub fn toggleTerminal(self: *Editor) void {
-        if (self.bottom.shown and self.bottom_panel == .terminal and self.focus == .bottom) return self.toggleDock(.bottom);
-        self.showBottom(.terminal);
+        if (self.bottom.shown and self.focus == .bottom) return self.toggleDock(.bottom);
+        self.showTerminal();
     }
 
     /// Closing the last terminal hides the panel.
     pub fn closeTerminal(self: *Editor, index: usize) void {
         self.terminals.close(index);
-        if (self.terminals.list.items.len == 0 and self.bottom_panel == .terminal) {
+        if (self.terminals.list.items.len == 0) {
             self.bottom.shown = false;
             self.focus = .editor;
         }
@@ -1058,6 +1083,11 @@ pub const Editor = struct {
     /// True when something on screen changed.
     pub fn tick(self: *Editor) bool {
         var changed = false;
+        if (self.disk_check_ms) |at| if (self.now_ms >= at) {
+            self.disk_check_ms = null;
+            self.diskChanged();
+            changed = true;
+        };
         for (self.files.items) |item| {
             if (item.role != .text or item.path == null) continue;
             const tracking = &item.tracking;
@@ -1073,7 +1103,7 @@ pub const Editor = struct {
 
     /// Milliseconds until the screen must change by itself, if ever.
     pub fn timeLeft(self: *const Editor) ?u64 {
-        var left: ?u64 = null;
+        var left: ?u64 = if (self.disk_check_ms) |at| at -| self.now_ms else null;
         for (self.files.items) |item| if (item.tracking.timeLeft(self.now_ms)) |ms| {
             left = @min(ms, left orelse ms);
         };
@@ -1183,13 +1213,14 @@ pub const Editor = struct {
     pub fn status(self: *const Editor) Status {
         return .{
             .branch = if (self.git.ready()) self.git.status.branch else "",
-            .language = if (self.welcome()) "" else if (self.file().highlighter.rules) |rules| rules.grammar.name else plain_text,
+            .language = if (self.empty()) "" else if (self.file().highlighter.rules) |rules| rules.grammar.name else plain_text,
+            .terminal = self.bottom.shown,
         };
     }
 
     /// Window title: the file name, with a dot when there are unsaved changes.
     pub fn title(self: *const Editor, buffer: []u8) []const u8 {
-        if (self.welcome()) return "8-Bit";
+        if (self.empty()) return "8-Bit";
         const dot = if (self.isModified()) "\u{25CF} " else "";
         return std.fmt.bufPrint(buffer, "{s}{s} - 8-Bit", .{ dot, self.name() }) catch "8-Bit";
     }

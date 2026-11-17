@@ -102,17 +102,17 @@ test "a bad settings file reports its line and keeps the defaults" {
     try testing.expect(!editor.view().wrap);
 }
 
-test "Alt+T switches themes, the settings file remembers it, and user themes join in" {
+test "Alt+Shift+T switches themes, the settings file remembers it, and user themes join in" {
     var session: Session = undefined;
     try session.init();
     defer session.deinit();
     const editor = &session.editor;
 
     try testing.expectEqual(app.ui.theme.Color.rgb(0x1e1f22), session.loadTheme().background);
-    _ = session.press("alt+t");
+    _ = session.press("alt+shift+t");
     try testing.expectEqualStrings("Theme: light", editor.lastMessage().?);
     try testing.expectEqualStrings("light", editor.settings.theme);
-    try testing.expectEqual(app.ui.theme.Color.rgb(0xf8f8f4), session.loadTheme().background);
+    try testing.expectEqual(app.ui.theme.Color.rgb(0xffffff), session.loadTheme().background);
     const text = try session.read("settings.zon");
     defer testing.allocator.free(text);
     try testing.expect(std.mem.indexOf(u8, text, ".theme = \"light\",") != null);
@@ -121,13 +121,13 @@ test "Alt+T switches themes, the settings file remembers it, and user themes joi
 
     // A user theme with one color; the rest comes from the dark theme.
     try session.write("themes/mine.zon", ".{ .text = 0xff0000 }");
-    _ = session.press("alt+t");
+    _ = session.press("alt+shift+t");
     try testing.expectEqualStrings("mine", editor.settings.theme);
     const mine = session.loadTheme();
     try testing.expectEqual(app.ui.theme.Color.rgb(0xff0000), mine.text);
     try testing.expectEqual(app.ui.theme.Color.rgb(0x1e1f22), mine.background);
 
-    _ = session.press("alt+t");
+    _ = session.press("alt+shift+t");
     try testing.expectEqualStrings("dark", editor.settings.theme);
 
     // A theme that does not exist: a message and the dark theme.

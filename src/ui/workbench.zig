@@ -2,8 +2,8 @@
 //! goes to the open menu or prompt, else to the focused panel, else to the
 //! key bindings. A click gives its panel focus. Each dock has a tab bar of
 //! its panels, and its edge can be dragged. Prompts that commands ask for
-//! are opened here. While nothing is open the editor area is the welcome
-//! screen.
+//! are opened here. While no file is open the editor area shows what to do
+//! next, and the recent folders while no folder is open either.
 const std = @import("std");
 const editor_zig = @import("../editor/editor.zig");
 const Editor = editor_zig.Editor;
@@ -26,8 +26,6 @@ const Menu = menu_zig.Menu;
 const Find = @import("../editor/find.zig").Find;
 const EditorView = @import("panels/editor_view.zig").EditorView;
 const FileTree = @import("panels/file_tree.zig").FileTree;
-const Messages = @import("panels/messages.zig").Messages;
-const Search = @import("panels/search.zig").Search;
 const GitPanel = @import("panels/git.zig").GitPanel;
 const TerminalPanel = @import("panels/terminal.zig").TerminalPanel;
 const Welcome = @import("panels/welcome.zig").Welcome;
@@ -37,7 +35,9 @@ const event = @import("../platform/event.zig");
 const Event = event.Event;
 const Area = editor_zig.Area;
 const SidePanel = editor_zig.SidePanel;
-const BottomPanel = editor_zig.BottomPanel;
+
+/// Rows scrolled per step of the mouse wheel.
+const wheel_rows = 3;
 
 pub const Outcome = struct {
     request: ?Request = null,
@@ -55,8 +55,6 @@ pub const Workbench = struct {
     welcome: Welcome,
     view: EditorView,
     files: FileTree,
-    messages: Messages,
-    search: Search,
     git: GitPanel,
     terminal: TerminalPanel,
     /// The find prompt asks what to replace; Enter then asks for the replacement.
@@ -71,6 +69,10 @@ pub const Workbench = struct {
     captured: ?Area = null,
     /// The last key was used, so the text it also types is dropped.
     swallow_text: bool = false,
+    /// Where the mouse is, in window pixels, for hover colors.
+    mouse: ?[2]f32 = null,
+    /// Wheel rows not scrolled yet: x, y.
+    wheel_rest: [2]f32 = .{ 0, 0 },
 
     /// In place, because the panels point into it.
     pub fn init(self: *Workbench, editor: *Editor) void {
@@ -80,8 +82,6 @@ pub const Workbench = struct {
             .welcome = .{ .editor = editor },
             .view = .{ .editor = editor, .menu = &self.menu },
             .files = .{ .editor = editor, .prompt = &self.prompt, .menu = &self.menu },
-            .messages = .{ .editor = editor },
-            .search = .{ .editor = editor },
             .git = .{ .editor = editor, .prompt = &self.prompt },
             .terminal = .{ .editor = editor },
         };
@@ -99,7 +99,7 @@ pub const Workbench = struct {
         return .init(self.editor.zoom);
     }
 
-    fn frame(self: *const Workbench) Frame {
+    pub fn frame(self: *const Workbench) Frame {
         const editor = self.editor;
         return .init(
             self.width,
@@ -112,9 +112,9 @@ pub const Workbench = struct {
 
     fn panelOf(self: *Workbench, area: Area) Panel {
         return switch (area) {
-            .sidebar => self.sidePanel(self.editor.side_panel),
-            .editor => if (self.editor.welcome()) .of(Welcome, &self.welcome) else .of(EditorView, &self.view),
-            .bottom => self.bottomPanel(self.editor.bottom_panel),
+            .sidebar => self.sidePanel(self.editor.sidePanel()),
+            .editor => if (self.editor.empty()) .of(Welcome, &self.welcome) else .of(EditorView, &self.view),
+            .bottom => .of(TerminalPanel, &self.terminal),
         };
     }
 
@@ -125,39 +125,14 @@ pub const Workbench = struct {
         };
     }
 
-    fn bottomPanel(self: *Workbench, which: BottomPanel) Panel {
-        return switch (which) {
-            .messages => .of(Messages, &self.messages),
-            .search => .of(Search, &self.search),
-            .terminal => .of(TerminalPanel, &self.terminal),
-        };
-    }
+    const side_panels = std.enums.values(SidePanel);
 
-    const max_dock_panels = 4;
-
-    /// One tab per panel of a dock, and the index of the one shown.
-    fn dockTabs(self: *Workbench, area: Area, items: *[max_dock_panels]tabs.Item) struct { []const tabs.Item, usize } {
-        switch (area) {
-            inline .sidebar, .bottom => |dock| {
-                const Which = if (dock == .sidebar) SidePanel else BottomPanel;
-                const values = comptime std.enums.values(Which);
-                inline for (values, 0..) |which, i| {
-                    const shown = if (dock == .sidebar) self.sidePanel(which) else self.bottomPanel(which);
-                    items[i] = .{ .title = shown.title(), .closable = false };
-                }
-                const active = if (dock == .sidebar) self.editor.side_panel else self.editor.bottom_panel;
-                return .{ items[0..values.len], @backingInt(active) };
-            },
-            .editor => unreachable,
-        }
-    }
-
-    fn selectDock(self: *Workbench, area: Area, index: usize) void {
-        switch (area) {
-            .sidebar => self.editor.showSide(@fromBackingInt(@intCast(index))),
-            .bottom => self.editor.showBottom(@fromBackingInt(@intCast(index))),
-            .editor => unreachable,
-        }
+    /// One tab per sidebar panel, and the index of the one shown. The git
+    /// panel, the last one, has no tab outside a repository.
+    fn sideTabs(self: *Workbench, items: *[side_panels.len]tabs.Item) struct { []const tabs.Item, usize } {
+        for (side_panels, items) |which, *item| item.* = .{ .title = self.sidePanel(which).title(), .closable = false };
+        const count = if (self.editor.git.ready()) side_panels.len else side_panels.len - 1;
+        return .{ items[0..count], @backingInt(self.editor.sidePanel()) };
     }
 
     fn rectOf(target: Frame, area: Area) ?Rect {
@@ -168,10 +143,10 @@ pub const Workbench = struct {
         };
     }
 
-    /// Where the panel of an area draws: docks have a title bar on top.
+    /// Where the panel of an area draws: the sidebar has its tabs on top.
     fn contentOf(self: *const Workbench, target: Frame, area: Area) ?Rect {
         const rect = rectOf(target, area) orelse return null;
-        return if (area == .editor) rect else rect.splitTop(self.metrics().bar())[1];
+        return if (area == .sidebar) rect.splitTop(self.metrics().bar())[1] else rect;
     }
 
     fn look(self: *Workbench) Look {
@@ -180,24 +155,24 @@ pub const Workbench = struct {
             self.theme = theme_zig.load(editor.loader, editor.config_arena.allocator(), editor.settings.theme, editor);
             self.theme_version = editor.config_version;
         }
-        return .{ .theme = &self.theme, .metrics = self.metrics() };
+        return .{ .theme = &self.theme, .metrics = self.metrics(), .mouse = self.mouse };
     }
 
     pub fn draw(self: *Workbench, canvas: Canvas) void {
         const style = self.look();
         const theme = style.theme;
         const target = self.frame();
-        canvas.fillRect(.{ .w = self.width, .h = self.height }, theme.border);
+        canvas.fillRect(.{ .w = self.width, .h = self.height }, theme.background);
         for (std.enums.values(Area)) |area| {
             const rect = rectOf(target, area) orelse continue;
             const focused = self.editor.focus == area;
-            canvas.fillRect(rect, theme.background);
+            canvas.fillRect(rect, if (area == .editor) theme.background else theme.panel);
             const content = self.contentOf(target, area).?;
             const item = self.panelOf(area);
-            if (area != .editor) {
-                var items: [max_dock_panels]tabs.Item = undefined;
-                const shown, const active = self.dockTabs(area, &items);
-                tabs.draw(canvas, style, rect.splitTop(style.metrics.bar())[0], shown, active, focused);
+            if (area == .sidebar) {
+                var items: [side_panels.len]tabs.Item = undefined;
+                const shown, const active = self.sideTabs(&items);
+                tabs.draw(canvas, style, rect.splitTop(style.metrics.bar())[0], .dock, shown, active, focused);
             }
             canvas.setClip(content);
             item.draw(canvas, style, content, focused);
@@ -247,6 +222,7 @@ pub const Workbench = struct {
 
     pub fn handle(self: *Workbench, ev: Event) Outcome {
         const editor = self.editor;
+        if (ev == .mouse_move) self.mouse = .{ ev.mouse_move.x * self.density, ev.mouse_move.y * self.density };
         if (self.menu.isOpen()) switch (ev) {
             .key, .text, .mouse_down, .mouse_move, .mouse_up, .wheel => return self.toMenu(ev),
             else => {},
@@ -255,8 +231,7 @@ pub const Workbench = struct {
             .quit => return self.run(.quit),
             .redraw, .wake => {},
             .focus => |gained| if (gained) {
-                self.files.refresh();
-                editor.git.refresh();
+                editor.diskChanged();
                 return .{ .request = editor.checkDisk() };
             },
             .key => |press| return self.onKey(press),
@@ -274,7 +249,8 @@ pub const Workbench = struct {
                     editor.dock(if (edge == .sidebar) .sidebar else .bottom).size = self.frame().sizeAt(edge, self.metrics(), x, y);
                     return .{};
                 }
-                const area = self.captured orelse return .{ .redraw = false };
+                // Without a capture only hover colors change.
+                const area = self.captured orelse return .{};
                 var scaled = mouse;
                 scaled.x = x;
                 scaled.y = y;
@@ -290,13 +266,14 @@ pub const Workbench = struct {
                 return self.toPanel(area, .{ .mouse_up = scaled });
             },
             .wheel => |wheel| {
-                if (wheel.mods.ctrl) {
-                    if (wheel.dy == 0) return .{ .redraw = false };
-                    return self.run(if (wheel.dy > 0) .zoom_in else .zoom_out);
-                }
+                const rows = self.wheelRows(wheel);
+                if (rows[0] == 0 and rows[1] == 0) return .{ .redraw = false };
+                if (wheel.mods.ctrl) return self.run(if (rows[1] > 0) .zoom_in else .zoom_out);
                 var scaled = wheel;
                 scaled.x *= self.density;
                 scaled.y *= self.density;
+                scaled.dx = rows[0];
+                scaled.dy = rows[1];
                 const area = self.areaAt(scaled.x, scaled.y) orelse return .{ .redraw = false };
                 return self.toPanel(area, .{ .wheel = scaled });
             },
@@ -309,7 +286,7 @@ pub const Workbench = struct {
         const editor = self.editor;
         const command = keymap.lookup(editor.bindings, press.key, press.mods);
         if (self.prompt.kind) |kind| {
-            if (command) |found| if (kind == .find or kind == .replace or kind == .find_in_project) {
+            if (command) |found| if (kind == .find or kind == .replace) {
                 if (worksInFind(found)) {
                     self.swallow_text = true;
                     return self.run(found);
@@ -339,7 +316,7 @@ pub const Workbench = struct {
         return self.fulfilHere(commands.run(self.editor, command));
     }
 
-    /// Commands that work while find, replace or find in project is open.
+    /// Commands that work while find or replace is open.
     fn worksInFind(command: commands.Command) bool {
         return switch (command) {
             .find, .replace, .find_next, .find_prev, .replace_all, .toggle_match_case, .toggle_whole_word => true,
@@ -363,13 +340,6 @@ pub const Workbench = struct {
                 break :blk .{ "Replace with:", find.replacement.items };
             },
             .goto_line => .{ "Go to line:", "" },
-            .find_in_project => blk: {
-                const project = &editor.project.needle;
-                if (!Find.copySelection(editor.allocator, editor.doc(), project) and project.items.len == 0) {
-                    project.appendSlice(editor.allocator, find.needle.items) catch {};
-                }
-                break :blk .{ "Find in folder:", project.items };
-            },
             .language => .{ "Language:", "" },
             .new_file, .new_folder, .rename, .branch => unreachable,
         };
@@ -402,10 +372,6 @@ pub const Workbench = struct {
             .goto_line => editor.gotoLine(text),
             .language => editor.setLanguage(text),
             .branch => editor.git.createBranch(text),
-            .find_in_project => {
-                editor.findInProject(text);
-                if (editor.project.running) editor.showBottom(.search);
-            },
         }
         return .{};
     }
@@ -425,10 +391,10 @@ pub const Workbench = struct {
     /// "3 of 12" for find and replace, and the options.
     fn promptNotes(self: *Workbench, buffer: []u8, notes: *[3]prompt_zig.Note, theme: *const theme_zig.Theme) []const prompt_zig.Note {
         const kind = self.prompt.kind orelse return &.{};
-        if (kind != .find and kind != .replace and kind != .find_in_project) return &.{};
+        if (kind != .find and kind != .replace) return &.{};
         const find = &self.editor.find;
         const count = find.matches.items.len;
-        const counted = if (kind == .find_in_project or find.needle.items.len == 0)
+        const counted = if (find.needle.items.len == 0)
             ""
         else if (count == 0)
             "No matches"
@@ -454,16 +420,22 @@ pub const Workbench = struct {
             self.dragging = edge;
             return .{};
         }
-        inline for (.{ Area.sidebar, Area.bottom }) |area| if (rectOf(target, area)) |rect| {
+        // The terminal button hides a shown terminal even without focus.
+        if (status_bar.terminalButton(self.metrics(), target.status).contains(scaled.x, scaled.y)) {
+            if (!self.editor.status().terminal) return self.run(.toggle_terminal);
+            self.editor.toggleDock(.bottom);
+            return .{};
+        }
+        if (target.sidebar) |rect| {
             const bar = rect.splitTop(self.metrics().bar())[0];
             if (bar.contains(scaled.x, scaled.y)) {
-                var items: [max_dock_panels]tabs.Item = undefined;
-                const shown, const active = self.dockTabs(area, &items);
-                const hit = tabs.hit(bar, self.metrics(), shown, active, scaled.x, scaled.y);
-                if (hit) |found| self.selectDock(area, found.index) else self.editor.focus = area;
+                var items: [side_panels.len]tabs.Item = undefined;
+                const shown, const active = self.sideTabs(&items);
+                const hit = tabs.hit(bar, self.metrics(), .dock, shown, active, scaled.x, scaled.y);
+                if (hit) |found| self.editor.showSide(side_panels[found.index]) else self.editor.focus = .sidebar;
                 return .{};
             }
-        };
+        }
         const area = self.areaAt(scaled.x, scaled.y) orelse return .{ .redraw = false };
         self.editor.focus = area;
         self.captured = area;
@@ -479,11 +451,25 @@ pub const Workbench = struct {
         return null;
     }
 
+    /// Wheel steps as whole rows. Smooth wheels and touchpads send parts of
+    /// a step; they add up until they make a row.
+    fn wheelRows(self: *Workbench, wheel: event.Wheel) [2]f32 {
+        var rows: [2]f32 = undefined;
+        for (&self.wheel_rest, &rows, [2]f32{ wheel.dx, wheel.dy }) |*rest, *whole, steps| {
+            rest.* += steps * wheel_rows;
+            whole.* = @trunc(rest.*);
+            rest.* -= whole.*;
+        }
+        return rows;
+    }
+
     /// Passes an event to a panel. `redraw` tells whether it used it.
     fn toPanel(self: *Workbench, area: Area, ev: Event) Outcome {
         const content = self.contentOf(self.frame(), area) orelse return .{ .redraw = false };
         const handled = self.panelOf(area).handle(ev, self.metrics(), content);
-        return .{ .request = handled.request, .redraw = handled.used };
+        var outcome = self.fulfilHere(handled.request);
+        outcome.redraw = handled.used or outcome.request != null;
+        return outcome;
     }
 
     /// The answer to an `ask` request.
@@ -502,9 +488,16 @@ pub const Workbench = struct {
         if (self.prompt.kind != null) {
             self.prompt.typeText(text);
             self.promptChanged();
-        } else if (editor.focus == .bottom and editor.bottom_panel == .terminal) {
+        } else if (editor.focus == .bottom) {
             self.terminal.paste(text);
         } else editor.paste(text);
+    }
+
+    /// The dock edge being dragged, or under the mouse: it gets a resize cursor.
+    pub fn edgeCursor(self: *const Workbench) ?Frame.Edge {
+        if (self.dragging) |edge| return edge;
+        const at = self.mouse orelse return null;
+        return self.frame().edgeAt(at[0], at[1]);
     }
 
     /// Milliseconds until the screen must change by itself, if ever.

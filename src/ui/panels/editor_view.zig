@@ -19,14 +19,13 @@ const Look = panel.Look;
 const Handled = panel.Handled;
 const tabs = @import("../widgets/tabs.zig");
 const menu_zig = @import("../widgets/menu.zig");
+const scrollbar_zig = @import("../widgets/scrollbar.zig");
+const Scrollbar = scrollbar_zig.Scrollbar;
 const commands = @import("../../editor/commands.zig");
 const Color = @import("../theme.zig").Color;
 const Event = @import("../../platform/event.zig").Event;
 const syntax = @import("../../syntax/syntax.zig");
 const Style = @import("../../syntax/grammar.zig").Style;
-
-/// Rows scrolled per step of the mouse wheel.
-const wheel_rows = 3;
 
 pub const EditorView = struct {
     editor: *Editor,
@@ -38,7 +37,8 @@ pub const EditorView = struct {
     /// The styled spans of the line being drawn.
     spans: std.ArrayList(syntax.Span) = .empty,
     /// What the left mouse button is doing since it went down.
-    drag: union(enum) { none, select, split: *panes.Split } = .none,
+    /// `scroll` holds which scrollbar, and where its thumb was grabbed.
+    drag: union(enum) { none, select, split: *panes.Split, scroll: struct { axis: scrollbar_zig.Axis, grabbed: f32 } } = .none,
 
     pub fn deinit(self: *EditorView) void {
         const allocator = self.editor.allocator;
@@ -58,16 +58,47 @@ pub const EditorView = struct {
         layout.placePanes(self.editor.allocator, self.editor.root, rect, &self.placed, &self.splitters) catch {};
     }
 
-    /// The text layout of a pane, for the tab it shows.
+    /// The text layout of a pane, for the tab it shows, inside the scrollbars.
     fn textLayout(self: *const EditorView, rect: Rect, metrics: Metrics, tab: *const Tab) TextLayout {
         const lines: ?usize = if (self.editor.settings.line_numbers) tab.file.doc.buffer.lineCount() else null;
-        return .init(rect.splitTop(metrics.bar())[1], metrics, lines, decoration.gutterTextWidth(tab.decorations.items));
+        var area = rect.splitTop(metrics.bar())[1];
+        area.w = @max(0, area.w - Scrollbar.width(metrics));
+        area.h = @max(0, area.h - Scrollbar.width(metrics));
+        return .init(area, metrics, lines, decoration.gutterTextWidth(tab.decorations.items));
+    }
+
+    /// The scrollbars of a pane: lines at the right, columns of the widest
+    /// line on screen below the text. Without wrap only.
+    fn scrollbars(self: *const EditorView, rect: Rect, metrics: Metrics, tab: *const Tab) [2]Scrollbar {
+        const text = self.textLayout(rect, metrics, tab).text;
+        const view = &tab.view;
+        const doc = &tab.file.doc;
+        const lines = doc.buffer.lineCount();
+        var widest: usize = 0;
+        for (view.top.line..@min(lines, view.top.line + view.rows)) |line| widest = @max(widest, doc.columnOf(doc.buffer.lineEnd(line)));
+        const right = Scrollbar.rightOf(rect.splitTop(metrics.bar())[1], metrics);
+        return .{
+            .{ .track = .{ .x = right.x, .y = right.y, .w = right.w, .h = text.h }, .first = view.top.line, .last = lines - 1, .shown = view.rows },
+            .{
+                .track = .{ .x = text.x, .y = text.y + text.h, .w = text.w, .h = right.w },
+                .axis = .horizontal,
+                .first = view.left,
+                .last = if (view.wrap) 0 else @max((widest + 1) -| view.cols, view.left),
+                .shown = view.cols,
+            },
+        };
+    }
+
+    /// Scrolls a tab to what a scrollbar was dragged to.
+    fn scrollTo(tab: *Tab, bar: Scrollbar, at: f32, grabbed: f32) void {
+        const first = bar.firstAt(at, grabbed);
+        if (bar.axis == .vertical) tab.view.top = .{ .line = first } else tab.view.left = first;
     }
 
     fn tabItems(self: *EditorView, pane: *const panes.Pane) []const tabs.Item {
         self.items.clearRetainingCapacity();
         for (pane.tabs.items) |tab| {
-            self.items.append(self.editor.allocator, .{ .title = tab.file.name(), .modified = tab.file.isModified() }) catch break;
+            self.items.append(self.editor.allocator, .{ .title = tab.file.name(), .modified = tab.file.isModified(), .preview = tab.file.preview }) catch break;
         }
         return self.items.items;
     }
@@ -77,13 +108,14 @@ pub const EditorView = struct {
         for (self.placed.items) |item| {
             const pane = item.node.pane();
             const active = item.node == self.editor.pane;
-            tabs.draw(canvas, look, item.rect.splitTop(look.metrics.bar())[0], self.tabItems(pane), pane.active, focused and active);
+            tabs.draw(canvas, look, item.rect.splitTop(look.metrics.bar())[0], .files, self.tabItems(pane), pane.active, focused and active);
             const tab = pane.tab();
             const text = self.textLayout(item.rect, look.metrics, tab);
             tab.view.setSize(&tab.file.doc, self.editor.cursorOf(tab).pos, text.cols, text.rows);
             canvas.setClip(.{ .x = text.gutter.x, .y = text.gutter.y, .w = text.gutter.w + text.text.w, .h = text.text.h });
             drawTab(canvas, look, self.editor, tab, &text, focused and active, &self.spans);
             canvas.setClip(null);
+            for (self.scrollbars(item.rect, look.metrics, tab)) |bar| bar.draw(canvas, look);
         }
         for (self.splitters.items) |splitter| canvas.fillRect(splitter.line, look.theme.border);
     }
@@ -105,13 +137,20 @@ pub const EditorView = struct {
                 const pane = item.node.pane();
                 const bar = item.rect.splitTop(metrics.bar())[0];
                 if (bar.contains(mouse.x, mouse.y)) {
-                    const hit = tabs.hit(bar, metrics, self.tabItems(pane), pane.active, mouse.x, mouse.y) orelse return .yes;
+                    const hit = tabs.hit(bar, metrics, .files, self.tabItems(pane), pane.active, mouse.x, mouse.y) orelse return .yes;
                     editor.switchTo(item.node, hit.index);
                     if (hit.close or mouse.button == .middle) return .{ .request = editor.closeTab(hit.index) };
                     return .yes;
                 }
                 if (mouse.button == .middle) return .yes;
                 if (item.node != editor.pane) editor.switchTo(item.node, pane.active);
+                for (self.scrollbars(item.rect, metrics, pane.tab())) |bar_| {
+                    if (!bar_.visible() or !bar_.track.contains(mouse.x, mouse.y)) continue;
+                    const at = bar_.along(mouse.x, mouse.y);
+                    self.drag = .{ .scroll = .{ .axis = bar_.axis, .grabbed = bar_.grab(at) } };
+                    scrollTo(pane.tab(), bar_, at, self.drag.scroll.grabbed);
+                    return .yes;
+                }
                 const cell = self.textLayout(item.rect, metrics, pane.tab()).cellAt(mouse.x, mouse.y);
                 if (mouse.button == .right) return self.openMenu(cell, mouse.x, mouse.y);
                 editor.mouseDown(cell.x, cell.y, mouse.clicks, mouse.mods.shift);
@@ -127,6 +166,11 @@ pub const EditorView = struct {
                     const cell = self.textLayout(item.rect, metrics, item.node.pane().tab()).cellAt(mouse.x, mouse.y);
                     editor.mouseDrag(cell.x, cell.y);
                 },
+                .scroll => |scroll| for (self.placed.items) |item| if (item.node == editor.pane) {
+                    const tab = item.node.pane().tab();
+                    const bar_ = self.scrollbars(item.rect, metrics, tab)[@backingInt(scroll.axis)];
+                    scrollTo(tab, bar_, bar_.along(mouse.x, mouse.y), scroll.grabbed);
+                },
             },
             .mouse_up => {
                 const was = self.drag;
@@ -140,8 +184,8 @@ pub const EditorView = struct {
                     if (wheel.dy != 0 and item.node == editor.pane) editor.cycleTab(if (wheel.dy > 0) -1 else 1);
                     return .yes;
                 }
-                const rows: isize = @intFromFloat(-wheel.dy * wheel_rows);
-                const cols: isize = @intFromFloat(wheel.dx * wheel_rows);
+                const rows: isize = @intFromFloat(-wheel.dy);
+                const cols: isize = @intFromFloat(wheel.dx);
                 const tab = pane.tab();
                 // Shift turns the wheel sideways.
                 if (wheel.mods.shift) tab.view.scrollBy(&tab.file.doc, 0, rows) else tab.view.scrollBy(&tab.file.doc, rows, cols);
@@ -350,7 +394,7 @@ const Painter = struct {
         const first = view.firstColumn(row.wrap);
         if (column < first or column - first >= view.cols) return;
         var bar = self.layout.cellRect(column - first, visible.y + row.wrap - visible.first_wrap, 0);
-        bar.w = @max(1, @floor(self.layout.metrics.cell / 8));
+        bar.w = self.layout.metrics.caret();
         self.canvas.fillRect(bar, self.look.theme.cursor);
     }
 
@@ -366,7 +410,7 @@ const Painter = struct {
             .removed => theme.git_removed,
             .diff_added => theme.diff_added,
             .diff_removed => theme.diff_removed,
-            .diff_header => theme.tab,
+            .diff_header => theme.panel,
         };
     }
 };

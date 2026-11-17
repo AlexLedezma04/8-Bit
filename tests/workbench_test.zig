@@ -37,7 +37,8 @@ test "the file tree: folders first, .git hidden, click opens, keys open folders"
     try testing.expectEqual(app.editor.editor.Area.editor, editor.focus);
     session.typeKeys("Z");
     try testing.expect(session.shows("Zex"));
-    try testing.expectEqual(@as(usize, 2), editor.pane.pane().tabs.items.len);
+    // b.txt was a preview, never saved: x.txt took its tab.
+    try testing.expectEqual(@as(usize, 1), editor.pane.pane().tabs.items.len);
 }
 
 test "new, rename and delete from the tree, through the prompt and a question" {
@@ -79,13 +80,10 @@ test "new, rename and delete from the tree, through the prompt and a question" {
     try testing.expectEqual(@as(?i96, null), fs.modTime(testing.io, session.path("renamed.txt")));
     for (session.workbench.files.entries.items) |entry| try testing.expect(!std.mem.endsWith(u8, entry.path, "renamed.txt"));
 
-    // Every message is in the messages panel.
-    _ = session.press("alt+0");
-    try testing.expect(session.shows("Messages"));
-    try testing.expect(session.shows("Deleted renamed.txt"));
+    try testing.expectEqualStrings("Deleted renamed.txt", editor.lastMessage().?);
 }
 
-test "docks: the sidebar while a folder is open, Ctrl+J, and their edges can be dragged" {
+test "docks: the sidebar while a folder is open, the terminal, and their edges can be dragged" {
     var session: Session = undefined;
     try session.init();
     defer session.deinit();
@@ -97,24 +95,28 @@ test "docks: the sidebar while a folder is open, Ctrl+J, and their edges can be 
     _ = session.press("alt+1");
     try testing.expectEqual(app.editor.editor.Area.editor, editor.focus);
     editor.openFolder(session.folderPath());
+    editor.open(session.path("a/x.txt"));
     session.draw();
     try testing.expect(session.shows("Files"));
-    _ = session.press("ctrl+j");
-    try testing.expect(session.shows("Messages"));
+    _ = session.press("alt+t");
+    try testing.expect(session.shows("Terminal 1"));
+    // The bottom dock is the terminal: no Messages or Search.
+    try testing.expect(!session.shows("Messages"));
+    try testing.expect(!session.shows("Search"));
 
     // The sidebar edge is at 30 cells of 8 pixels.
     session.drag(240, 300, 320, 300);
     try testing.expectEqual(@as(u16, 40), editor.sidebar.size);
-    // The tab title starts one cell after the sidebar and its line.
-    try testing.expectEqual(@as(f32, 320 + 1 + 8), session.recorder.find("untitled").?.x);
-    // The bottom edge, from 10 rows to 20.
-    session.drag(400, 584 - 160, 400, 584 - 320);
+    // The tab title starts a cell and a half after the sidebar and its line.
+    try testing.expectEqual(@as(f32, 320 + 1 + 12), session.recorder.find("x.txt").?.x);
+    // The bottom edge, from 14 rows to 20.
+    session.drag(400, 576 - 224, 400, 576 - 320);
     try testing.expectEqual(@as(u16, 20), editor.bottom.size);
 
     // Zoom doubles every size, because sizes are in cells.
     session.drag(320, 300, 240, 300);
     _ = session.press("ctrl+=");
-    try testing.expectEqual(@as(f32, 30 * 16 + 1 + 16), session.recorder.find("untitled").?.x);
+    try testing.expectEqual(@as(f32, 30 * 16 + 1 + 24), session.recorder.find("x.txt").?.x);
 }
 
 test "split panes: their own tabs, click to focus, drag the line, close the last tab" {
@@ -151,4 +153,38 @@ test "split panes: their own tabs, click to focus, drag the line, close the last
     _ = session.click(button.x + 2, button.y + 4);
     try testing.expect(editor.root.kind == .pane);
     try testing.expectEqual(@as(usize, 2), editor.root.pane().tabs.items.len);
+}
+
+test "resize: the terminal's top edge and the sidebar's edge, with a resize cursor" {
+    var session: Session = undefined;
+    try session.init();
+    defer session.deinit();
+    const editor = &session.editor;
+    editor.open(session.path("b.txt"));
+    _ = session.press("alt+t");
+    const before = session.workbench.frame();
+    const bottom = before.bottom.?;
+    const side = before.sidebar.?;
+    const edge = side.x + side.w;
+
+    // Hovering an edge shows the resize cursor; elsewhere the arrow.
+    _ = session.send(.{ .mouse_move = .{ .x = 400, .y = bottom.y + 5, .left_down = false } });
+    try testing.expectEqual(@as(?app.ui.layout.Frame.Edge, .bottom), session.workbench.edgeCursor());
+    _ = session.send(.{ .mouse_move = .{ .x = edge + 5, .y = 200, .left_down = false } });
+    try testing.expectEqual(@as(?app.ui.layout.Frame.Edge, .sidebar), session.workbench.edgeCursor());
+    _ = session.send(.{ .mouse_move = .{ .x = 500, .y = 200, .left_down = false } });
+    try testing.expectEqual(@as(?app.ui.layout.Frame.Edge, null), session.workbench.edgeCursor());
+
+    // The terminal grows when its edge is dragged up, from just inside its tabs.
+    session.drag(400, bottom.y + 5, 400, bottom.y - 160);
+    try testing.expectEqual(@as(u16, editor.bottom.size), @as(u16, @intFromFloat(@round((before.status.y - (bottom.y - 160)) / 16))));
+    try testing.expect(session.workbench.frame().bottom.?.h > bottom.h + 150);
+    // The sidebar grows when its edge is dragged right, from the editor side.
+    session.drag(edge + 5, 200, edge + 165, 200);
+    try testing.expect(session.workbench.frame().sidebar.?.w > side.w + 150);
+    // Below the grip the terminal tabs are clicked, not dragged.
+    const size = editor.bottom.size;
+    const tabs = session.workbench.frame().bottom.?;
+    session.drag(tabs.x + 30, tabs.y + 12, tabs.x + 30, tabs.y - 88);
+    try testing.expectEqual(size, editor.bottom.size);
 }

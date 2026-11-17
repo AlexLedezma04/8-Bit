@@ -53,6 +53,7 @@ pub const MouseUp = struct { x: f32, y: f32, button: MouseButton };
 pub const MouseMove = struct { x: f32, y: f32, left_down: bool };
 
 /// Wheel steps; positive `dy` is away from the user. `x`, `y` is the mouse.
+/// Panels get whole rows instead, from the workbench.
 pub const Wheel = struct { x: f32, y: f32, dx: f32, dy: f32, mods: Mods };
 
 pub const Event = union(enum) {

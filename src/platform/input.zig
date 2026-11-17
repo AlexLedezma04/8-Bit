@@ -85,6 +85,8 @@ fn translate(ev: c.SDL_Event) ?Event {
         => .redraw,
         c.SDL_EVENT_WINDOW_FOCUS_GAINED => .{ .focus = true },
         c.SDL_EVENT_WINDOW_FOCUS_LOST => .{ .focus = false },
+        // Outside the window nothing is under the mouse.
+        c.SDL_EVENT_WINDOW_MOUSE_LEAVE => .{ .mouse_move = .{ .x = -1, .y = -1, .left_down = false } },
         c.SDL_EVENT_KEY_DOWN => .{ .key = .{
             .key = keyOf(ev.key.key) orelse return null,
             .mods = modsOf(ev.key.mod),

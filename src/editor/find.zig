@@ -46,7 +46,7 @@ pub const Find = struct {
     }
 
     /// Puts the selection into `out` if it is on one line.
-    pub fn copySelection(allocator: std.mem.Allocator, doc: *const Document, out: *std.ArrayList(u8)) bool {
+    fn copySelection(allocator: std.mem.Allocator, doc: *const Document, out: *std.ArrayList(u8)) bool {
         const selection = doc.cursor.selection();
         const one_line = doc.buffer.lineOf(selection.start) == doc.buffer.lineOf(selection.end);
         if (selection.len() == 0 or !one_line) return false;

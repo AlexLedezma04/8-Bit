@@ -28,8 +28,9 @@ pub const FileTree = struct {
     menu: *Menu,
     entries: std.ArrayList(Entry) = .empty,
     list: List = .{},
-    /// The `folder_version` of the editor that `entries` show.
+    /// The `folder_version` and `disk_version` of the editor that `entries` show.
     version: ?u32 = null,
+    disk_version: u32 = 0,
     /// The folder a new file goes in, or the path being renamed or deleted.
     target: ?[]u8 = null,
     /// What the prompt asks a name for.
@@ -43,7 +44,7 @@ pub const FileTree = struct {
     const Naming = enum { new_file, new_folder, rename };
 
     /// The menu items, in order.
-    const Action = enum { new_file, new_folder, copy, cut, paste, delete };
+    const Action = enum { new_file, new_folder, copy, cut, paste, delete, close_folder };
 
     const Entry = struct { path: []u8, depth: usize, is_dir: bool, open: bool = false };
 
@@ -79,10 +80,15 @@ pub const FileTree = struct {
 
     /// Reads the folder again when the editor opened another one.
     pub fn sync(self: *FileTree) void {
-        if (self.version == self.editor.folder_version) return;
-        self.version = self.editor.folder_version;
-        self.list = .{};
-        self.reload(&.{});
+        if (self.version != self.editor.folder_version) {
+            self.version = self.editor.folder_version;
+            self.disk_version = self.editor.disk_version;
+            self.list = .{};
+            self.reload(&.{});
+        } else if (self.disk_version != self.editor.disk_version) {
+            self.disk_version = self.editor.disk_version;
+            self.refresh();
+        }
     }
 
     /// Reads the folder, opening the folders in `open` again.
@@ -273,7 +279,7 @@ pub const FileTree = struct {
     /// What the right-click menu chose, for the entry it was opened on.
     pub fn choose(self: *FileTree, index: usize) ?Request {
         const entry = if (self.context) |at| if (at < self.entries.items.len) self.entries.items[at] else null else null;
-        return self.run(@enumFromInt(index), entry);
+        return self.run(@fromBackingInt(@intCast(index)), entry);
     }
 
     fn run(self: *FileTree, action: Action, entry: ?Entry) ?Request {
@@ -282,6 +288,7 @@ pub const FileTree = struct {
             .new_folder => self.ask(.new_folder, entry),
             .copy, .cut => if (entry) |found| self.setClip(found.path, action == .cut),
             .paste => self.paste(entry),
+            .close_folder => return self.editor.closeFolder(),
             .delete => {
                 const found = entry orelse return null;
                 self.setTarget(found.path);
@@ -303,6 +310,7 @@ pub const FileTree = struct {
             .{ .label = "Cut", .shortcut = "Ctrl+X", .enabled = on_entry },
             .{ .label = "Paste", .shortcut = "Ctrl+V", .enabled = self.clip != null },
             .{ .label = "Delete", .shortcut = "Delete", .enabled = on_entry },
+            .{ .label = "Close Folder", .shortcut = "Ctrl+Shift+W" },
         }, x, y, .of(FileTree, self));
     }
 
@@ -321,6 +329,7 @@ pub const FileTree = struct {
         self.sync();
         const count = self.entries.items.len;
         const rows = List.rowsIn(rect, metrics);
+        if (self.list.scrollbarEvent(event, rect, metrics, count)) return .yes;
         switch (event) {
             .key => |press| {
                 if (press.mods.ctrl and !press.mods.shift and !press.mods.alt) switch (press.key) {
@@ -361,7 +370,7 @@ pub const FileTree = struct {
                 .right => self.openMenu(mouse.x, mouse.y, rect, metrics),
                 .middle => {},
             },
-            .wheel => |wheel| self.list.scroll(@intFromFloat(-wheel.dy * 3), count, rows),
+            .wheel => |wheel| self.list.scroll(@intFromFloat(-wheel.dy), count, rows),
             else => return .no,
         }
         return .yes;
@@ -388,7 +397,7 @@ pub const FileTree = struct {
                 .text = std.fs.path.basename(entry.path),
                 .color = if (is_current) self.theme.accent else color,
                 .indent = entry.depth,
-                .icon = if (!entry.is_dir) ' ' else if (entry.open) 'v' else '>',
+                .icon = if (!entry.is_dir) ' ' else if (entry.open) 0x25BC else 0x25B6,
                 .mark = mark,
             };
         }
@@ -396,11 +405,6 @@ pub const FileTree = struct {
 
     pub fn draw(self: *FileTree, canvas: Canvas, look: Look, rect: Rect, focused: bool) void {
         self.sync();
-        if (self.editor.folder == null) {
-            canvas.drawText(rect.x + look.metrics.cell, rect.y + look.metrics.row / 2, "No folder open", look.theme.line_number);
-            canvas.drawText(rect.x + look.metrics.cell, rect.y + look.metrics.row * 1.5, "Ctrl+Shift+O", look.theme.line_number);
-            return;
-        }
         const rows: Rows = .{ .tree = self, .theme = look.theme, .current = self.editor.file().path };
         self.list.draw(canvas, look, rect, self.entries.items.len, rows, focused);
     }

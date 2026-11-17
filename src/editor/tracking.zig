@@ -66,6 +66,13 @@ pub const Tracking = struct {
         self.seen = null;
     }
 
+    /// Forgets everything git said, when the repository is gone.
+    pub fn forgetAll(self: *Tracking, allocator: std.mem.Allocator) void {
+        self.forgetHead(allocator);
+        self.forgetBlame(allocator);
+        self.markers.clearRetainingCapacity();
+    }
+
     pub fn forgetBlame(self: *Tracking, allocator: std.mem.Allocator) void {
         if (self.blame == .ready) {
             const lines = self.blame.ready;

@@ -37,6 +37,10 @@ pub const Session = struct {
             .workbench = undefined,
             .recorder = .{ .allocator = testing.allocator },
         };
+        // The folder is inside this project's repository; git must not see it.
+        const tmp_root = try std.Io.Dir.cwd().realPathFileAlloc(testing.io, ".zig-cache/tmp", testing.allocator);
+        defer testing.allocator.free(tmp_root);
+        try self.env.put("GIT_CEILING_DIRECTORIES", tmp_root);
         self.start();
         const folder = try std.fmt.bufPrint(&self.folder, ".zig-cache/tmp/{s}", .{self.tmp.sub_path});
         self.folder_len = folder.len;
@@ -124,8 +128,12 @@ pub const Session = struct {
         self.tmp.cleanup();
     }
 
+    /// A file of the folder, named as the file tree names it: with the OS
+    /// separator after the folder, so paths compare equal on Windows too.
     pub fn path(self: *Session, name: []const u8) []const u8 {
-        return std.fmt.bufPrint(&self.path_buffer, "{s}/{s}", .{ self.folder[0..self.folder_len], name }) catch unreachable;
+        const joined = std.fmt.bufPrint(&self.path_buffer, "{s}" ++ std.fs.path.sep_str ++ "{s}", .{ self.folder[0..self.folder_len], name }) catch unreachable;
+        std.mem.replaceScalar(u8, joined[self.folder_len..], '/', std.fs.path.sep);
+        return joined;
     }
 
     pub fn write(self: *Session, name: []const u8, text: []const u8) !void {
@@ -208,7 +216,7 @@ pub const Session = struct {
 
     /// Text drawn in the status bar, the last row of the window.
     pub fn inStatusBar(self: *const Session, part: []const u8) bool {
-        const bottom = self.workbench.height - 16;
+        const bottom = self.workbench.height - app.ui.layout.Metrics.init(1).item();
         for (self.recorder.texts.items) |item| {
             if (item.y >= bottom and std.mem.indexOf(u8, item.text, part) != null) return true;
         }
@@ -239,18 +247,6 @@ pub const Session = struct {
             _ = self.editor.receive(posted);
             self.draw();
         }
-    }
-
-    /// Takes what find in project posts until it is done, then draws.
-    pub fn waitForSearch(self: *Session) void {
-        while (self.editor.project.running) {
-            const posted = self.mailbox.take() orelse {
-                std.Thread.yield() catch {};
-                continue;
-            };
-            _ = self.editor.receive(posted);
-        }
-        self.draw();
     }
 };
 

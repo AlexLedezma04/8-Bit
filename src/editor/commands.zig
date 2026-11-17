@@ -61,7 +61,6 @@ pub const Command = enum {
     replace_all,
     toggle_match_case,
     toggle_whole_word,
-    find_in_project,
     toggle_comment,
     goto_bracket,
     set_language,
@@ -79,10 +78,8 @@ pub const Command = enum {
     split_down,
     next_pane,
     prev_pane,
-    toggle_bottom,
     focus_sidebar,
     focus_editor,
-    focus_bottom,
     show_files,
     show_git,
     git_commit,
@@ -153,14 +150,13 @@ fn execute(editor: *Editor, command: Command) !?Request {
         .paste => return .paste,
         .open => return .{ .pick = .open_file },
         .open_folder => return .{ .pick = .open_folder },
-        .close_folder => editor.closeFolder(),
+        .close_folder => return editor.closeFolder(),
         .save => return editor.save(),
         .save_as => return .{ .pick = .save_file },
         .quit => return editor.quit(),
         .goto_line => return .{ .prompt = .goto_line },
         .find => return .{ .prompt = .find },
         .replace => return .{ .prompt = .replace },
-        .find_in_project => return .{ .prompt = .find_in_project },
         .find_next, .find_prev => {
             if (editor.find.needle.items.len == 0) return .{ .prompt = .find };
             if (!editor.find.step(doc, if (command == .find_next) .forward else .back)) editor.notify("Not found: {s}", .{editor.find.needle.items});
@@ -189,10 +185,8 @@ fn execute(editor: *Editor, command: Command) !?Request {
         .split_down => try editor.split(.down),
         .next_pane => try editor.cyclePane(1),
         .prev_pane => try editor.cyclePane(-1),
-        .toggle_bottom => editor.toggleDock(.bottom),
         .focus_sidebar => editor.focusArea(.sidebar),
         .focus_editor => editor.focusArea(.editor),
-        .focus_bottom => editor.focusArea(.bottom),
         .show_files => editor.showSide(.files),
         .show_git => editor.showSide(.git),
         .git_commit => try editor.commit(),
@@ -286,6 +280,8 @@ test "zoom and wrap commands" {
 test "tab and pane commands" {
     var editor = try Editor.init(testing.allocator, testing.io);
     defer editor.deinit();
+    // The first new file takes the place of the placeholder.
+    _ = run(&editor, .new_file);
     _ = run(&editor, .new_file);
     _ = run(&editor, .new_file);
     const pane = editor.pane.pane();
@@ -302,8 +298,4 @@ test "tab and pane commands" {
     try testing.expectEqual(panes.Axis.down, editor.root.kind.split.axis);
     _ = run(&editor, .prev_pane);
     try testing.expectEqual(editor.root.kind.split.first, editor.pane);
-    _ = run(&editor, .focus_bottom);
-    try testing.expect(editor.bottom.shown);
-    _ = run(&editor, .toggle_bottom);
-    try testing.expectEqual(@import("editor.zig").Area.editor, editor.focus);
 }

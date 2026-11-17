@@ -4,7 +4,7 @@
 src/
   main.zig        wires platform + editor + ui
   platform/       OS/SDL boundary: window, renderer, input, clipboard, dialog, pty
-                  SDL-free: event (input types), mailbox, fs
+                  SDL-free: event (input types), mailbox, fs, png
   core/           text model: buffer, cursor, edit, undo, newline, search, utf8
   syntax/         highlighting engine; language data lives in assets/grammars
   git/            VCS integration via the git CLI
@@ -17,19 +17,21 @@ src/
     workbench.zig the whole window: places panels, routes input, focus
     theme.zig     the color struct; theme files live in assets/themes
     layout.zig    where the parts of the window are; all sizes come from the cell
-    widgets/      reusable controls (list, tabs, prompt, menu)
-    panels/       one view per feature (editor_view, welcome, file_tree, messages, status_bar, ...)
-  font/           bitmap font
+    widgets/      reusable controls (list, tabs, prompt, menu, scrollbar)
+    panels/       one view per feature (editor_view, welcome, file_tree, git, terminal, status_bar)
+  font/           the built-in fonts (stb_truetype), their metrics, the glyph atlas
 assets/           built-in ZON files, embedded in the exe (assets.zig lists them)
   settings.zon    default settings
   keymap.zon      user key bindings (empty: the defaults are in keymap.zig)
   state.zon       what the app remembers between runs (written by the app)
   themes/         theme data files
+  fonts/          JetBrains Mono and Inter, cut to the characters the app draws (OFL)
+  icons/          the app logo
   grammars/       one grammar file per language (docs/GRAMMARS.md)
 tests/            integration tests (unit tests stay next to the code)
 tools/            small build helpers (size_check: `zig build size`,
                   embed_dir: embeds every grammar file)
-third_party/      vendored C dependencies (SDL3)
+third_party/      vendored C dependencies (SDL3, stb_truetype)
 ```
 
 ## Dependency rules
@@ -59,14 +61,24 @@ third_party/      vendored C dependencies (SDL3)
 
 ## Drawing text
 
-- `font/spleen.zig` holds the glyph bits of the 8x16 Spleen font (ASCII,
-  Latin-1, box drawing, blocks; a missing character is a small box). `font/bitmap_font.zig` turns them into
-  atlas pixels and places the glyphs of a line. Both are SDL-free.
-- `platform/renderer.zig` uploads the atlas once and draws all text through
-  `drawText`, in batches, tinted with the text color.
+- Two fonts, embedded from `assets/fonts`: JetBrains Mono for code (editor,
+  gutter, terminal, prompt input) and Inter for the UI. `font/truetype.zig`
+  reads them with stb_truetype (C, so the test build links libc too).
+- `font/fonts.zig` sizes them like IntelliJ's 13 pixel fonts: at zoom 1 a
+  code character is 8 pixels wide and a row 16 high. Code text keeps to that
+  cell grid; UI text moves by each character's advance. `fonts.Pen` places
+  the characters of a line and `fonts.width` measures one, so the UI can
+  lay out labels (`Metrics.labelWidth`) without SDL.
+- `font/atlas.zig` draws the glyphs of both fonts at one zoom into one
+  picture. `platform/renderer.zig` uploads it and makes it again when the
+  zoom changes, so text is drawn at its own size and stays sharp.
+  `Canvas.drawText` draws code, `Canvas.drawLabel` the UI font.
+- The logo (`assets/icons`) is read by `platform/png.zig`; it is the window
+  icon and, tinted with the theme, the logo of the welcome screen.
 - Color values live only in theme files; `ui/theme.zig` defines the struct.
 - The main loop sleeps until an event comes, handles all waiting events, and
-  draws one frame only if something changed.
+  draws one frame only if something changed. Moving the mouse redraws for
+  hover colors (`Look.mouse`).
 
 ## The editor (`editor/`, `ui/`, `main.zig`)
 
@@ -75,12 +87,26 @@ third_party/      vendored C dependencies (SDL3)
   key goes to the open menu or prompt, else to the focused panel, else it
   is looked up in the `editor/keymap.zig` table and becomes a `Command`.
   Typed text goes to the focused panel too.
-- **Panels.** The sidebar (file tree), the editor area and the bottom panel
-  (messages) follow `ui/panel.zig`: `title`, `draw(rect)` and `handle(event)`.
+- **Panels.** The sidebar (file tree, git), the editor area and the bottom
+  panel (the terminal) follow `ui/panel.zig`: `title`, `draw(rect)` and `handle(event)`.
   One area has focus; a click gives focus. The workbench draws and routes
   without knowing what a panel is. The sidebar is shown whenever a folder
-  is open. While nothing is open (`Editor.welcome`) the editor area is the
-  welcome screen with the recent folders.
+  is open; dock tabs share the bar's width. A pane always has a tab: with
+  nothing open it holds a hidden blank `placeholder` file, which the next
+  file opened replaces. While only that is open (`Editor.empty`) the editor
+  area shows what to do next, and the recent folders when no folder is
+  open either (`Editor.welcome`). Closing the folder closes every file,
+  asking about unsaved ones like quitting does.
+- **Scrolling.** The workbench turns wheel steps into whole rows, adding up
+  the parts of a step that smooth wheels and touchpads send. On X11, SDL
+  reads those from XInput 2.1 scroll valuators (`..._SUPPORTS_SCROLLINFO` in
+  SDL's Linux build config). Files and lists show `ui/widgets/scrollbar.zig`
+  when they do not fit: lines at the right, and below the text the columns
+  of the widest line on screen, unless lines wrap.
+- **Resizing.** The sidebar's edge and the terminal's top edge can be
+  dragged. Each grip reaches 2 pixels into its dock and 6 out of it, so the
+  scrollbars beside it stay free; `Workbench.edgeCursor` gives the resize
+  cursor that `main.zig` shows over it.
 - **Menus.** A panel opens the one `ui/widgets/menu.zig` on a right click with
   its items and itself as the target; the workbench gives the menu every
   input event while it is open and the target gets the chosen index.
@@ -94,6 +120,9 @@ third_party/      vendored C dependencies (SDL3)
   is one view of a file with its own cursor and scroll. The active tab uses
   the document's cursor; the other tabs register theirs with
   `Document.follow`, and `apply` moves them on every change.
+- **Preview tabs.** `Editor.open` marks a file as a `preview`; the next file
+  opened in the pane takes its tab, unless it has unsaved changes. Saving
+  keeps it. Diff views, the commit message and new files never replace one.
 - **Changes on disk.** When the window gets focus, `Editor.checkDisk` reloads
   files that changed, or asks first when they have unsaved changes.
 - **Commands.** `editor/commands.zig` lists every action and runs it with
@@ -108,8 +137,8 @@ third_party/      vendored C dependencies (SDL3)
   Features add entries; only the editor view draws them.
 - **Background work.** A thread hands a result to the main loop with
   `Mailbox.post` (`platform/mailbox.zig`), which wakes the event wait. The
-  main thread takes the item and `Editor.receive` frees it. Dialogs, find
-  in project and git use it.
+  main thread takes the item and `Editor.receive` frees it. Dialogs, git
+  and terminals use it.
 - **Prompts.** A command that needs typed text returns `Request.prompt`;
   the workbench opens the prompt and sends the text back to the editor.
 - **Files.** `platform/fs.zig` reads whole files and saves through a
@@ -118,10 +147,12 @@ third_party/      vendored C dependencies (SDL3)
 - **Questions.** The flag for unsaved changes comes from the undo history
   (`History.isModified`). Quit and closing a tab ask Save / Don't save /
   Cancel with an `ask` request; the answer comes back to `Editor.answer`.
-- **Messages.** Everything reports through `Editor.notify`; the messages
-  panel keeps it. The status bar shows only the git branch and the language.
-- **Sizes.** `ui/layout.zig` derives every size from the cell size, which is
-  the 8x16 font times the zoom (1x to 4x).
+- **Messages.** Everything reports through `Editor.notify`, which keeps the
+  last message; nothing shows it now. The status bar shows the git branch,
+  the language and the terminal button.
+- **Sizes.** `ui/layout.zig` derives every size from the cell size, 8x16
+  pixels times the zoom (1x to 4x): tab bars are 2.5 rows, list rows, menu
+  items and the status bar 1.5 rows.
 
 ## Search
 
@@ -130,8 +161,6 @@ third_party/      vendored C dependencies (SDL3)
 - `editor/find.zig` keeps the needle, the options and the matches of the
   active file. While the find or replace prompt is open, the matches are
   found again after every change and drawn as decorations.
-- `editor/project_search.zig` walks the open folder on a thread and posts
-  the hits of each file. A new search drops the late hits of the old one.
 
 ## Syntax (`syntax/`)
 
@@ -152,8 +181,8 @@ third_party/      vendored C dependencies (SDL3)
 
 ## Git (`git/`, `editor/git.zig`, `editor/tracking.zig`)
 
-- `git/repo.zig` finds the repository (walks up to `.git`) and runs the git
-  CLI. Every git feature goes through `repo.run`. The program comes from the
+- `git/repo.zig` finds the repository (walks up to `.git`, stopping at
+  `GIT_CEILING_DIRECTORIES` like git) and runs the git CLI. Every git feature goes through `repo.run`. The program comes from the
   `git` setting; when it is missing, git features hide and one message says why.
 - `git/status.zig`, `git/log.zig` know the commands and read their output:
   `status --porcelain=v1 -z`, `log`, `branch`, `blame --porcelain`.
@@ -171,7 +200,12 @@ third_party/      vendored C dependencies (SDL3)
   read-only (`Document.read_only`) with its lines as `File.marks`; the commit
   message is committed with Ctrl+Enter and is never "modified".
 - The sidebar has the file tree and the git panel; each dock switches its
-  panels with the tabs widget.
+  panels with the tabs widget. Outside a repository the Git tab is hidden.
+- Every `Git.refresh` looks for the repository again, so one made, deleted
+  or moved while the folder is open is noticed; a lost one also takes the
+  gutter markers and blame of open files. `Editor.diskChanged` refreshes git
+  and the file tree on focus, and 500 ms after terminal output rests, since
+  a command there may have changed files or the repository.
 
 ## Terminal (`terminal/`, `platform/pty.zig`, `editor/terminals.zig`)
 
@@ -192,9 +226,13 @@ third_party/      vendored C dependencies (SDL3)
   so its tests use a fake one.
 - `editor/terminals.zig` owns the terminals. The pty thread posts output
   through the mailbox with the terminal's id; output of a closed one is dropped.
+  A new terminal is named with the smallest number no open one has; the +
+  after the terminal tabs opens one.
 - `ui/panels/terminal.zig` draws each run of one color with `drawText`. The
   16 colors come from the theme's `terminal` colors; 256 and true colors
-  are computed. Keys go to the shell, except a few window commands.
+  are computed. Keys go to the shell, except a few window commands. The
+  terminal icon at the right of the status bar, Alt+T and Ctrl+` show or
+  hide it.
 
 ## Config (`editor/config.zig`)
 

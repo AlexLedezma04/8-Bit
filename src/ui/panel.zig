@@ -8,8 +8,18 @@ const Theme = @import("theme.zig").Theme;
 const Event = @import("../platform/event.zig").Event;
 const Request = @import("../editor/editor.zig").Request;
 
-/// What drawing needs besides the canvas.
-pub const Look = struct { theme: *const Theme, metrics: Metrics };
+/// What drawing needs besides the canvas. `mouse` is where the mouse is,
+/// in window pixels, for hover colors.
+pub const Look = struct {
+    theme: *const Theme,
+    metrics: Metrics,
+    mouse: ?[2]f32 = null,
+
+    pub fn hovered(self: Look, rect: Rect) bool {
+        const at = self.mouse orelse return false;
+        return rect.contains(at[0], at[1]);
+    }
+};
 
 pub const Handled = struct {
     /// False lets the workbench try the global key bindings.

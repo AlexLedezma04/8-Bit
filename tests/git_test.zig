@@ -77,16 +77,24 @@ fn editorOpen(session: *Session, name: []const u8) void {
     session.draw();
 }
 
-test "no repository, and git that is not installed" {
+test "no repository, and git that is not installed: no Git tab" {
     var session: Session = undefined;
     try session.init();
     defer session.deinit();
     const editor = &session.editor;
-
-    // A folder that is not there is in no repository: the panel says so.
-    editor.openFolder("no/such/folder");
+    try testing.expect(session.last("Git") != null);
     _ = session.press("ctrl+shift+g");
-    try testing.expect(session.shows("No git repository"));
+    try testing.expectEqual(app.editor.editor.SidePanel.git, editor.sidePanel());
+
+    // A folder that is not there is in no repository: the Files tab only,
+    // and Ctrl+Shift+G says why.
+    editor.openFolder("no/such/folder");
+    session.draw();
+    try testing.expect(session.last("Git") == null);
+    try testing.expect(session.last("Files") != null);
+    try testing.expectEqual(app.editor.editor.SidePanel.files, editor.sidePanel());
+    _ = session.press("ctrl+shift+g");
+    try expectMessage(&session, "No git repository");
     try testing.expectEqualStrings("", editor.status().branch);
 
     editor.openFolder(session.folderPath());
@@ -94,12 +102,12 @@ test "no repository, and git that is not installed" {
     _ = session.send(.{ .focus = true });
     _ = session.waitForGit();
     try expectMessage(&session, "git is not installed: git features are off");
-    try testing.expect(session.shows("git is not installed"));
+    try testing.expect(session.last("Git") == null);
     // Said once.
-    const messages = editor.log.items.len;
+    editor.notify("later", .{});
     _ = session.send(.{ .focus = true });
     _ = session.waitForGit();
-    try testing.expectEqual(messages, editor.log.items.len);
+    try testing.expectEqualStrings("later", editor.lastMessage().?);
 }
 
 test "gutter markers follow the text after a short delay, F7 jumps between changes" {
@@ -497,4 +505,69 @@ test "blame: gutter text per line, hidden while edited, a click opens the commit
     _ = session.press("alt+b");
     try expectMessage(&session, "Blame off");
     try testing.expectEqual(@as(usize, 0), editor.view().left);
+}
+
+test "a repository made or deleted outside while the folder is open" {
+    var session: Session = undefined;
+    try committed(&session);
+    defer session.deinit();
+    const editor = &session.editor;
+    editor.open(session.path("b.txt"));
+    session.typeKeys("x");
+    _ = session.waitForGit();
+    editor.now_ms += 1000;
+    _ = session.waitForGit();
+    try testing.expect(editor.file().tracking.markers.items.len > 0);
+    try testing.expect(session.inStatusBar("main"));
+
+    // Deleted: no Git tab, no branch, no gutter markers.
+    try fs.delete(testing.io, session.path(".git"));
+    _ = session.send(.{ .focus = true });
+    _ = session.waitForGit();
+    try testing.expect(!editor.git.ready());
+    try testing.expect(session.last("Git") == null);
+    try testing.expect(!session.inStatusBar("main"));
+    try testing.expectEqual(@as(usize, 0), editor.file().tracking.markers.items.len);
+
+    // Made again: all of it comes back.
+    try session.git(&.{ "init", "-q", "-b", "main" });
+    _ = session.send(.{ .focus = true });
+    _ = session.waitForGit();
+    try testing.expect(editor.git.ready());
+    try testing.expect(session.last("Git") != null);
+    try testing.expect(session.inStatusBar("main"));
+}
+
+test "the Staged and Changes titles collapse and expand their files" {
+    var session: Session = undefined;
+    try committed(&session);
+    defer session.deinit();
+    try session.write("b.txt", "changed\n");
+    try session.write("new.txt", "new\n");
+    try session.git(&.{ "add", "new.txt" });
+    _ = session.press("ctrl+shift+g");
+    _ = session.waitForGit();
+    try testing.expect(session.shows("new.txt"));
+    try testing.expect(session.shows("b.txt"));
+
+    // One click on a title hides its files; the arrow turns.
+    _ = session.clickText("Changes (1)");
+    try testing.expect(!session.shows("b.txt"));
+    try testing.expect(session.shows("new.txt"));
+    try testing.expectEqualStrings("\u{25B6}", session.recorder.texts.items[indexOf(&session, "Changes (1)") - 1].text);
+    _ = session.clickText("Changes (1)");
+    try testing.expect(session.shows("b.txt"));
+
+    // Enter on a title does the same.
+    _ = session.press("home");
+    _ = session.press("enter");
+    try testing.expect(!session.shows("new.txt"));
+    try testing.expect(session.shows("Staged (1)"));
+    _ = session.press("enter");
+    try testing.expect(session.shows("new.txt"));
+}
+
+fn indexOf(session: *const Session, text: []const u8) usize {
+    for (session.recorder.texts.items, 0..) |item, i| if (std.mem.eql(u8, item.text, text)) return i;
+    unreachable;
 }

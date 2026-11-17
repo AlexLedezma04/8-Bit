@@ -19,7 +19,6 @@ pub const Settings = struct {
     theme: []const u8,
     line_numbers: bool,
     undo_limit_mb: u16,
-    search_exclude: []const []const u8,
     /// The git program, by name or path.
     git: []const u8,
     /// The program of new terminals; empty for the system's shell.

@@ -6,6 +6,7 @@ const input = @import("platform/input.zig");
 const clipboard = @import("platform/clipboard.zig");
 const dialog = @import("platform/dialog.zig");
 const fs = @import("platform/fs.zig");
+const png = @import("platform/png.zig");
 const editor_zig = @import("editor/editor.zig");
 const Editor = editor_zig.Editor;
 const Request = editor_zig.Request;
@@ -22,8 +23,12 @@ const App = struct {
     fn draw(self: *App) void {
         var title: [128]u8 = undefined;
         self.window.setTitle(self.editor.title(&title));
+        self.window.setCursor(if (self.workbench.edgeCursor()) |edge| switch (edge) {
+            .sidebar => .resize_x,
+            .bottom => .resize_y,
+        } else null);
         const size = self.renderer.outputSize();
-        self.renderer.scale = @floatFromInt(self.editor.zoom);
+        self.renderer.setZoom(self.editor.zoom);
         self.workbench.width = size.w;
         self.workbench.height = size.h;
         self.workbench.density = self.window.pixelDensity();
@@ -78,7 +83,10 @@ pub fn main(init: std.process.Init) !void {
 
     var window = try Window.init(.{});
     defer window.deinit();
-    var renderer = try Renderer.init(&window);
+    const logo = try png.decode(init.gpa, @import("assets").logo);
+    defer logo.deinit(init.gpa);
+    window.setIcon(logo);
+    var renderer = try Renderer.init(&window, logo);
     defer renderer.deinit();
 
     var app: App = .{

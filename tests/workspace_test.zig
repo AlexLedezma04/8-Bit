@@ -58,7 +58,7 @@ test "welcome: recent folders newest first, click opens, x and Delete remove, ke
 
     session.editor.openFolder(session.folderPath());
     session.editor.openFolder(session.path("a"));
-    session.editor.closeFolder();
+    _ = session.editor.closeFolder();
     session.draw();
     try testing.expect(session.shows("Open Folder..."));
     try testing.expect(session.shows("Ctrl+Shift+O"));
@@ -77,7 +77,7 @@ test "welcome: recent folders newest first, click opens, x and Delete remove, ke
     try testing.expect(session.shows("x.txt"));
     try testing.expect(session.shows("Files"));
 
-    session.editor.closeFolder();
+    _ = session.editor.closeFolder();
     session.draw();
     // The x of the first row, then Delete on the one left.
     _ = session.clickText("\u{D7}");
@@ -86,9 +86,10 @@ test "welcome: recent folders newest first, click opens, x and Delete remove, ke
     try session.restart();
     try testing.expectEqual(@as(usize, 1), session.editor.recent.items.len);
     _ = session.press("delete");
-    try testing.expect(session.shows("No recent folders"));
+    try testing.expect(!session.shows("Recent folders"));
     try session.restart();
-    try testing.expect(session.shows("No recent folders"));
+    try testing.expectEqual(@as(usize, 0), session.editor.recent.items.len);
+    try testing.expect(!session.shows("Recent folders"));
 }
 
 test "editor menu: Copy, Cut and Paste; Copy and Cut need a selection; Esc and clicks outside close it" {
@@ -157,10 +158,7 @@ test "file tree menu: new, copy, cut, paste and delete files and folders" {
     try testing.expect(session.shows("b copy.txt"));
 
     // Cut moves, and an open file follows.
-    // Named as the tree names it, with the OS separator.
-    const copy = try std.fs.path.join(testing.allocator, &.{ session.folderPath(), "b copy.txt" });
-    defer testing.allocator.free(copy);
-    editor.open(copy);
+    editor.open(session.path("b copy.txt"));
     _ = session.rightClickText("b copy.txt");
     _ = session.clickMenu("Cut");
     _ = session.rightClickText("a");
@@ -244,4 +242,122 @@ test "sidebar: shown while a folder is open, Files and Git tabs, the choice is r
     _ = session.press("ctrl+shift+w");
     try testing.expect(session.last("Files") == null);
     try testing.expect(session.last("Git") == null);
+}
+
+test "no file open: no untitled tab, hints instead; Ctrl+N and closing the last tab" {
+    var session: Session = undefined;
+    try session.init();
+    defer session.deinit();
+    const editor = &session.editor;
+
+    try testing.expect(!session.shows("untitled"));
+    try testing.expect(session.shows("New File"));
+    try testing.expect(session.shows("Close Folder"));
+    try testing.expect(!session.shows("Recent folders"));
+    // Typing does not reach the hidden blank file.
+    session.typeKeys("zz");
+    try testing.expect(editor.empty());
+
+    _ = session.press("ctrl+n");
+    try testing.expect(session.shows("untitled"));
+    try testing.expectEqual(@as(usize, 1), editor.pane.pane().tabs.items.len);
+    _ = session.press("ctrl+w");
+    try testing.expect(editor.empty());
+    try testing.expect(!session.shows("untitled"));
+
+    // A hint runs its command.
+    try testing.expectEqual(Request{ .pick = .open_file }, session.clickText("Open File...").?);
+    _ = session.clickText("New File");
+    try testing.expect(session.shows("untitled"));
+}
+
+test "close folder from the tree menu: asks about unsaved files, then the welcome screen" {
+    var session: Session = undefined;
+    try session.init();
+    defer session.deinit();
+    const editor = &session.editor;
+    editor.open(session.path("b.txt"));
+    session.draw();
+    session.typeKeys("x");
+
+    _ = session.rightClick(100, 400);
+    const request = session.clickMenu("Close Folder").?;
+    try testing.expectEqual(app.editor.editor.Question.save, request.ask.question);
+    try testing.expectEqualStrings("b.txt", request.ask.name);
+    // Cancel keeps everything.
+    try testing.expectEqual(@as(?Request, null), session.workbench.answer(.save, .cancel));
+    try testing.expect(editor.folder != null);
+
+    _ = session.press("ctrl+shift+w");
+    try testing.expectEqual(@as(?Request, null), session.workbench.answer(.save, .no));
+    session.draw();
+    try testing.expectEqual(@as(?[]u8, null), editor.folder);
+    try testing.expect(editor.welcome());
+    try testing.expect(session.shows("Open Folder..."));
+    try testing.expect(!session.shows("b.txt"));
+    // Not saved.
+    const text = try fs.read(testing.io, testing.allocator, session.path("b.txt"));
+    defer testing.allocator.free(text);
+    try testing.expectEqualStrings("bee\n", text);
+}
+
+test "tabs: the sidebar's share its whole width; file tabs have no underline" {
+    var session: Session = undefined;
+    try session.init();
+    defer session.deinit();
+    session.editor.open(session.path("b.txt"));
+    session.draw();
+    const sidebar = session.workbench.frame().sidebar.?;
+
+    // Each of Files and Git is centered in its half.
+    const files = session.last("Files").?;
+    const git = session.last("Git").?;
+    try testing.expect(files.x > sidebar.w / 8 and files.x < sidebar.w / 2);
+    try testing.expect(git.x > sidebar.w / 2 + sidebar.w / 8);
+    _ = session.click(sidebar.w - 10, 10);
+    try testing.expectEqual(app.editor.editor.SidePanel.git, session.editor.side_panel);
+    _ = session.click(10, 10);
+    try testing.expectEqual(app.editor.editor.SidePanel.files, session.editor.side_panel);
+
+    // Focus is in the sidebar: its tab is underlined in the accent color,
+    // and nothing else is.
+    try testing.expectEqual(@as(usize, 1), session.recorder.filled(session.workbench.theme.accent));
+    _ = session.click(500, 300);
+    try testing.expectEqual(app.editor.editor.Area.editor, session.editor.focus);
+    try testing.expectEqual(@as(usize, 0), session.recorder.filled(session.workbench.theme.accent));
+}
+
+test "preview tabs: an opened file keeps its tab only once saved" {
+    var session: Session = undefined;
+    try session.init();
+    defer session.deinit();
+    const editor = &session.editor;
+    const theme = &session.workbench.theme;
+    const tabs = &editor.pane.pane().tabs;
+    try session.write("c.txt", "see\n");
+    _ = session.send(.{ .focus = true });
+
+    // Each file opened takes the preview's tab, drawn dimmer.
+    _ = session.clickText("b.txt");
+    try testing.expectEqual(theme.line_number_current, session.last("b.txt").?.color);
+    _ = session.clickText("c.txt");
+    try testing.expectEqual(@as(usize, 1), tabs.items.len);
+    try testing.expectEqualStrings("c.txt", editor.name());
+
+    // Saved, it stays; the next one opens next to it.
+    _ = session.press("ctrl+s");
+    try testing.expect(!editor.file().preview);
+    _ = session.clickText("b.txt");
+    try testing.expectEqual(@as(usize, 2), tabs.items.len);
+
+    // A preview with unsaved changes stays too, so nothing is lost.
+    editor.focus = .editor;
+    session.typeKeys("x");
+    editor.open(session.path("a/x.txt"));
+    try testing.expectEqual(@as(usize, 3), tabs.items.len);
+    try testing.expect(editor.findFile(session.path("b.txt")) != null);
+
+    // A new file does not take a preview's place.
+    _ = session.press("ctrl+n");
+    try testing.expectEqual(@as(usize, 4), tabs.items.len);
 }
