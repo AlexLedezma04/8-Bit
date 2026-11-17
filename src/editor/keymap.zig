@@ -17,6 +17,7 @@ const shift: Mods = .{ .shift = true };
 const alt: Mods = .{ .alt = true };
 const ctrl_shift: Mods = .{ .ctrl = true, .shift = true };
 const alt_shift: Mods = .{ .alt = true, .shift = true };
+const ctrl_alt: Mods = .{ .ctrl = true, .alt = true };
 
 /// Cursor moves. Each one also gets a Shift binding that selects.
 const moves = [_]Binding{
@@ -97,6 +98,7 @@ const others = [_]Binding{
     .{ .key = .char('d'), .mods = alt, .command = .show_changes },
     .{ .key = .f7, .command = .next_change },
     .{ .key = .f7, .mods = shift, .command = .prev_change },
+    .{ .key = .char('z'), .mods = ctrl_alt, .command = .revert_change },
     .{ .key = .char('b'), .mods = alt, .command = .toggle_blame },
     .{ .key = .char('h'), .mods = alt, .command = .file_history },
     .{ .key = .char('`'), .mods = ctrl, .command = .toggle_terminal },

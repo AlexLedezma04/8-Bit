@@ -23,6 +23,18 @@ pub fn splitLines(allocator: std.mem.Allocator, text: []const u8) ![]const []con
     return list.toOwnedSlice(allocator);
 }
 
+/// The bytes of `count` lines of `text` from line `first`, with their line breaks.
+pub fn lineSpan(text: []const u8, first: usize, count: usize) []const u8 {
+    const rest = text[lineOffset(text, first)..];
+    return rest[0..lineOffset(rest, count)];
+}
+
+fn lineOffset(text: []const u8, line: usize) usize {
+    var offset: usize = 0;
+    for (0..line) |_| offset = 1 + (std.mem.indexOfScalarPos(u8, text, offset, '\n') orelse return text.len);
+    return offset;
+}
+
 /// The hunks that turn `old` into `new`, in order.
 pub fn diff(allocator: std.mem.Allocator, old: []const []const u8, new: []const []const u8) ![]Hunk {
     var prefix: usize = 0;
@@ -181,6 +193,12 @@ test "splitLines drops line breaks and the empty last line" {
     try testing.expectEqualStrings("b", lines[1]);
     try testing.expectEqualStrings("", lines[2]);
     try testing.expectEqual(@as(usize, 0), (try splitLines(testing.allocator, "")).len);
+}
+
+test "lineSpan keeps line breaks and stops at the end" {
+    try testing.expectEqualStrings("b\r\nc\n", lineSpan("a\nb\r\nc\nd", 1, 2));
+    try testing.expectEqualStrings("d", lineSpan("a\nb\r\nc\nd", 3, 5));
+    try testing.expectEqualStrings("", lineSpan("a\n", 1, 1));
 }
 
 test "added, removed and changed lines" {

@@ -1139,6 +1139,12 @@ pub const Editor = struct {
         active.doc.cursor = .{ .pos = buffer.lineStart(found) };
     }
 
+    /// Puts the text at HEAD back over the change at the cursor.
+    pub fn revertChange(self: *Editor) !void {
+        const doc_ = self.doc();
+        if (!try self.file().tracking.revert(doc_, doc_.buffer.lineOf(doc_.cursor.pos))) self.notify("No change here", .{});
+    }
+
     pub fn toggleBlame(self: *Editor) void {
         if (!self.git.ready()) return self.notify("No git repository", .{});
         self.git.blame = !self.git.blame;

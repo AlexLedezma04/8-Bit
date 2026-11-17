@@ -195,7 +195,10 @@ third_party/      vendored C dependencies (SDL3, stb_truetype)
 - `editor/tracking.zig` is what git knows about one open file: its text at
   HEAD (fetched once), the gutter markers, and blame. `Editor.tick` asks for
   what is missing and makes markers again once the text has rested for
-  300 ms. Files over 50,000 lines get no markers.
+  300 ms. Files over 50,000 lines get no markers. It keeps the hunks the
+  markers come from: a click in the gutter of a changed line opens Previous
+  Change, Next Change, Show Diff and Revert, which puts the HEAD lines back
+  (`Tracking.revert`, Ctrl+Alt+Z) while the markers are of the current text.
 - A diff view and the commit message are files with a `role`: a diff view is
   read-only (`Document.read_only`) with its lines as `File.marks`; the commit
   message is committed with Ctrl+Enter and is never "modified".

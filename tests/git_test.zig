@@ -571,3 +571,56 @@ fn indexOf(session: *const Session, text: []const u8) usize {
     for (session.recorder.texts.items, 0..) |item, i| if (std.mem.eql(u8, item.text, text)) return i;
     unreachable;
 }
+
+/// Makes the markers again, as the main loop does once the text rests.
+fn settle(session: *Session) void {
+    _ = session.editor.tick();
+    session.editor.now_ms += app.editor.tracking.delay_ms;
+    _ = session.editor.tick();
+    session.draw();
+}
+
+/// Clicks the gutter beside the first marker drawn in `color`, past the
+/// sidebar's resize grip.
+fn clickMarker(session: *Session, color: app.ui.theme.Color) void {
+    for (session.recorder.fills.items) |fill| if (std.meta.eql(fill.color, color)) {
+        _ = session.click(fill.rect.x + 16, fill.rect.y + 1);
+        return;
+    };
+    std.debug.panic("no marker", .{});
+}
+
+test "a click on a git marker: next change, its diff, revert" {
+    var session: Session = undefined;
+    try session.init();
+    defer session.deinit();
+    const theme = &session.workbench.theme;
+    try session.write("c.txt", "one\ntwo\nthree\nfour\n");
+    try session.git(&.{ "add", "-A" });
+    try session.git(&.{ "commit", "-q", "-m", "First" });
+    try session.write("c.txt", "one\nTWO\nthree\nfour\nfive\n");
+    editorOpen(&session, "c.txt");
+    _ = session.waitForGit();
+
+    clickMarker(&session, theme.git_changed);
+    try testing.expect(session.shows("Revert"));
+    _ = session.clickMenu("Next Change");
+    try testing.expectEqual(@as(usize, 5), session.cursor()[0]);
+    _ = session.press("ctrl+alt+z");
+    try testing.expect(!docHas(&session, "five"));
+
+    settle(&session);
+    clickMarker(&session, theme.git_changed);
+    _ = session.clickMenu("Show Diff");
+    try testing.expectEqualStrings("c.txt (changes)", session.editor.name());
+    try testing.expect(docHas(&session, "TWO"));
+    _ = session.press("ctrl+w");
+
+    clickMarker(&session, theme.git_changed);
+    _ = session.clickMenu("Revert");
+    try testing.expect(docHas(&session, "one\ntwo\nthree\nfour\n"));
+    settle(&session);
+    try testing.expectEqual(@as(usize, 0), markerCount(&session));
+    _ = session.press("ctrl+alt+z");
+    try expectMessage(&session, "No change here");
+}
