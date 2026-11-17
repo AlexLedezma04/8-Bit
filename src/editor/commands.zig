@@ -6,6 +6,7 @@ const editor_zig = @import("editor.zig");
 const Editor = editor_zig.Editor;
 const Request = editor_zig.Request;
 const panes = @import("panes.zig");
+const Document = @import("../core/edit.zig").Document;
 
 /// The tag name is the command's text name, used by key binding files.
 pub const Command = enum {
@@ -110,9 +111,9 @@ pub fn run(editor: *Editor, command: Command) ?Request {
     return request;
 }
 
-fn execute(editor: *Editor, command: Command) !?Request {
-    const doc = editor.doc();
-    const view = editor.view();
+/// Runs a command that moves, selects or deletes within one line, or undoes.
+/// False for any other command. The prompt edits its text with these.
+pub fn editLine(doc: *Document, command: Command) !bool {
     switch (command) {
         .move_left => doc.move(.left, false),
         .move_right => doc.move(.right, false),
@@ -120,34 +121,63 @@ fn execute(editor: *Editor, command: Command) !?Request {
         .move_word_right => doc.move(.word_right, false),
         .move_line_start => doc.move(.line_start, false),
         .move_line_end => doc.move(.line_end, false),
-        .move_up => view.moveVertical(doc, -1, false),
-        .move_down => view.moveVertical(doc, 1, false),
-        .move_page_up => view.moveVertical(doc, -view.pageRows(), false),
-        .move_page_down => view.moveVertical(doc, view.pageRows(), false),
-        .move_file_start => doc.move(.file_start, false),
-        .move_file_end => doc.move(.file_end, false),
         .select_left => doc.move(.left, true),
         .select_right => doc.move(.right, true),
         .select_word_left => doc.move(.word_left, true),
         .select_word_right => doc.move(.word_right, true),
         .select_line_start => doc.move(.line_start, true),
         .select_line_end => doc.move(.line_end, true),
-        .select_up => view.moveVertical(doc, -1, true),
-        .select_down => view.moveVertical(doc, 1, true),
-        .select_page_up => view.moveVertical(doc, -view.pageRows(), true),
-        .select_page_down => view.moveVertical(doc, view.pageRows(), true),
-        .select_file_start => doc.move(.file_start, true),
-        .select_file_end => doc.move(.file_end, true),
         .select_all => doc.selectAll(),
-        .insert_newline => try doc.insertNewline(),
-        .indent => try doc.indent(),
-        .outdent => try doc.outdent(),
         .delete_left => try doc.delete(.left),
         .delete_right => try doc.delete(.right),
         .delete_word_left => try doc.delete(.word_left),
         .delete_word_right => try doc.delete(.word_right),
         .undo => _ = try doc.undo(),
         .redo => _ = try doc.redo(),
+        else => return false,
+    }
+    return true;
+}
+
+fn execute(editor: *Editor, command: Command) !?Request {
+    const doc = editor.doc();
+    const view = editor.view();
+    switch (command) {
+        .move_left,
+        .move_right,
+        .move_word_left,
+        .move_word_right,
+        .move_line_start,
+        .move_line_end,
+        .select_left,
+        .select_right,
+        .select_word_left,
+        .select_word_right,
+        .select_line_start,
+        .select_line_end,
+        .select_all,
+        .delete_left,
+        .delete_right,
+        .delete_word_left,
+        .delete_word_right,
+        .undo,
+        .redo,
+        => _ = try editLine(doc, command),
+        .move_up => view.moveVertical(doc, -1, false),
+        .move_down => view.moveVertical(doc, 1, false),
+        .move_page_up => view.moveVertical(doc, -view.pageRows(), false),
+        .move_page_down => view.moveVertical(doc, view.pageRows(), false),
+        .move_file_start => doc.move(.file_start, false),
+        .move_file_end => doc.move(.file_end, false),
+        .select_up => view.moveVertical(doc, -1, true),
+        .select_down => view.moveVertical(doc, 1, true),
+        .select_page_up => view.moveVertical(doc, -view.pageRows(), true),
+        .select_page_down => view.moveVertical(doc, view.pageRows(), true),
+        .select_file_start => doc.move(.file_start, true),
+        .select_file_end => doc.move(.file_end, true),
+        .insert_newline => try doc.insertNewline(),
+        .indent => try doc.indent(),
+        .outdent => try doc.outdent(),
         .copy => return try editor.copy(),
         .cut => return try editor.cut(),
         .paste => return .paste,
@@ -186,8 +216,8 @@ fn execute(editor: *Editor, command: Command) !?Request {
         .prev_tab => editor.cycleTab(-1),
         .split_right => try editor.split(.right),
         .split_down => try editor.split(.down),
-        .next_pane => try editor.cyclePane(1),
-        .prev_pane => try editor.cyclePane(-1),
+        .next_pane => editor.cyclePane(1),
+        .prev_pane => editor.cyclePane(-1),
         .focus_sidebar => editor.focusArea(.sidebar),
         .focus_editor => editor.focusArea(.editor),
         .show_files => editor.showSide(.files),

@@ -151,13 +151,7 @@ pub const View = struct {
 };
 
 const testing = std.testing;
-
-fn testDocument(text: []const u8) !Document {
-    var doc = Document.init(testing.allocator);
-    errdefer doc.deinit();
-    try doc.load(text);
-    return doc;
-}
+const testDocument = @import("../core/edit.zig").testDocument;
 
 /// Ten lines "0".."9", each on its own line.
 const ten_lines = "0\n1\n2\n3\n4\n5\n6\n7\n8\n9";

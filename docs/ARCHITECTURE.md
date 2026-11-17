@@ -20,7 +20,7 @@ src/
     widgets/      reusable controls (list, tabs, prompt, menu, scrollbar, minimap)
     panels/       one view per feature (editor_view, welcome, file_tree, git, terminal, status_bar)
   font/           the built-in fonts (stb_truetype), their metrics, the glyph atlas
-assets/           built-in ZON files, embedded in the exe (assets.zig lists them)
+assets/           built-in data files, deflated into the exe (build.zig lists them)
   settings.zon    default settings
   keymap.zon      user key bindings (empty: the defaults are in keymap.zig)
   state.zon       what the app remembers between runs (written by the app)
@@ -30,7 +30,7 @@ assets/           built-in ZON files, embedded in the exe (assets.zig lists them
   grammars/       one grammar file per language (docs/GRAMMARS.md)
 tests/            integration tests (unit tests stay next to the code)
 tools/            small build helpers (size_check: `zig build size`,
-                  embed_dir: embeds every grammar file)
+                  pack: deflates the files of assets/ into the exe)
 third_party/      vendored C dependencies (SDL3, stb_truetype)
 ```
 
@@ -180,8 +180,9 @@ third_party/      vendored C dependencies (SDL3, stb_truetype)
 - `language.zig` picks a grammar by file name, extension, then shebang.
   Grammars that share an extension (`.m`, `.pl`, `.v`, `.fs`) are told
   apart by hints found in the first 1 KB of the file.
-- Grammars load with the settings into the config arena. `tools/embed_dir.zig`
-  embeds every file of `assets/grammars/` at build time.
+- Grammars load with the settings into the config arena. `tools/pack.zig`
+  packs every file of `assets/grammars/` at build time; `assets.get`
+  unpacks the built-in files on first use.
 - The editor view draws each run of one style in its theme color.
 
 ## Git (`git/`, `editor/git.zig`, `editor/tracking.zig`)

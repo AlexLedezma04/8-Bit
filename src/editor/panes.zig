@@ -122,15 +122,27 @@ pub const Node = struct {
     }
 
     /// The panes under this node, in order: left to right, top to bottom.
-    pub fn leaves(self: *Node, allocator: std.mem.Allocator, list: *std.ArrayList(*Node)) !void {
-        switch (self.kind) {
-            .pane => try list.append(allocator, self),
-            .split => |halves| {
-                try halves.first.leaves(allocator, list);
-                try halves.second.leaves(allocator, list);
-            },
-        }
+    pub fn leaves(self: *Node) Leaves {
+        return .{ .root = self, .next_leaf = self.firstLeaf() };
     }
+
+    pub const Leaves = struct {
+        root: *Node,
+        next_leaf: ?*Node,
+
+        pub fn next(self: *Leaves) ?*Node {
+            const leaf = self.next_leaf orelse return null;
+            self.next_leaf = after: {
+                var node = leaf;
+                while (node != self.root) : (node = node.parent.?) {
+                    const halves = node.parent.?.kind.split;
+                    if (halves.first == node) break :after halves.second.firstLeaf();
+                }
+                break :after null;
+            };
+            return leaf;
+        }
+    };
 
     pub fn firstLeaf(self: *Node) *Node {
         var node = self;
@@ -141,11 +153,11 @@ pub const Node = struct {
 
 const testing = std.testing;
 
-fn leafCount(root: *Node) !usize {
-    var list: std.ArrayList(*Node) = .empty;
-    defer list.deinit(testing.allocator);
-    try root.leaves(testing.allocator, &list);
-    return list.items.len;
+fn leafCount(root: *Node) usize {
+    var count: usize = 0;
+    var leaves = root.leaves();
+    while (leaves.next()) |_| count += 1;
+    return count;
 }
 
 test "split and remove keep a valid tree" {
@@ -154,7 +166,13 @@ test "split and remove keep a valid tree" {
 
     const right = try root.split(testing.allocator, .right);
     const below = try right.split(testing.allocator, .down);
-    try testing.expectEqual(@as(usize, 3), try leafCount(root));
+    try testing.expectEqual(@as(usize, 3), leafCount(root));
+    // Left to right, top to bottom.
+    var leaves = root.leaves();
+    try testing.expectEqual(root.kind.split.first, leaves.next().?);
+    try testing.expectEqual(root.kind.split.second.kind.split.first, leaves.next().?);
+    try testing.expectEqual(below, leaves.next().?);
+    try testing.expectEqual(@as(?*Node, null), leaves.next());
     try testing.expectEqual(Axis.right, root.kind.split.axis);
     try testing.expectEqual(root.kind.split.second, below.parent.?);
 
@@ -164,7 +182,7 @@ test "split and remove keep a valid tree" {
     const kept = top_right.remove(testing.allocator);
     try testing.expectEqual(root.kind.split.second, kept);
     try testing.expect(kept.kind == .pane);
-    try testing.expectEqual(@as(usize, 2), try leafCount(root));
+    try testing.expectEqual(@as(usize, 2), leafCount(root));
 
     _ = kept.remove(testing.allocator);
     try testing.expect(root.kind == .pane);

@@ -75,6 +75,7 @@ fn addEditor(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.buil
             .target = target,
             .optimize = optimize,
             .link_libc = true,
+            .unwind_tables = unwindTables(target, optimize),
             .imports = &.{
                 .{ .name = "sdl", .module = sdl_c.createModule() },
                 .{ .name = "assets", .module = assets },
@@ -84,6 +85,12 @@ fn addEditor(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.buil
     exe.root_module.linkLibrary(buildSdl(b, target, optimize));
     addStb(b, exe.root_module, target, optimize);
     return exe;
+}
+
+/// None in a Linux release: nothing unwinds the stack there, so the tables
+/// are only size. Windows needs them for SEH, debug builds for stack traces.
+fn unwindTables(target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) ?std.builtin.UnwindTables {
+    return if (target.result.os.tag == .windows or optimize == .debug) null else .none;
 }
 
 /// stb_truetype, which reads the built-in fonts: C code and its Zig import "stb".
@@ -99,23 +106,35 @@ fn addStb(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedTarge
     mod.addCSourceFile(.{ .file = b.path("third_party/stb/stb_truetype.c"), .flags = &.{"-fno-sanitize=undefined"} });
 }
 
-/// The built-in data files of assets/, embedded in the exe. Every grammar
-/// file is found by `tools/embed_dir.zig`.
+/// The built-in data files of assets/, deflated into the exe by
+/// `tools/pack.zig`: a name, then the file or the folder of `.zon` files.
+const packed_assets = [_][2][]const u8{
+    .{ "settings", "settings.zon" },
+    .{ "keymap", "keymap.zon" },
+    .{ "state", "state.zon" },
+    .{ "fonts/code", "fonts/JetBrainsMono-Regular.ttf" },
+    .{ "fonts/ui", "fonts/Inter-Regular.ttf" },
+    .{ "themes", "themes" },
+    .{ "grammars", "grammars" },
+};
+
 fn addAssets(b: *std.Build) *std.Build.Module {
-    const embed = b.addRunArtifact(b.addExecutable(.{
-        .name = "embed_dir",
+    const pack = b.addRunArtifact(b.addExecutable(.{
+        .name = "pack",
         .root_module = b.createModule(.{
-            .root_source_file = b.path("tools/embed_dir.zig"),
+            .root_source_file = b.path("tools/pack.zig"),
             .target = b.graph.host,
         }),
     }));
-    // The folder's contents are not hashed, so run every time to see new files.
-    embed.has_side_effects = true;
-    embed.addArg("grammars");
-    embed.addDirectoryArg(b.path("assets/grammars"));
-    const grammars = b.createModule(.{ .root_source_file = embed.addOutputFileArg("grammars.zig") });
+    // Folder contents are not hashed, so run every time to see new files.
+    pack.has_side_effects = true;
+    const bundle = pack.addOutputFileArg("bundle.zig");
+    for (packed_assets) |asset| {
+        pack.addArg(asset[0]);
+        pack.addDirectoryArg(b.path(b.fmt("assets/{s}", .{asset[1]})));
+    }
     const assets = b.createModule(.{ .root_source_file = b.path("assets/assets.zig") });
-    assets.addImport("grammars", grammars);
+    assets.addImport("bundle", b.createModule(.{ .root_source_file = bundle }));
     return assets;
 }
 
@@ -125,6 +144,7 @@ fn buildSdl(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.built
         .target = target,
         .optimize = optimize,
         .link_libc = true,
+        .unwind_tables = unwindTables(target, optimize),
     });
     const lib = b.addLibrary(.{ .name = "SDL3", .root_module = mod, .linkage = .static });
     // One section per function/data, so the linker drops every SDL part we never call.

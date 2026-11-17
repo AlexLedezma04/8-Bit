@@ -100,14 +100,8 @@ fn toggleBlock(doc: *Document, lines: [2]usize, start: []const u8, end: []const 
 }
 
 const testing = std.testing;
+const testDocument = @import("edit.zig").testDocument;
 const expectText = @import("buffer.zig").expectText;
-
-fn testDocument(text: []const u8) !Document {
-    var doc = Document.init(testing.allocator);
-    errdefer doc.deinit();
-    try doc.load(text);
-    return doc;
-}
 
 test "line comments at the smallest indent, then off again; one undo step" {
     var doc = try testDocument("if x:\n    a\n\n  b\nc");
