@@ -19,7 +19,8 @@ const Look = panel.Look;
 const Handled = panel.Handled;
 const tabs = @import("../widgets/tabs.zig");
 const menu_zig = @import("../widgets/menu.zig");
-const Scrollbar = @import("../widgets/scrollbar.zig").Scrollbar;
+const scrollbar_zig = @import("../widgets/scrollbar.zig");
+const Scrollbar = scrollbar_zig.Scrollbar;
 const commands = @import("../../editor/commands.zig");
 const Color = @import("../theme.zig").Color;
 const Event = @import("../../platform/event.zig").Event;
@@ -37,8 +38,8 @@ pub const EditorView = struct {
     /// The styled spans of the line being drawn.
     spans: std.ArrayList(syntax.Span) = .empty,
     /// What the left mouse button is doing since it went down.
-    /// `scroll` holds where the thumb was grabbed.
-    drag: union(enum) { none, select, split: *panes.Split, scroll: f32 } = .none,
+    /// `scroll` holds which scrollbar, and where its thumb was grabbed.
+    drag: union(enum) { none, select, split: *panes.Split, scroll: struct { axis: scrollbar_zig.Axis, grabbed: f32 } } = .none,
 
     pub fn deinit(self: *EditorView) void {
         const allocator = self.editor.allocator;
@@ -58,22 +59,41 @@ pub const EditorView = struct {
         layout.placePanes(self.editor.allocator, self.editor.root, rect, &self.placed, &self.splitters) catch {};
     }
 
-    /// The text layout of a pane, for the tab it shows, left of the scrollbar.
+    /// The text layout of a pane, for the tab it shows, inside the scrollbars.
     fn textLayout(self: *const EditorView, rect: Rect, metrics: Metrics, tab: *const Tab) TextLayout {
         const lines: ?usize = if (self.editor.settings.line_numbers) tab.file.doc.buffer.lineCount() else null;
         var area = rect.splitTop(metrics.bar())[1];
         area.w = @max(0, area.w - Scrollbar.width(metrics));
+        area.h = @max(0, area.h - Scrollbar.width(metrics));
         return .init(area, metrics, lines, decoration.gutterTextWidth(tab.decorations.items));
     }
 
-    /// The scrollbar of a pane: lines, with the first one shown at the top.
-    fn scrollbar(rect: Rect, metrics: Metrics, tab: *const Tab) Scrollbar {
+    /// The scrollbars of a pane: lines at the right, columns of the widest
+    /// line on screen below the text. Without wrap only.
+    fn scrollbars(self: *const EditorView, rect: Rect, metrics: Metrics, tab: *const Tab) [2]Scrollbar {
+        const text = self.textLayout(rect, metrics, tab).text;
+        const view = &tab.view;
+        const doc = &tab.file.doc;
+        const lines = doc.buffer.lineCount();
+        var widest: usize = 0;
+        for (view.top.line..@min(lines, view.top.line + view.rows)) |line| widest = @max(widest, doc.columnOf(doc.buffer.lineEnd(line)));
+        const right = Scrollbar.rightOf(rect.splitTop(metrics.bar())[1], metrics);
         return .{
-            .track = Scrollbar.trackOf(rect.splitTop(metrics.bar())[1], metrics),
-            .first = tab.view.top.line,
-            .last = tab.file.doc.buffer.lineCount() - 1,
-            .shown = tab.view.rows,
+            .{ .track = .{ .x = right.x, .y = right.y, .w = right.w, .h = text.h }, .first = view.top.line, .last = lines - 1, .shown = view.rows },
+            .{
+                .track = .{ .x = text.x, .y = text.y + text.h, .w = text.w, .h = right.w },
+                .axis = .horizontal,
+                .first = view.left,
+                .last = if (view.wrap) 0 else @max((widest + 1) -| view.cols, view.left),
+                .shown = view.cols,
+            },
         };
+    }
+
+    /// Scrolls a tab to what a scrollbar was dragged to.
+    fn scrollTo(tab: *Tab, bar: Scrollbar, at: f32, grabbed: f32) void {
+        const first = bar.firstAt(at, grabbed);
+        if (bar.axis == .vertical) tab.view.top = .{ .line = first } else tab.view.left = first;
     }
 
     fn tabItems(self: *EditorView, pane: *const panes.Pane) []const tabs.Item {
@@ -96,7 +116,7 @@ pub const EditorView = struct {
             canvas.setClip(.{ .x = text.gutter.x, .y = text.gutter.y, .w = text.gutter.w + text.text.w, .h = text.text.h });
             drawTab(canvas, look, self.editor, tab, &text, focused and active, &self.spans);
             canvas.setClip(null);
-            scrollbar(item.rect, look.metrics, tab).draw(canvas, look);
+            for (self.scrollbars(item.rect, look.metrics, tab)) |bar| bar.draw(canvas, look);
         }
         for (self.splitters.items) |splitter| canvas.fillRect(splitter.line, look.theme.border);
     }
@@ -125,10 +145,11 @@ pub const EditorView = struct {
                 }
                 if (mouse.button == .middle) return .yes;
                 if (item.node != editor.pane) editor.switchTo(item.node, pane.active);
-                const bar_ = scrollbar(item.rect, metrics, pane.tab());
-                if (bar_.visible() and bar_.track.contains(mouse.x, mouse.y)) {
-                    self.drag = .{ .scroll = bar_.grab(mouse.y) };
-                    pane.tab().view.top = .{ .line = bar_.firstAt(mouse.y, self.drag.scroll) };
+                for (self.scrollbars(item.rect, metrics, pane.tab())) |bar_| {
+                    if (!bar_.visible() or !bar_.track.contains(mouse.x, mouse.y)) continue;
+                    const at = bar_.along(mouse.x, mouse.y);
+                    self.drag = .{ .scroll = .{ .axis = bar_.axis, .grabbed = bar_.grab(at) } };
+                    scrollTo(pane.tab(), bar_, at, self.drag.scroll.grabbed);
                     return .yes;
                 }
                 const cell = self.textLayout(item.rect, metrics, pane.tab()).cellAt(mouse.x, mouse.y);
@@ -146,9 +167,10 @@ pub const EditorView = struct {
                     const cell = self.textLayout(item.rect, metrics, item.node.pane().tab()).cellAt(mouse.x, mouse.y);
                     editor.mouseDrag(cell.x, cell.y);
                 },
-                .scroll => |grabbed| for (self.placed.items) |item| if (item.node == editor.pane) {
+                .scroll => |scroll| for (self.placed.items) |item| if (item.node == editor.pane) {
                     const tab = item.node.pane().tab();
-                    tab.view.top = .{ .line = scrollbar(item.rect, metrics, tab).firstAt(mouse.y, grabbed) };
+                    const bar_ = self.scrollbars(item.rect, metrics, tab)[@intFromEnum(scroll.axis)];
+                    scrollTo(tab, bar_, bar_.along(mouse.x, mouse.y), scroll.grabbed);
                 },
             },
             .mouse_up => {

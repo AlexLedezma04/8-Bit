@@ -98,8 +98,11 @@ third_party/      vendored C dependencies (SDL3, stb_truetype)
   open either (`Editor.welcome`). Closing the folder closes every file,
   asking about unsaved ones like quitting does.
 - **Scrolling.** The workbench turns wheel steps into whole rows, adding up
-  the parts of a step that smooth wheels and touchpads send. Files and
-  lists show `ui/widgets/scrollbar.zig` when they do not fit.
+  the parts of a step that smooth wheels and touchpads send. On X11, SDL
+  reads those from XInput 2.1 scroll valuators (`..._SUPPORTS_SCROLLINFO` in
+  SDL's Linux build config). Files and lists show `ui/widgets/scrollbar.zig`
+  when they do not fit: lines at the right, and below the text the columns
+  of the widest line on screen, unless lines wrap.
 - **Menus.** A panel opens the one `ui/widgets/menu.zig` on a right click with
   its items and itself as the target; the workbench gives the menu every
   input event while it is open and the target gets the chosen index.

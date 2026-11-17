@@ -91,3 +91,37 @@ test "list scrollbar: the file tree of a big folder can be dragged" {
     for (0..30) |_| wheel(&session, sidebar.x + 50, sidebar.y + 100, 1);
     try testing.expectEqual(@as(usize, 0), session.workbench.files.list.top);
 }
+
+/// The thumb of the scrollbar drawn along the bottom of `area`.
+fn bottomThumb(session: *const Session, area: app.ui.layout.Rect) ?app.ui.layout.Rect {
+    for (session.recorder.fills.items) |fill| {
+        const rect = fill.rect;
+        if (rect.h < 8 and rect.w >= 16 and rect.y > area.y + area.h - 40 and rect.y < area.y + area.h) return rect;
+    }
+    return null;
+}
+
+test "horizontal scrollbar: shown for a long line, drag and Shift+wheel scroll, gone with wrap" {
+    var session: Session = undefined;
+    try session.init();
+    defer session.deinit();
+    const editor = &session.editor;
+    const long: [400]u8 = @splat('w');
+    try session.write("wide.txt", "short\n" ++ long ++ "\n");
+    editor.open(session.path("wide.txt"));
+    session.draw();
+    const area = session.workbench.frame().editor;
+
+    const thumb_ = bottomThumb(&session, area).?;
+    try testing.expect(thumb_.w < area.w / 2);
+    session.drag(thumb_.x + 4, thumb_.y + 2, area.x + area.w + 100, thumb_.y + 2);
+    // The end of the line is in view.
+    try testing.expect(editor.view().left + editor.view().cols >= 400);
+    try testing.expect(bottomThumb(&session, area).?.x > area.x + area.w / 2);
+
+    _ = session.send(.{ .wheel = .{ .x = 500, .y = 300, .dx = 0, .dy = 1, .mods = .{ .shift = true } } });
+    try testing.expect(editor.view().left + editor.view().cols < 400);
+
+    _ = session.press("alt+z");
+    try testing.expect(bottomThumb(&session, area) == null);
+}

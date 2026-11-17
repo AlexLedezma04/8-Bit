@@ -1,4 +1,4 @@
-//! A vertical scrollbar at the right edge of a file or a list, shown when
+//! A scrollbar at the right or bottom edge of a file or a list, shown when
 //! not everything fits. Dragging the thumb scrolls; a click on the track
 //! moves the thumb there first.
 const std = @import("std");
@@ -8,57 +8,104 @@ const Rect = layout.Rect;
 const Metrics = layout.Metrics;
 const Look = @import("../panel.zig").Look;
 
+pub const Axis = enum { vertical, horizontal };
+
 pub const Scrollbar = struct {
     track: Rect,
-    /// The first row shown, and the largest it can be.
+    axis: Axis = .vertical,
+    /// The first row (or column) shown, and the largest it can be.
     first: usize,
     last: usize,
-    /// Rows on screen.
+    /// Rows (or columns) on screen.
     shown: usize,
 
+    /// How thick a scrollbar is.
     pub fn width(metrics: Metrics) f32 {
         return metrics.cell;
     }
 
     /// The strip at the right edge of `rect`.
-    pub fn trackOf(rect: Rect, metrics: Metrics) Rect {
+    pub fn rightOf(rect: Rect, metrics: Metrics) Rect {
         const w = width(metrics);
         return .{ .x = rect.x + rect.w - w, .y = rect.y, .w = w, .h = rect.h };
     }
 
+    /// The strip at the bottom edge of `rect`.
+    pub fn bottomOf(rect: Rect, metrics: Metrics) Rect {
+        const h = width(metrics);
+        return .{ .x = rect.x, .y = rect.y + rect.h - h, .w = rect.w, .h = h };
+    }
+
     pub fn visible(self: Scrollbar) bool {
-        return self.last > 0 and self.track.h > 0;
+        return self.last > 0 and self.length() > 0;
+    }
+
+    /// Where the track starts and how long it is, along the axis.
+    fn start(self: Scrollbar) f32 {
+        return if (self.axis == .vertical) self.track.y else self.track.x;
+    }
+
+    fn length(self: Scrollbar) f32 {
+        return if (self.axis == .vertical) self.track.h else self.track.w;
+    }
+
+    fn thickness(self: Scrollbar) f32 {
+        return if (self.axis == .vertical) self.track.w else self.track.h;
+    }
+
+    /// The thumb's start and length along the axis.
+    fn span(self: Scrollbar) [2]f32 {
+        const total: f32 = @floatFromInt(self.last + self.shown);
+        const len = @min(self.length(), @max(2 * self.thickness(), self.length() * @as(f32, @floatFromInt(self.shown)) / total));
+        const share = @as(f32, @floatFromInt(@min(self.first, self.last))) / @as(f32, @floatFromInt(@max(self.last, 1)));
+        return .{ self.start() + @round((self.length() - len) * share), len };
     }
 
     pub fn thumb(self: Scrollbar) Rect {
-        const total: f32 = @floatFromInt(self.last + self.shown);
-        const h = @min(self.track.h, @max(2 * self.track.w, self.track.h * @as(f32, @floatFromInt(self.shown)) / total));
-        const share = @as(f32, @floatFromInt(@min(self.first, self.last))) / @as(f32, @floatFromInt(@max(self.last, 1)));
-        return .{ .x = self.track.x, .y = self.track.y + @round((self.track.h - h) * share), .w = self.track.w, .h = h };
+        const at, const len = self.span();
+        var rect = self.track;
+        if (self.axis == .vertical) {
+            rect.y = at;
+            rect.h = len;
+        } else {
+            rect.x = at;
+            rect.w = len;
+        }
+        return rect;
     }
 
-    /// Where a press grabs the thumb: the point under the mouse, or its
-    /// middle when the press is on the track.
-    pub fn grab(self: Scrollbar, y: f32) f32 {
-        const t = self.thumb();
-        return if (y >= t.y and y < t.y + t.h) y - t.y else t.h / 2;
+    /// The mouse position along the axis.
+    pub fn along(self: Scrollbar, x: f32, y: f32) f32 {
+        return if (self.axis == .vertical) y else x;
     }
 
-    /// The first row that puts the grabbed point of the thumb at `y`.
-    pub fn firstAt(self: Scrollbar, y: f32, grabbed: f32) usize {
-        const t = self.thumb();
-        const room = self.track.h - t.h;
+    /// Where a press at `at` grabs the thumb: the point under the mouse, or
+    /// its middle when the press is on the track.
+    pub fn grab(self: Scrollbar, at: f32) f32 {
+        const thumb_at, const len = self.span();
+        return if (at >= thumb_at and at < thumb_at + len) at - thumb_at else len / 2;
+    }
+
+    /// The first row that puts the grabbed point of the thumb at `at`.
+    pub fn firstAt(self: Scrollbar, at: f32, grabbed: f32) usize {
+        const room = self.length() - self.span()[1];
         if (room <= 0) return 0;
-        const share = std.math.clamp((y - grabbed - self.track.y) / room, 0, 1);
+        const share = std.math.clamp((at - grabbed - self.start()) / room, 0, 1);
         return @intFromFloat(@round(share * @as(f32, @floatFromInt(self.last))));
     }
 
     pub fn draw(self: Scrollbar, canvas: Canvas, look: Look) void {
         if (!self.visible()) return;
-        const t = self.thumb();
-        const inset = @floor(t.w / 4);
-        const color = if (look.hovered(self.track)) look.theme.line_number else look.theme.list_inactive;
-        canvas.fillRect(.{ .x = t.x + inset, .y = t.y, .w = t.w - 2 * inset, .h = t.h }, color);
+        var t = self.thumb();
+        const inset = @floor(self.thickness() / 4);
+        if (self.axis == .vertical) {
+            t.x += inset;
+            t.w -= 2 * inset;
+        } else {
+            t.y += inset;
+            t.h -= 2 * inset;
+        }
+        canvas.fillRect(t, if (look.hovered(self.track)) look.theme.line_number else look.theme.list_inactive);
     }
 };
 
@@ -85,4 +132,11 @@ test "dragging maps the thumb back to a row" {
     // A press on the track grabs the middle, so the thumb centers there.
     try testing.expectEqual(@as(f32, 50), bar.grab(350));
     try testing.expectEqual(@as(usize, 300), bar.firstAt(350, 50));
+}
+
+test "a horizontal scrollbar works along x" {
+    const bar: Scrollbar = .{ .track = .{ .x = 10, .y = 500, .w = 400, .h = 8 }, .axis = .horizontal, .first = 100, .last = 100, .shown = 300 };
+    try testing.expectEqual(Rect{ .x = 10 + 100, .y = 500, .w = 300, .h = 8 }, bar.thumb());
+    try testing.expectEqual(@as(f32, 410), bar.along(410, 0));
+    try testing.expectEqual(@as(usize, 0), bar.firstAt(10 + 5, 5));
 }

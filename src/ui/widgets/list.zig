@@ -40,7 +40,7 @@ pub const List = struct {
 
     fn scrollbar(self: *const List, rect: Rect, metrics: Metrics, count: usize) Scrollbar {
         const rows = rowsIn(rect, metrics);
-        return .{ .track = Scrollbar.trackOf(rect, metrics), .first = self.top, .last = count -| rows, .shown = rows };
+        return .{ .track = Scrollbar.rightOf(rect, metrics), .first = self.top, .last = count -| rows, .shown = rows };
     }
 
     /// Presses, drags and releases of the scrollbar. True when it used the event.
