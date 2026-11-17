@@ -82,6 +82,8 @@ pub const Status = struct {
     /// Empty outside a repository.
     branch: []const u8,
     language: []const u8,
+    /// The terminal panel is shown.
+    terminal: bool,
 };
 
 /// What the app remembers between runs, in `state.zon`.
@@ -122,6 +124,10 @@ pub const Editor = struct {
     folder: ?[]u8 = null,
     /// Goes up whenever `folder` changes.
     folder_version: u32 = 0,
+    /// Goes up when files may have changed outside the editor.
+    disk_version: u32 = 0,
+    /// When terminal output has rested long enough to look at the disk.
+    disk_check_ms: ?u64 = null,
     /// Screen pixels per font pixel.
     zoom: u8 = 1,
     default_zoom: u8 = 1,
@@ -164,6 +170,8 @@ pub const Editor = struct {
     const max_log = 200;
     const max_message = 160;
     const max_recent = 10;
+    /// A command in a terminal may have changed files or made a repository.
+    const disk_rest_ms = 500;
 
     const Pending = union(enum) {
         /// Quitting or closing the folder; the files before `from` are done.
@@ -748,7 +756,10 @@ pub const Editor = struct {
         switch (posted) {
             .found => |found| self.project.receive(found),
             .search_done => |done| self.project.done(done),
-            .terminal => |output| self.terminals.receive(output),
+            .terminal => |output| {
+                self.terminals.receive(output);
+                self.disk_check_ms = self.now_ms + disk_rest_ms;
+            },
             .git => |job| {
                 defer self.refreshVisible(self.root);
                 return self.git.receive(job);
@@ -786,6 +797,13 @@ pub const Editor = struct {
             // `Git.deinit` already freed it.
             .git, .cancelled, .dialog_failed, .search_done => {},
         }
+    }
+
+    /// Files may have changed outside: the file tree reads the folder again
+    /// and git looks again, also for a repository made or deleted.
+    pub fn diskChanged(self: *Editor) void {
+        self.disk_version +%= 1;
+        self.git.refresh();
     }
 
     /// Reloads files that changed on disk. A file with unsaved changes is
@@ -946,7 +964,13 @@ pub const Editor = struct {
         };
     }
 
+    /// The sidebar panel shown: the git panel only inside a repository.
+    pub fn sidePanel(self: *const Editor) SidePanel {
+        return if (self.side_panel == .git and !self.git.ready()) .files else self.side_panel;
+    }
+
     pub fn showSide(self: *Editor, panel: SidePanel) void {
+        if (panel == .git and !self.git.ready()) return self.notify("No git repository", .{});
         if (self.side_panel != panel) {
             self.side_panel = panel;
             self.remember();
@@ -1090,6 +1114,11 @@ pub const Editor = struct {
     /// True when something on screen changed.
     pub fn tick(self: *Editor) bool {
         var changed = false;
+        if (self.disk_check_ms) |at| if (self.now_ms >= at) {
+            self.disk_check_ms = null;
+            self.diskChanged();
+            changed = true;
+        };
         for (self.files.items) |item| {
             if (item.role != .text or item.path == null) continue;
             const tracking = &item.tracking;
@@ -1105,7 +1134,7 @@ pub const Editor = struct {
 
     /// Milliseconds until the screen must change by itself, if ever.
     pub fn timeLeft(self: *const Editor) ?u64 {
-        var left: ?u64 = null;
+        var left: ?u64 = if (self.disk_check_ms) |at| at -| self.now_ms else null;
         for (self.files.items) |item| if (item.tracking.timeLeft(self.now_ms)) |ms| {
             left = @min(ms, left orelse ms);
         };
@@ -1216,6 +1245,7 @@ pub const Editor = struct {
         return .{
             .branch = if (self.git.ready()) self.git.status.branch else "",
             .language = if (self.empty()) "" else if (self.file().highlighter.rules) |rules| rules.grammar.name else plain_text,
+            .terminal = self.bottom.shown and self.bottom_panel == .terminal,
         };
     }
 

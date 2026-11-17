@@ -52,8 +52,9 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, program: []const u8, cwd: [
 }
 
 /// The absolute path of the folder at or above `path` that holds `.git`,
-/// or null outside a repository.
-pub fn findRoot(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !?[]u8 {
+/// or null outside a repository. Like git, it never goes up into a folder
+/// of `ceilings`, a list as in `GIT_CEILING_DIRECTORIES`.
+pub fn findRoot(allocator: std.mem.Allocator, io: std.Io, path: []const u8, ceilings: []const u8) !?[]u8 {
     const real = try std.Io.Dir.cwd().realPathFileAlloc(io, path, allocator);
     defer allocator.free(real);
     var dir: ?[]const u8 = real;
@@ -61,6 +62,9 @@ pub fn findRoot(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !?[]
         const dot_git = try std.fs.path.join(allocator, &.{ current, ".git" });
         defer allocator.free(dot_git);
         if (fs.modTime(io, dot_git) != null) return try allocator.dupe(u8, current);
+        const parent = std.fs.path.dirname(current) orelse break;
+        var list = std.mem.tokenizeScalar(u8, ceilings, std.fs.path.delimiter);
+        while (list.next()) |ceiling| if (std.mem.eql(u8, std.mem.trimEnd(u8, ceiling, std.fs.path.sep_str), parent)) return null;
     }
     return null;
 }
@@ -86,10 +90,15 @@ test "findRoot walks up to .git, run gives the output of git" {
     try testing.expect(init.ok);
 
     var deeper: [160]u8 = undefined;
-    const root = (try findRoot(testing.allocator, testing.io, try std.fmt.bufPrint(&deeper, "{s}/sub/deeper", .{folder}))).?;
+    const sub = try std.fmt.bufPrint(&deeper, "{s}/sub/deeper", .{folder});
+    const root = (try findRoot(testing.allocator, testing.io, sub, "")).?;
     defer testing.allocator.free(root);
     try testing.expect(std.fs.path.isAbsolute(root));
     try testing.expect(std.mem.endsWith(u8, root, &tmp.sub_path));
+    // A ceiling stops the walk before it reaches the repository.
+    const ceiling = try std.fmt.allocPrint(testing.allocator, "/nowhere{c}{s}" ++ std.fs.path.sep_str ++ "sub", .{ std.fs.path.delimiter, root });
+    defer testing.allocator.free(ceiling);
+    try testing.expectEqual(@as(?[]u8, null), try findRoot(testing.allocator, testing.io, sub, ceiling));
 
     const bad = try run(testing.allocator, testing.io, "git", root, &.{ "show", "HEAD:none" });
     defer bad.deinit(testing.allocator);

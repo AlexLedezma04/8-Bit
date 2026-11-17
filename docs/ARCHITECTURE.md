@@ -175,8 +175,8 @@ third_party/      vendored C dependencies (SDL3, stb_truetype)
 
 ## Git (`git/`, `editor/git.zig`, `editor/tracking.zig`)
 
-- `git/repo.zig` finds the repository (walks up to `.git`) and runs the git
-  CLI. Every git feature goes through `repo.run`. The program comes from the
+- `git/repo.zig` finds the repository (walks up to `.git`, stopping at
+  `GIT_CEILING_DIRECTORIES` like git) and runs the git CLI. Every git feature goes through `repo.run`. The program comes from the
   `git` setting; when it is missing, git features hide and one message says why.
 - `git/status.zig`, `git/log.zig` know the commands and read their output:
   `status --porcelain=v1 -z`, `log`, `branch`, `blame --porcelain`.
@@ -194,7 +194,12 @@ third_party/      vendored C dependencies (SDL3, stb_truetype)
   read-only (`Document.read_only`) with its lines as `File.marks`; the commit
   message is committed with Ctrl+Enter and is never "modified".
 - The sidebar has the file tree and the git panel; each dock switches its
-  panels with the tabs widget.
+  panels with the tabs widget. Outside a repository the Git tab is hidden.
+- Every `Git.refresh` looks for the repository again, so one made, deleted
+  or moved while the folder is open is noticed; a lost one also takes the
+  gutter markers and blame of open files. `Editor.diskChanged` refreshes git
+  and the file tree on focus, and 500 ms after terminal output rests, since
+  a command there may have changed files or the repository.
 
 ## Terminal (`terminal/`, `platform/pty.zig`, `editor/terminals.zig`)
 
@@ -217,7 +222,9 @@ third_party/      vendored C dependencies (SDL3, stb_truetype)
   through the mailbox with the terminal's id; output of a closed one is dropped.
 - `ui/panels/terminal.zig` draws each run of one color with `drawText`. The
   16 colors come from the theme's `terminal` colors; 256 and true colors
-  are computed. Keys go to the shell, except a few window commands.
+  are computed. Keys go to the shell, except a few window commands. The
+  Terminal button at the right of the status bar, Alt+T and Ctrl+` show or
+  hide it.
 
 ## Config (`editor/config.zig`)
 

@@ -28,8 +28,9 @@ pub const FileTree = struct {
     menu: *Menu,
     entries: std.ArrayList(Entry) = .empty,
     list: List = .{},
-    /// The `folder_version` of the editor that `entries` show.
+    /// The `folder_version` and `disk_version` of the editor that `entries` show.
     version: ?u32 = null,
+    disk_version: u32 = 0,
     /// The folder a new file goes in, or the path being renamed or deleted.
     target: ?[]u8 = null,
     /// What the prompt asks a name for.
@@ -79,10 +80,15 @@ pub const FileTree = struct {
 
     /// Reads the folder again when the editor opened another one.
     pub fn sync(self: *FileTree) void {
-        if (self.version == self.editor.folder_version) return;
-        self.version = self.editor.folder_version;
-        self.list = .{};
-        self.reload(&.{});
+        if (self.version != self.editor.folder_version) {
+            self.version = self.editor.folder_version;
+            self.disk_version = self.editor.disk_version;
+            self.list = .{};
+            self.reload(&.{});
+        } else if (self.disk_version != self.editor.disk_version) {
+            self.disk_version = self.editor.disk_version;
+            self.refresh();
+        }
     }
 
     /// Reads the folder, opening the folders in `open` again.

@@ -64,7 +64,7 @@ const others = [_]Binding{
     .{ .key = .char('-'), .mods = ctrl, .command = .zoom_out },
     .{ .key = .char('0'), .mods = ctrl, .command = .zoom_reset },
     .{ .key = .char(','), .mods = ctrl, .command = .open_settings },
-    .{ .key = .char('t'), .mods = alt, .command = .next_theme },
+    .{ .key = .char('t'), .mods = alt_shift, .command = .next_theme },
     .{ .key = .char('n'), .mods = ctrl, .command = .new_file },
     .{ .key = .char('w'), .mods = ctrl, .command = .close_tab },
     .{ .key = .tab, .mods = ctrl, .command = .next_tab },
@@ -104,6 +104,7 @@ const others = [_]Binding{
     .{ .key = .char('h'), .mods = alt, .command = .file_history },
     .{ .key = .char('`'), .mods = ctrl, .command = .toggle_terminal },
     .{ .key = .f12, .mods = alt, .command = .toggle_terminal },
+    .{ .key = .char('t'), .mods = alt, .command = .toggle_terminal },
     .{ .key = .char('`'), .mods = ctrl_shift, .command = .new_terminal },
     .{ .key = .f12, .mods = alt_shift, .command = .new_terminal },
 };

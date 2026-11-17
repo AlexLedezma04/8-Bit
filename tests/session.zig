@@ -37,6 +37,10 @@ pub const Session = struct {
             .workbench = undefined,
             .recorder = .{ .allocator = testing.allocator },
         };
+        // The folder is inside this project's repository; git must not see it.
+        const tmp_root = try std.Io.Dir.cwd().realPathFileAlloc(testing.io, ".zig-cache/tmp", testing.allocator);
+        defer testing.allocator.free(tmp_root);
+        try self.env.put("GIT_CEILING_DIRECTORIES", tmp_root);
         self.start();
         const folder = try std.fmt.bufPrint(&self.folder, ".zig-cache/tmp/{s}", .{self.tmp.sub_path});
         self.folder_len = folder.len;

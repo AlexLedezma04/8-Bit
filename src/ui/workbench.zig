@@ -119,7 +119,7 @@ pub const Workbench = struct {
 
     fn panelOf(self: *Workbench, area: Area) Panel {
         return switch (area) {
-            .sidebar => self.sidePanel(self.editor.side_panel),
+            .sidebar => self.sidePanel(self.editor.sidePanel()),
             .editor => if (self.editor.empty()) .of(Welcome, &self.welcome) else .of(EditorView, &self.view),
             .bottom => self.bottomPanel(self.editor.bottom_panel),
         };
@@ -142,7 +142,8 @@ pub const Workbench = struct {
 
     const max_dock_panels = 4;
 
-    /// One tab per panel of a dock, and the index of the one shown.
+    /// One tab per panel of a dock, and the index of the one shown. The git
+    /// panel, the last of the sidebar, has no tab outside a repository.
     fn dockTabs(self: *Workbench, area: Area, items: *[max_dock_panels]tabs.Item) struct { []const tabs.Item, usize } {
         switch (area) {
             inline .sidebar, .bottom => |dock| {
@@ -152,8 +153,9 @@ pub const Workbench = struct {
                     const shown = if (dock == .sidebar) self.sidePanel(which) else self.bottomPanel(which);
                     items[i] = .{ .title = shown.title(), .closable = false };
                 }
-                const active = if (dock == .sidebar) self.editor.side_panel else self.editor.bottom_panel;
-                return .{ items[0..values.len], @backingInt(active) };
+                const active = if (dock == .sidebar) self.editor.sidePanel() else self.editor.bottom_panel;
+                const count = if (dock == .sidebar and !self.editor.git.ready()) values.len - 1 else values.len;
+                return .{ items[0..count], @backingInt(active) };
             },
             .editor => unreachable,
         }
@@ -263,8 +265,7 @@ pub const Workbench = struct {
             .quit => return self.run(.quit),
             .redraw, .wake => {},
             .focus => |gained| if (gained) {
-                self.files.refresh();
-                editor.git.refresh();
+                editor.diskChanged();
                 return .{ .request = editor.checkDisk() };
             },
             .key => |press| return self.onKey(press),
@@ -462,6 +463,12 @@ pub const Workbench = struct {
         const target = self.frame();
         if (target.edgeAt(scaled.x, scaled.y)) |edge| {
             self.dragging = edge;
+            return .{};
+        }
+        // The terminal button hides a shown terminal even without focus.
+        if (status_bar.terminalButton(self.metrics(), target.status).contains(scaled.x, scaled.y)) {
+            if (!self.editor.status().terminal) return self.run(.toggle_terminal);
+            self.editor.toggleDock(.bottom);
             return .{};
         }
         inline for (.{ Area.sidebar, Area.bottom }) |area| if (rectOf(target, area)) |rect| {

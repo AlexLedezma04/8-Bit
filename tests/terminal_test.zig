@@ -156,3 +156,59 @@ test "colors and the alternate screen of a real program" {
     try session.waitForTerminal("rgb");
     try testing.expect(!session.shows("fullscreen"));
 }
+
+test "the terminal button in the status bar and Alt+T show and hide the terminal" {
+    var session: Session = undefined;
+    try session.init();
+    defer session.deinit();
+    const editor = &session.editor;
+    editor.open(session.path("b.txt"));
+    session.draw();
+    try testing.expect(session.inStatusBar("Terminal"));
+
+    _ = session.clickText("Terminal");
+    try testing.expect(editor.bottom.shown);
+    try testing.expectEqual(app.editor.editor.BottomPanel.terminal, editor.bottom_panel);
+    try testing.expectEqual(@as(usize, 1), editor.terminals.list.items.len);
+    // Hidden again even when the editor has focus.
+    _ = session.click(500, 100);
+    try testing.expectEqual(Area.editor, editor.focus);
+    const button = session.last("Terminal").?;
+    _ = session.click(button.x + 4, button.y + 8);
+    try testing.expect(!editor.bottom.shown);
+
+    _ = session.press("alt+t");
+    try testing.expect(editor.bottom.shown);
+    try testing.expectEqual(Area.bottom, editor.focus);
+    // Alt+T works from inside the terminal too.
+    _ = session.press("alt+t");
+    try testing.expect(!editor.bottom.shown);
+    try testing.expectEqual(@as(usize, 1), editor.terminals.list.items.len);
+}
+
+test "a repository made or deleted in the terminal shows up once its output rests" {
+    if (windows) return error.SkipZigTest;
+    var session: Session = undefined;
+    try session.init();
+    defer session.deinit();
+    const editor = &session.editor;
+
+    _ = session.press("ctrl+`");
+    run(&session, "rm -rf .git && touch made.txt && " ++ comptime echo("gone", "now"));
+    try session.waitForTerminal("gone-now");
+    // Not yet: the output must rest first.
+    try testing.expect(editor.git.ready());
+    editor.now_ms += 1000;
+    _ = session.waitForGit();
+    try testing.expect(!editor.git.ready());
+    try testing.expect(session.last("Git") == null);
+    try testing.expect(session.shows("made.txt"));
+
+    run(&session, "git init -q -b main && " ++ comptime echo("back", "again"));
+    try session.waitForTerminal("back-again");
+    editor.now_ms += 1000;
+    _ = session.waitForGit();
+    try testing.expect(editor.git.ready());
+    try testing.expect(session.last("Git") != null);
+    try testing.expect(session.inStatusBar("main"));
+}

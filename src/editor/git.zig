@@ -245,8 +245,9 @@ pub const Git = struct {
         self.branches.deinit(self.allocator);
     }
 
-    /// Forgets the repository.
+    /// Forgets the repository and what it said about open files.
     pub fn close(self: *Git) void {
+        for (self.editor().files.items) |file| file.tracking.forgetAll(self.allocator);
         if (self.root) |root| self.allocator.free(root);
         self.allocator.free(self.prefix);
         self.root = null;
@@ -263,7 +264,7 @@ pub const Git = struct {
     /// Finds the repository of a newly opened folder and reads its status.
     pub fn open(self: *Git, folder: []const u8) void {
         self.close();
-        const root = (repo.findRoot(self.allocator, self.io, folder) catch null) orelse return;
+        const root = self.findRoot(folder) orelse return;
         const real = std.Io.Dir.cwd().realPathFileAlloc(self.io, folder, self.allocator) catch return self.allocator.free(root);
         defer self.allocator.free(real);
         const rest = std.mem.trimStart(u8, real[@min(root.len, real.len)..], std.fs.path.sep_str);
@@ -316,12 +317,30 @@ pub const Git = struct {
 
     /// Reads the status again. Many calls while one runs make one more.
     pub fn refresh(self: *Git) void {
+        self.recheck();
         if (!self.ready()) return;
         if (self.refreshing) {
             self.again = true;
             return;
         }
         self.refreshing = self.start(.status, self.root.?, &status_zig.args);
+    }
+
+    /// The repository around `folder`, honoring `GIT_CEILING_DIRECTORIES`.
+    fn findRoot(self: *Git, folder: []const u8) ?[]u8 {
+        const env = self.editor().environ;
+        const ceilings = if (env) |map| map.get("GIT_CEILING_DIRECTORIES") orelse "" else "";
+        return repo.findRoot(self.allocator, self.io, folder, ceilings) catch null;
+    }
+
+    /// Opens the repository again when one was made, deleted or moved
+    /// around the open folder since.
+    fn recheck(self: *Git) void {
+        const folder = self.editor().folder orelse return;
+        const root = self.findRoot(folder);
+        defer if (root) |path| self.allocator.free(path);
+        const same = if (root) |path| self.root != null and std.mem.eql(u8, path, self.root.?) else self.root == null;
+        if (!same) self.open(folder);
     }
 
     fn setStatus(self: *Git, text: []u8) void {

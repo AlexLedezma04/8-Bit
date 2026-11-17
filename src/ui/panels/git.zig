@@ -254,11 +254,8 @@ pub const GitPanel = struct {
 
     pub fn draw(self: *GitPanel, canvas: Canvas, look: Look, rect: Rect, focused: bool) void {
         const git = &self.editor.git;
-        if (!git.ready()) {
-            const text = if (!git.available) "git is not installed" else "No git repository";
-            canvas.drawLabel(rect.x + look.metrics.cell, rect.y + look.metrics.row / 2, text, look.theme.line_number);
-            return;
-        }
+        // Outside a repository the sidebar does not show this panel.
+        if (!git.ready()) return;
         self.sync();
         const bar, const area = split(rect, look.metrics);
         var buffer: [3]tabs.Item = undefined;
