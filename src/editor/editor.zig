@@ -15,8 +15,6 @@ const fs = @import("../platform/fs.zig");
 const config = @import("config.zig");
 const keymap = @import("keymap.zig");
 const Find = @import("find.zig").Find;
-const project_search = @import("project_search.zig");
-const ProjectSearch = project_search.ProjectSearch;
 const Rules = @import("../syntax/grammar.zig").Rules;
 const language = @import("../syntax/language.zig");
 const comment = @import("../core/comment.zig");
@@ -39,7 +37,7 @@ pub const Question = enum {
 };
 
 /// What the prompt asks for.
-pub const PromptKind = enum { new_file, new_folder, rename, find, replace, goto_line, find_in_project, language, branch };
+pub const PromptKind = enum { new_file, new_folder, rename, find, replace, goto_line, language, branch };
 
 /// The language of a file without a grammar.
 pub const plain_text = "Plain Text";
@@ -69,8 +67,6 @@ pub const Posted = union(enum) {
     cancelled,
     /// No native dialog could be shown.
     dialog_failed,
-    found: project_search.Found,
-    search_done: project_search.Done,
     git: *git_zig.Job,
     terminal: terminals_zig.Output,
 };
@@ -98,9 +94,8 @@ pub const State = struct {
 /// The parts of the window that can have focus.
 pub const Area = enum { sidebar, editor, bottom };
 
-/// The panels of the sidebar and of the bottom dock.
+/// The panels of the sidebar. The bottom dock is the terminal.
 pub const SidePanel = enum { files, git };
-pub const BottomPanel = enum { messages, search, terminal };
 
 /// A panel at an edge of the window.
 pub const Dock = struct {
@@ -120,7 +115,6 @@ pub const Editor = struct {
     sidebar: Dock = .{ .size = 30 },
     bottom: Dock = .{ .size = 14 },
     side_panel: SidePanel = .files,
-    bottom_panel: BottomPanel = .messages,
     folder: ?[]u8 = null,
     /// Goes up whenever `folder` changes.
     folder_version: u32 = 0,
@@ -148,26 +142,24 @@ pub const Editor = struct {
     recent: std.ArrayList([]u8) = .empty,
     /// Current time. The main loop sets it before it passes on input.
     now_ms: u64 = 0,
-    /// Every message, oldest first, for the messages panel.
-    log: std.ArrayList([]u8) = .empty,
+    /// The last message, cut to `max_message` bytes.
+    message: [max_message]u8 = undefined,
+    message_len: ?usize = null,
     /// Waits for an answer, or for a file name, before it can go on.
     pending: ?Pending = null,
     clipboard: std.ArrayList(u8) = .empty,
     find: Find,
-    project: ProjectSearch,
     git: Git,
     terminals: Terminals,
     /// The environment the shells of terminals get.
     environ: ?*const std.process.Environ.Map = null,
-    /// Where background work posts results. Needed for find in project, git
-    /// and terminals.
+    /// Where background work posts results. Needed for git and terminals.
     mailbox: ?*Mailbox = null,
     /// The id the next file gets.
     next_id: u32 = 1,
 
     pub const min_zoom = 1;
     pub const max_zoom = 4;
-    const max_log = 200;
     const max_message = 160;
     const max_recent = 10;
     /// A command in a terminal may have changed files or made a repository.
@@ -193,7 +185,6 @@ pub const Editor = struct {
             .loader = .{ .io = io, .gpa = allocator },
             .config_arena = .init(allocator),
             .find = .{ .allocator = allocator },
-            .project = .{ .allocator = allocator, .io = io },
             .git = .{ .allocator = allocator, .io = io },
             .terminals = .{ .allocator = allocator },
         };
@@ -204,7 +195,6 @@ pub const Editor = struct {
     }
 
     pub fn deinit(self: *Editor) void {
-        self.project.deinit();
         self.git.deinit();
         self.terminals.deinit();
         // Results that came too late.
@@ -217,8 +207,6 @@ pub const Editor = struct {
         if (self.folder) |folder| self.allocator.free(folder);
         for (self.recent.items) |path| self.allocator.free(path);
         self.recent.deinit(self.allocator);
-        for (self.log.items) |line| self.allocator.free(line);
-        self.log.deinit(self.allocator);
         self.clipboard.deinit(self.allocator);
         self.config_arena.deinit();
     }
@@ -276,20 +264,16 @@ pub const Editor = struct {
         self.enter(node, index);
     }
 
-    // Messages
+    // Messages, kept for a later notice; nothing shows them now
 
-    /// Adds a message to the log of the messages panel. Every feature
-    /// reports errors and info through here.
+    /// Every feature reports errors and info through here.
     pub fn notify(self: *Editor, comptime format: []const u8, args: anytype) void {
-        var buffer: [max_message]u8 = undefined;
-        const text = std.fmt.bufPrint(&buffer, format, args) catch &buffer;
-        const line = self.allocator.dupe(u8, text) catch return;
-        self.log.append(self.allocator, line) catch return self.allocator.free(line);
-        if (self.log.items.len > max_log) self.allocator.free(self.log.orderedRemove(0));
+        const text = std.fmt.bufPrint(&self.message, format, args) catch self.message[0..];
+        self.message_len = text.len;
     }
 
     pub fn lastMessage(self: *const Editor) ?[]const u8 {
-        return if (self.log.items.len > 0) self.log.items[self.log.items.len - 1] else null;
+        return self.message[0 .. self.message_len orelse return null];
     }
 
     // Input that is not a command
@@ -754,8 +738,6 @@ pub const Editor = struct {
     /// Takes a result from the mailbox and frees it.
     pub fn receive(self: *Editor, posted: Posted) ?Request {
         switch (posted) {
-            .found => |found| self.project.receive(found),
-            .search_done => |done| self.project.done(done),
             .terminal => |output| {
                 self.terminals.receive(output);
                 self.disk_check_ms = self.now_ms + disk_rest_ms;
@@ -792,10 +774,9 @@ pub const Editor = struct {
     fn drop(self: *Editor, posted: Posted) void {
         switch (posted) {
             .picked => |picked| self.allocator.free(picked.path),
-            .found => |found| project_search.freeFound(self.allocator, found),
             .terminal => |output| if (output.bytes) |bytes| self.allocator.free(bytes),
             // `Git.deinit` already freed it.
-            .git, .cancelled, .dialog_failed, .search_done => {},
+            .git, .cancelled, .dialog_failed => {},
         }
     }
 
@@ -845,27 +826,6 @@ pub const Editor = struct {
         const target = @min(line, doc_.buffer.lineCount()) - 1;
         doc_.cursor.moveTo(doc_.posAtColumn(target, column - 1), false);
         self.afterEdit();
-    }
-
-    /// Opens the file of a search hit and selects the match.
-    pub fn openHit(self: *Editor, hit: project_search.Hit) void {
-        self.open(hit.path);
-        const active = self.file();
-        if (active.path == null or !std.mem.eql(u8, active.path.?, hit.path)) return;
-        const buffer = &active.doc.buffer;
-        const start = @min(buffer.lineStart(@min(hit.line, buffer.lineCount() - 1)) + hit.column, buffer.len());
-        active.doc.cursor = .{ .anchor = start, .pos = @min(start + hit.len, buffer.len()) };
-        self.focus = .editor;
-        self.afterEdit();
-    }
-
-    /// Searches every file of the open folder for `needle`, on a thread.
-    pub fn findInProject(self: *Editor, needle: []const u8) void {
-        const folder = self.folder orelse return self.notify("Open a folder first", .{});
-        const mailbox = self.mailbox orelse return;
-        if (needle.len == 0) return;
-        const query: @import("../core/search.zig").Query = .{ .needle = needle, .options = self.find.options };
-        self.project.start(mailbox, folder, query, self.settings.search_exclude) catch |err| self.notify("Could not search: {t}", .{err});
     }
 
     pub fn openFolder(self: *Editor, path: []const u8) void {
@@ -979,11 +939,10 @@ pub const Editor = struct {
         if (panel == .git) self.git.refresh();
     }
 
-    /// The terminal panel starts a terminal when it has none.
-    pub fn showBottom(self: *Editor, panel: BottomPanel) void {
-        self.bottom_panel = panel;
+    /// Shows and focuses the terminals, starting one when there is none.
+    pub fn showTerminal(self: *Editor) void {
         self.focusArea(.bottom);
-        if (panel == .terminal and self.terminals.list.items.len == 0) self.openTerminal();
+        if (self.terminals.list.items.len == 0) self.openTerminal();
     }
 
     /// The sidebar can only have focus while a folder is open.
@@ -1010,19 +969,19 @@ pub const Editor = struct {
             .env = self.environ,
             .scrollback = self.settings.terminal_scrollback,
         }) catch |err| return self.notify("Could not start a terminal: {t}", .{err});
-        self.showBottom(.terminal);
+        self.showTerminal();
     }
 
     /// Shows the terminal panel, or hides it when it has focus.
     pub fn toggleTerminal(self: *Editor) void {
-        if (self.bottom.shown and self.bottom_panel == .terminal and self.focus == .bottom) return self.toggleDock(.bottom);
-        self.showBottom(.terminal);
+        if (self.bottom.shown and self.focus == .bottom) return self.toggleDock(.bottom);
+        self.showTerminal();
     }
 
     /// Closing the last terminal hides the panel.
     pub fn closeTerminal(self: *Editor, index: usize) void {
         self.terminals.close(index);
-        if (self.terminals.list.items.len == 0 and self.bottom_panel == .terminal) {
+        if (self.terminals.list.items.len == 0) {
             self.bottom.shown = false;
             self.focus = .editor;
         }
@@ -1245,7 +1204,7 @@ pub const Editor = struct {
         return .{
             .branch = if (self.git.ready()) self.git.status.branch else "",
             .language = if (self.empty()) "" else if (self.file().highlighter.rules) |rules| rules.grammar.name else plain_text,
-            .terminal = self.bottom.shown and self.bottom_panel == .terminal,
+            .terminal = self.bottom.shown,
         };
     }
 

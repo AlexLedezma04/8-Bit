@@ -18,7 +18,7 @@ src/
     theme.zig     the color struct; theme files live in assets/themes
     layout.zig    where the parts of the window are; all sizes come from the cell
     widgets/      reusable controls (list, tabs, prompt, menu, scrollbar)
-    panels/       one view per feature (editor_view, welcome, file_tree, messages, status_bar, ...)
+    panels/       one view per feature (editor_view, welcome, file_tree, git, terminal, status_bar)
   font/           the built-in fonts (stb_truetype), their metrics, the glyph atlas
 assets/           built-in ZON files, embedded in the exe (assets.zig lists them)
   settings.zon    default settings
@@ -87,8 +87,8 @@ third_party/      vendored C dependencies (SDL3, stb_truetype)
   key goes to the open menu or prompt, else to the focused panel, else it
   is looked up in the `editor/keymap.zig` table and becomes a `Command`.
   Typed text goes to the focused panel too.
-- **Panels.** The sidebar (file tree), the editor area and the bottom panel
-  (messages) follow `ui/panel.zig`: `title`, `draw(rect)` and `handle(event)`.
+- **Panels.** The sidebar (file tree, git), the editor area and the bottom
+  panel (the terminal) follow `ui/panel.zig`: `title`, `draw(rect)` and `handle(event)`.
   One area has focus; a click gives focus. The workbench draws and routes
   without knowing what a panel is. The sidebar is shown whenever a folder
   is open; dock tabs share the bar's width. A pane always has a tab: with
@@ -130,8 +130,8 @@ third_party/      vendored C dependencies (SDL3, stb_truetype)
   Features add entries; only the editor view draws them.
 - **Background work.** A thread hands a result to the main loop with
   `Mailbox.post` (`platform/mailbox.zig`), which wakes the event wait. The
-  main thread takes the item and `Editor.receive` frees it. Dialogs, find
-  in project and git use it.
+  main thread takes the item and `Editor.receive` frees it. Dialogs, git
+  and terminals use it.
 - **Prompts.** A command that needs typed text returns `Request.prompt`;
   the workbench opens the prompt and sends the text back to the editor.
 - **Files.** `platform/fs.zig` reads whole files and saves through a
@@ -140,8 +140,9 @@ third_party/      vendored C dependencies (SDL3, stb_truetype)
 - **Questions.** The flag for unsaved changes comes from the undo history
   (`History.isModified`). Quit and closing a tab ask Save / Don't save /
   Cancel with an `ask` request; the answer comes back to `Editor.answer`.
-- **Messages.** Everything reports through `Editor.notify`; the messages
-  panel keeps it. The status bar shows only the git branch and the language.
+- **Messages.** Everything reports through `Editor.notify`, which keeps the
+  last message; nothing shows it now. The status bar shows the git branch,
+  the language and the terminal button.
 - **Sizes.** `ui/layout.zig` derives every size from the cell size, 8x16
   pixels times the zoom (1x to 4x): tab bars are 2.5 rows, list rows, menu
   items and the status bar 1.5 rows.
@@ -153,8 +154,6 @@ third_party/      vendored C dependencies (SDL3, stb_truetype)
 - `editor/find.zig` keeps the needle, the options and the matches of the
   active file. While the find or replace prompt is open, the matches are
   found again after every change and drawn as decorations.
-- `editor/project_search.zig` walks the open folder on a thread and posts
-  the hits of each file. A new search drops the late hits of the old one.
 
 ## Syntax (`syntax/`)
 

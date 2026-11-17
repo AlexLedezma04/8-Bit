@@ -11,8 +11,7 @@ const language = app.syntax.language;
 test "every grammar loads and highlights its sample" {
     var editor = try app.editor.editor.Editor.init(testing.allocator, testing.io);
     defer editor.deinit();
-    for (editor.log.items) |line| std.debug.print("{s}\n", .{line});
-    try testing.expectEqual(@as(usize, 0), editor.log.items.len);
+    try testing.expectEqual(@as(?[]const u8, null), editor.lastMessage());
     const languages = editor.languages;
     try testing.expectEqual(@as(usize, 96), languages.len);
 

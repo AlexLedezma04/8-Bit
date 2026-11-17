@@ -79,13 +79,10 @@ test "new, rename and delete from the tree, through the prompt and a question" {
     try testing.expectEqual(@as(?i96, null), fs.modTime(testing.io, session.path("renamed.txt")));
     for (session.workbench.files.entries.items) |entry| try testing.expect(!std.mem.endsWith(u8, entry.path, "renamed.txt"));
 
-    // Every message is in the messages panel.
-    _ = session.press("alt+0");
-    try testing.expect(session.shows("Messages"));
-    try testing.expect(session.shows("Deleted renamed.txt"));
+    try testing.expectEqualStrings("Deleted renamed.txt", editor.lastMessage().?);
 }
 
-test "docks: the sidebar while a folder is open, Ctrl+J, and their edges can be dragged" {
+test "docks: the sidebar while a folder is open, the terminal, and their edges can be dragged" {
     var session: Session = undefined;
     try session.init();
     defer session.deinit();
@@ -100,8 +97,11 @@ test "docks: the sidebar while a folder is open, Ctrl+J, and their edges can be 
     editor.open(session.path("a/x.txt"));
     session.draw();
     try testing.expect(session.shows("Files"));
-    _ = session.press("ctrl+j");
-    try testing.expect(session.shows("Messages"));
+    _ = session.press("alt+t");
+    try testing.expect(session.shows("Terminal 1"));
+    // The bottom dock is the terminal: no Messages or Search.
+    try testing.expect(!session.shows("Messages"));
+    try testing.expect(!session.shows("Search"));
 
     // The sidebar edge is at 30 cells of 8 pixels.
     session.drag(240, 300, 320, 300);

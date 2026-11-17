@@ -27,7 +27,6 @@ const welcome_actions = [_]Action{
 const folder_actions = [_]Action{
     .{ .label = "New File", .shortcut = "Ctrl+N", .command = .new_file },
     .{ .label = "Open File...", .shortcut = "Ctrl+O", .command = .open },
-    .{ .label = "Find in Folder", .shortcut = "Ctrl+Shift+F", .command = .find_in_project },
     .{ .label = "Close Folder", .shortcut = "Ctrl+Shift+W", .command = .close_folder },
 };
 

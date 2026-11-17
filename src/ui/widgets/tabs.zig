@@ -22,17 +22,27 @@ pub const Hit = struct { index: usize, close: bool };
 pub const Style = enum {
     /// As wide as the title; the active one has the panel color.
     files,
+    /// Like `files`, with less space, in a bar one list row high.
+    compact,
     /// The bar shared out; the active one is underlined.
     dock,
 };
 
 /// Cells of space at each end of a tab, and of its close button.
-const pad = 1.5;
+fn padOf(style: Style) f32 {
+    return if (style == .compact) 0.75 else 1.5;
+}
 const button = 2;
 
-fn width(item: Item, metrics: Metrics) f32 {
+fn width(item: Item, metrics: Metrics, style: Style) f32 {
+    const pad = padOf(style);
     const extra: f32 = if (item.closable) 2 * pad + button else 2 * pad;
     return metrics.labelWidth(item.title) + extra * metrics.cell;
+}
+
+/// Height of a bar of tabs in this style.
+pub fn height(metrics: Metrics, style: Style) f32 {
+    return if (style == .compact) metrics.item() else metrics.bar();
 }
 
 /// One tab and the pixels it takes from the left of the bar.
@@ -51,17 +61,17 @@ const Places = struct {
     fn init(items: []const Item, metrics: Metrics, style: Style, active: usize, w: f32) Places {
         if (style == .dock) return .{ .items = items, .metrics = metrics, .style = style, .index = 0, .width = w };
         var first = @min(active, items.len -| 1);
-        var used: f32 = if (items.len > 0) width(items[first], metrics) else 0;
-        while (first > 0 and used + width(items[first - 1], metrics) <= w) {
+        var used: f32 = if (items.len > 0) width(items[first], metrics, style) else 0;
+        while (first > 0 and used + width(items[first - 1], metrics, style) <= w) {
             first -= 1;
-            used += width(items[first], metrics);
+            used += width(items[first], metrics, style);
         }
         return .{ .items = items, .metrics = metrics, .style = style, .index = first, .width = w };
     }
 
     fn widthOf(self: *const Places, item: Item) f32 {
         return switch (self.style) {
-            .files => width(item, self.metrics),
+            .files, .compact => width(item, self.metrics, self.style),
             .dock => @floor(self.width / @as(f32, @floatFromInt(self.items.len))),
         };
     }
@@ -76,8 +86,8 @@ const Places = struct {
 };
 
 /// Where the close button of a tab is.
-fn buttonX(place: Place, metrics: Metrics) f32 {
-    return place.x + place.w - (pad + button) * metrics.cell;
+fn buttonX(place: Place, metrics: Metrics, style: Style) f32 {
+    return place.x + place.w - (padOf(style) + button) * metrics.cell;
 }
 
 /// The tab, and whether its close button, under a pixel.
@@ -87,7 +97,7 @@ pub fn hit(rect: Rect, metrics: Metrics, style: Style, items: []const Item, acti
     var places = Places.init(items, metrics, style, active, rect.w);
     while (places.next()) |place| {
         if (at >= place.x + place.w) continue;
-        const start = buttonX(place, metrics);
+        const start = buttonX(place, metrics, style);
         return .{ .index = place.index, .close = items[place.index].closable and at >= start and at < start + button * metrics.cell };
     }
     return null;
@@ -101,22 +111,22 @@ pub fn draw(canvas: Canvas, look: Look, rect: Rect, style: Style, items: []const
     canvas.fillRect(.{ .x = rect.x, .y = rect.y + rect.h - 1, .w = rect.w, .h = 1 }, theme.border);
     canvas.setClip(rect);
     defer canvas.setClip(null);
-    const text_y = metrics.barText(rect.y);
+    const text_y = metrics.center(rect.y, rect.h);
     var places = Places.init(items, metrics, style, active, rect.w);
     while (places.next()) |place| {
         const item = items[place.index];
         const x = rect.x + place.x;
         const is_active = place.index == active;
         const tab: Rect = .{ .x = x, .y = rect.y, .w = place.w, .h = rect.h - 1 };
-        if (is_active and style == .files) canvas.fillRect(tab, theme.panel) else if (look.hovered(tab)) canvas.fillRect(tab, theme.hover);
+        if (is_active and style != .dock) canvas.fillRect(tab, theme.panel) else if (look.hovered(tab)) canvas.fillRect(tab, theme.hover);
         if (is_active and style == .dock) {
             const line = @floor(metrics.cell / 4);
             canvas.fillRect(.{ .x = x, .y = rect.y + rect.h - line, .w = place.w, .h = line }, if (focused) theme.accent else theme.list_inactive);
         }
-        const title_x = if (style == .dock) x + @floor((place.w - metrics.labelWidth(item.title)) / 2) else x + pad * metrics.cell;
+        const title_x = if (style == .dock) x + @floor((place.w - metrics.labelWidth(item.title)) / 2) else x + padOf(style) * metrics.cell;
         canvas.drawLabel(title_x, text_y, item.title, if (is_active) theme.tab_active_text else theme.tab_text);
         if (!item.closable) continue;
-        const button_x = rect.x + buttonX(place, metrics);
+        const button_x = rect.x + buttonX(place, metrics, style);
         if (item.modified) {
             const dot = @floor(metrics.cell * 0.75);
             canvas.fillRect(.{ .x = button_x + (button * metrics.cell - dot) / 2, .y = text_y + (metrics.row - dot) / 2, .w = dot, .h = dot }, theme.unsaved);
@@ -133,7 +143,7 @@ test "clicks find the tab and its close button" {
     const metrics = Metrics.init(1);
     const items = [_]Item{ .{ .title = "a.zig" }, .{ .title = "bb.txt", .modified = true } };
     const rect: Rect = .{ .x = 100, .w = 400, .h = 24 };
-    const first = width(items[0], metrics);
+    const first = width(items[0], metrics, .files);
     try testing.expectEqual(metrics.labelWidth("a.zig") + 5 * 8, first);
     try testing.expectEqual(Hit{ .index = 0, .close = false }, hit(rect, metrics, .files, &items, 0, 100 + 8, 5).?);
     // The button is the two cells before the last one and a half.
@@ -153,10 +163,18 @@ test "dock tabs share the whole bar" {
     try testing.expectEqual(Hit{ .index = 1, .close = false }, hit(rect, metrics, .dock, &items, 0, 239, 5).?);
 }
 
+test "compact tabs are lower and narrower" {
+    const metrics = Metrics.init(1);
+    const item: Item = .{ .title = "Terminal 1" };
+    try testing.expectEqual(@as(f32, 24), height(metrics, .compact));
+    try testing.expectEqual(@as(f32, 40), height(metrics, .files));
+    try testing.expectEqual(width(item, metrics, .files) - 12, width(item, metrics, .compact));
+}
+
 test "too many tabs scroll so the active one is in view" {
     const metrics = Metrics.init(1);
     const items = [_]Item{ .{ .title = "one" }, .{ .title = "two" }, .{ .title = "three" }, .{ .title = "four" } };
-    const room = width(items[2], metrics) + width(items[3], metrics);
+    const room = width(items[2], metrics, .files) + width(items[3], metrics, .files);
     var places = Places.init(&items, metrics, .files, 3, room);
     try testing.expectEqual(@as(usize, 2), places.next().?.index);
     try testing.expectEqual(@as(usize, 3), places.next().?.index);

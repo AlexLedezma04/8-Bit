@@ -1,6 +1,6 @@
 //! Plain text search with match case and whole word options. Text comes in
 //! two parts, like the halves of a gap buffer, so nothing is copied. Used by
-//! find, replace and find in project.
+//! find and replace.
 const std = @import("std");
 const Range = @import("buffer.zig").Range;
 const Document = @import("edit.zig").Document;

@@ -1,4 +1,4 @@
-//! End to end: find, replace, go to line and find in project, driven by keys
+//! End to end: find, replace and go to line, driven by keys
 //! on the whole window, with real files on disk.
 const std = @import("std");
 const app = @import("8-bit");
@@ -128,43 +128,4 @@ test "go to line and line:column; bad input is reported" {
     session.typeKeys("x");
     _ = session.press("enter");
     try testing.expectEqualStrings("Not a line: x", session.editor.lastMessage().?);
-}
-
-test "find in project: results while it runs, Enter opens, Esc stops" {
-    var session: Session = undefined;
-    try session.init();
-    defer session.deinit();
-    const editor = &session.editor;
-    try session.write("zig-out/y.txt", "ex");
-    try session.write(".git/z.txt", "ex");
-    try session.write("big.bin", "ex\x00");
-
-    _ = session.press("ctrl+shift+f");
-    try testing.expect(session.shows("Find in folder:"));
-    session.typeKeys("ex");
-    _ = session.press("enter");
-    try testing.expectEqual(Area.bottom, editor.focus);
-    try testing.expect(session.shows("Searching \"ex\""));
-    session.waitForSearch();
-    try testing.expect(session.shows("\"ex\": 1 result in 1 file"));
-    try testing.expect(session.shows("x.txt:1: ex"));
-    try testing.expect(!session.shows("y.txt:"));
-
-    _ = session.press("enter");
-    try testing.expectEqualStrings("x.txt", editor.name());
-    try testing.expectEqual(Area.editor, editor.focus);
-    try expectSelection(&session, 0, 2);
-
-    // The selection is searched again; Esc in the results stops it.
-    _ = session.press("ctrl+shift+f");
-    try testing.expectEqualStrings("ex", session.workbench.prompt.text());
-    _ = session.press("enter");
-    _ = session.press("escape");
-    session.waitForSearch();
-    try testing.expect(session.shows("Stopped: \"ex\""));
-
-    // A click on a title of the bottom bar switches the panel.
-    _ = session.clickText("Messages");
-    try testing.expectEqual(app.editor.editor.BottomPanel.messages, session.editor.bottom_panel);
-    try testing.expect(!session.shows("Stopped:"));
 }

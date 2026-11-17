@@ -26,8 +26,6 @@ const Menu = menu_zig.Menu;
 const Find = @import("../editor/find.zig").Find;
 const EditorView = @import("panels/editor_view.zig").EditorView;
 const FileTree = @import("panels/file_tree.zig").FileTree;
-const Messages = @import("panels/messages.zig").Messages;
-const Search = @import("panels/search.zig").Search;
 const GitPanel = @import("panels/git.zig").GitPanel;
 const TerminalPanel = @import("panels/terminal.zig").TerminalPanel;
 const Welcome = @import("panels/welcome.zig").Welcome;
@@ -37,7 +35,6 @@ const event = @import("../platform/event.zig");
 const Event = event.Event;
 const Area = editor_zig.Area;
 const SidePanel = editor_zig.SidePanel;
-const BottomPanel = editor_zig.BottomPanel;
 
 /// Rows scrolled per step of the mouse wheel.
 const wheel_rows = 3;
@@ -58,8 +55,6 @@ pub const Workbench = struct {
     welcome: Welcome,
     view: EditorView,
     files: FileTree,
-    messages: Messages,
-    search: Search,
     git: GitPanel,
     terminal: TerminalPanel,
     /// The find prompt asks what to replace; Enter then asks for the replacement.
@@ -87,8 +82,6 @@ pub const Workbench = struct {
             .welcome = .{ .editor = editor },
             .view = .{ .editor = editor, .menu = &self.menu },
             .files = .{ .editor = editor, .prompt = &self.prompt, .menu = &self.menu },
-            .messages = .{ .editor = editor },
-            .search = .{ .editor = editor },
             .git = .{ .editor = editor, .prompt = &self.prompt },
             .terminal = .{ .editor = editor },
         };
@@ -121,7 +114,7 @@ pub const Workbench = struct {
         return switch (area) {
             .sidebar => self.sidePanel(self.editor.sidePanel()),
             .editor => if (self.editor.empty()) .of(Welcome, &self.welcome) else .of(EditorView, &self.view),
-            .bottom => self.bottomPanel(self.editor.bottom_panel),
+            .bottom => .of(TerminalPanel, &self.terminal),
         };
     }
 
@@ -132,41 +125,14 @@ pub const Workbench = struct {
         };
     }
 
-    fn bottomPanel(self: *Workbench, which: BottomPanel) Panel {
-        return switch (which) {
-            .messages => .of(Messages, &self.messages),
-            .search => .of(Search, &self.search),
-            .terminal => .of(TerminalPanel, &self.terminal),
-        };
-    }
+    const side_panels = std.enums.values(SidePanel);
 
-    const max_dock_panels = 4;
-
-    /// One tab per panel of a dock, and the index of the one shown. The git
-    /// panel, the last of the sidebar, has no tab outside a repository.
-    fn dockTabs(self: *Workbench, area: Area, items: *[max_dock_panels]tabs.Item) struct { []const tabs.Item, usize } {
-        switch (area) {
-            inline .sidebar, .bottom => |dock| {
-                const Which = if (dock == .sidebar) SidePanel else BottomPanel;
-                const values = comptime std.enums.values(Which);
-                inline for (values, 0..) |which, i| {
-                    const shown = if (dock == .sidebar) self.sidePanel(which) else self.bottomPanel(which);
-                    items[i] = .{ .title = shown.title(), .closable = false };
-                }
-                const active = if (dock == .sidebar) self.editor.sidePanel() else self.editor.bottom_panel;
-                const count = if (dock == .sidebar and !self.editor.git.ready()) values.len - 1 else values.len;
-                return .{ items[0..count], @backingInt(active) };
-            },
-            .editor => unreachable,
-        }
-    }
-
-    fn selectDock(self: *Workbench, area: Area, index: usize) void {
-        switch (area) {
-            .sidebar => self.editor.showSide(@fromBackingInt(@intCast(index))),
-            .bottom => self.editor.showBottom(@fromBackingInt(@intCast(index))),
-            .editor => unreachable,
-        }
+    /// One tab per sidebar panel, and the index of the one shown. The git
+    /// panel, the last one, has no tab outside a repository.
+    fn sideTabs(self: *Workbench, items: *[side_panels.len]tabs.Item) struct { []const tabs.Item, usize } {
+        for (side_panels, items) |which, *item| item.* = .{ .title = self.sidePanel(which).title(), .closable = false };
+        const count = if (self.editor.git.ready()) side_panels.len else side_panels.len - 1;
+        return .{ items[0..count], @backingInt(self.editor.sidePanel()) };
     }
 
     fn rectOf(target: Frame, area: Area) ?Rect {
@@ -177,10 +143,10 @@ pub const Workbench = struct {
         };
     }
 
-    /// Where the panel of an area draws: docks have a title bar on top.
+    /// Where the panel of an area draws: the sidebar has its tabs on top.
     fn contentOf(self: *const Workbench, target: Frame, area: Area) ?Rect {
         const rect = rectOf(target, area) orelse return null;
-        return if (area == .editor) rect else rect.splitTop(self.metrics().bar())[1];
+        return if (area == .sidebar) rect.splitTop(self.metrics().bar())[1] else rect;
     }
 
     fn look(self: *Workbench) Look {
@@ -203,9 +169,9 @@ pub const Workbench = struct {
             canvas.fillRect(rect, if (area == .editor) theme.background else theme.panel);
             const content = self.contentOf(target, area).?;
             const item = self.panelOf(area);
-            if (area != .editor) {
-                var items: [max_dock_panels]tabs.Item = undefined;
-                const shown, const active = self.dockTabs(area, &items);
+            if (area == .sidebar) {
+                var items: [side_panels.len]tabs.Item = undefined;
+                const shown, const active = self.sideTabs(&items);
                 tabs.draw(canvas, style, rect.splitTop(style.metrics.bar())[0], .dock, shown, active, focused);
             }
             canvas.setClip(content);
@@ -320,7 +286,7 @@ pub const Workbench = struct {
         const editor = self.editor;
         const command = keymap.lookup(editor.bindings, press.key, press.mods);
         if (self.prompt.kind) |kind| {
-            if (command) |found| if (kind == .find or kind == .replace or kind == .find_in_project) {
+            if (command) |found| if (kind == .find or kind == .replace) {
                 if (worksInFind(found)) {
                     self.swallow_text = true;
                     return self.run(found);
@@ -350,7 +316,7 @@ pub const Workbench = struct {
         return self.fulfilHere(commands.run(self.editor, command));
     }
 
-    /// Commands that work while find, replace or find in project is open.
+    /// Commands that work while find or replace is open.
     fn worksInFind(command: commands.Command) bool {
         return switch (command) {
             .find, .replace, .find_next, .find_prev, .replace_all, .toggle_match_case, .toggle_whole_word => true,
@@ -374,13 +340,6 @@ pub const Workbench = struct {
                 break :blk .{ "Replace with:", find.replacement.items };
             },
             .goto_line => .{ "Go to line:", "" },
-            .find_in_project => blk: {
-                const project = &editor.project.needle;
-                if (!Find.copySelection(editor.allocator, editor.doc(), project) and project.items.len == 0) {
-                    project.appendSlice(editor.allocator, find.needle.items) catch {};
-                }
-                break :blk .{ "Find in folder:", project.items };
-            },
             .language => .{ "Language:", "" },
             .new_file, .new_folder, .rename, .branch => unreachable,
         };
@@ -413,10 +372,6 @@ pub const Workbench = struct {
             .goto_line => editor.gotoLine(text),
             .language => editor.setLanguage(text),
             .branch => editor.git.createBranch(text),
-            .find_in_project => {
-                editor.findInProject(text);
-                if (editor.project.running) editor.showBottom(.search);
-            },
         }
         return .{};
     }
@@ -436,10 +391,10 @@ pub const Workbench = struct {
     /// "3 of 12" for find and replace, and the options.
     fn promptNotes(self: *Workbench, buffer: []u8, notes: *[3]prompt_zig.Note, theme: *const theme_zig.Theme) []const prompt_zig.Note {
         const kind = self.prompt.kind orelse return &.{};
-        if (kind != .find and kind != .replace and kind != .find_in_project) return &.{};
+        if (kind != .find and kind != .replace) return &.{};
         const find = &self.editor.find;
         const count = find.matches.items.len;
-        const counted = if (kind == .find_in_project or find.needle.items.len == 0)
+        const counted = if (find.needle.items.len == 0)
             ""
         else if (count == 0)
             "No matches"
@@ -471,16 +426,16 @@ pub const Workbench = struct {
             self.editor.toggleDock(.bottom);
             return .{};
         }
-        inline for (.{ Area.sidebar, Area.bottom }) |area| if (rectOf(target, area)) |rect| {
+        if (target.sidebar) |rect| {
             const bar = rect.splitTop(self.metrics().bar())[0];
             if (bar.contains(scaled.x, scaled.y)) {
-                var items: [max_dock_panels]tabs.Item = undefined;
-                const shown, const active = self.dockTabs(area, &items);
+                var items: [side_panels.len]tabs.Item = undefined;
+                const shown, const active = self.sideTabs(&items);
                 const hit = tabs.hit(bar, self.metrics(), .dock, shown, active, scaled.x, scaled.y);
-                if (hit) |found| self.selectDock(area, found.index) else self.editor.focus = area;
+                if (hit) |found| self.editor.showSide(side_panels[found.index]) else self.editor.focus = .sidebar;
                 return .{};
             }
-        };
+        }
         const area = self.areaAt(scaled.x, scaled.y) orelse return .{ .redraw = false };
         self.editor.focus = area;
         self.captured = area;
@@ -533,7 +488,7 @@ pub const Workbench = struct {
         if (self.prompt.kind != null) {
             self.prompt.typeText(text);
             self.promptChanged();
-        } else if (editor.focus == .bottom and editor.bottom_panel == .terminal) {
+        } else if (editor.focus == .bottom) {
             self.terminal.paste(text);
         } else editor.paste(text);
     }

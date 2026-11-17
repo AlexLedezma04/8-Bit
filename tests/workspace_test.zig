@@ -255,7 +255,7 @@ test "no file open: no untitled tab, hints instead; Ctrl+N and closing the last 
 
     try testing.expect(!session.shows("untitled"));
     try testing.expect(session.shows("New File"));
-    try testing.expect(session.shows("Find in Folder"));
+    try testing.expect(session.shows("Close Folder"));
     try testing.expect(!session.shows("Recent folders"));
     // Typing does not reach the hidden blank file.
     session.typeKeys("zz");
@@ -268,10 +268,8 @@ test "no file open: no untitled tab, hints instead; Ctrl+N and closing the last 
     try testing.expect(editor.empty());
     try testing.expect(!session.shows("untitled"));
 
-    // A hint runs its command; Find in Folder opens its prompt.
-    _ = session.clickText("Find in Folder");
-    try testing.expect(session.shows("Find in folder:"));
-    _ = session.press("escape");
+    // A hint runs its command.
+    try testing.expectEqual(Request{ .pick = .open_file }, session.clickText("Open File...").?);
     _ = session.clickText("New File");
     try testing.expect(session.shows("untitled"));
 }

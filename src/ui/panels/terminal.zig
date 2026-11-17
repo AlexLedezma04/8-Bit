@@ -64,7 +64,7 @@ pub const TerminalPanel = struct {
 
     /// The tab bar, and the screen below it.
     fn split(rect: Rect, metrics: Metrics) [2]Rect {
-        return rect.splitTop(metrics.bar());
+        return rect.splitTop(tabs.height(metrics, .compact));
     }
 
     fn tabItems(self: *TerminalPanel) []const tabs.Item {
@@ -115,7 +115,7 @@ pub const TerminalPanel = struct {
                 self.typed();
             },
             .mouse_down => |mouse| {
-                if (tabs.hit(bar, metrics, .files, self.tabItems(), self.editor.terminals.active, mouse.x, mouse.y)) |hit| {
+                if (tabs.hit(bar, metrics, .compact, self.tabItems(), self.editor.terminals.active, mouse.x, mouse.y)) |hit| {
                     if (hit.close) self.editor.closeTerminal(hit.index) else self.editor.terminals.active = hit.index;
                     return .yes;
                 }
@@ -215,7 +215,7 @@ pub const TerminalPanel = struct {
             canvas.drawLabel(rect.x + metrics.cell, rect.y + metrics.row / 2, "No terminal: Ctrl+` starts one", look.theme.line_number);
             return;
         };
-        tabs.draw(canvas, look, bar, .files, self.tabItems(), self.editor.terminals.active, focused);
+        tabs.draw(canvas, look, bar, .compact, self.tabItems(), self.editor.terminals.active, focused);
         const session = &shown.session;
         const cols: u16 = @intCast(std.math.clamp(metrics.cols(area.w), 2, 1000));
         const rows: u16 = @intCast(std.math.clamp(List.rowsIn(area, metrics), 2, 1000));

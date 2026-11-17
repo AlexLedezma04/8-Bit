@@ -104,10 +104,10 @@ test "no repository, and git that is not installed: no Git tab" {
     try expectMessage(&session, "git is not installed: git features are off");
     try testing.expect(session.last("Git") == null);
     // Said once.
-    const messages = editor.log.items.len;
+    editor.notify("later", .{});
     _ = session.send(.{ .focus = true });
     _ = session.waitForGit();
-    try testing.expectEqual(messages, editor.log.items.len);
+    try testing.expectEqualStrings("later", editor.lastMessage().?);
 }
 
 test "gutter markers follow the text after a short delay, F7 jumps between changes" {

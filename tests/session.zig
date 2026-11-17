@@ -244,18 +244,6 @@ pub const Session = struct {
             self.draw();
         }
     }
-
-    /// Takes what find in project posts until it is done, then draws.
-    pub fn waitForSearch(self: *Session) void {
-        while (self.editor.project.running) {
-            const posted = self.mailbox.take() orelse {
-                std.Thread.yield() catch {};
-                continue;
-            };
-            _ = self.editor.receive(posted);
-        }
-        self.draw();
-    }
 };
 
 fn noWake() void {}

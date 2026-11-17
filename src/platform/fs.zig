@@ -5,7 +5,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const Io = std.Io;
 
-/// Names the file tree never shows and find in project never reads.
+/// Names the file tree never shows.
 pub const hidden = [_][]const u8{".git"};
 
 /// The bytes end with a 0 that is not part of the file.

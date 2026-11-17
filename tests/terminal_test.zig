@@ -168,7 +168,10 @@ test "the terminal button in the status bar and Alt+T show and hide the terminal
 
     _ = session.clickText("Terminal");
     try testing.expect(editor.bottom.shown);
-    try testing.expectEqual(app.editor.editor.BottomPanel.terminal, editor.bottom_panel);
+    // The tabs of the terminals take one compact row.
+    const bottom = session.workbench.frame().bottom.?;
+    const tab = session.last("Terminal 1").?;
+    try testing.expect(tab.y >= bottom.y and tab.y + 16 <= bottom.y + 24);
     try testing.expectEqual(@as(usize, 1), editor.terminals.list.items.len);
     // Hidden again even when the editor has focus.
     _ = session.click(500, 100);
