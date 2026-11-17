@@ -194,7 +194,7 @@ fn execute(editor: *Editor, command: Command) !?Request {
         .show_git => editor.showSide(.git),
         .git_commit => try editor.commit(),
         .git_amend => editor.git.amend(),
-        .show_changes => try editor.git.showFileChanges(editor.file()),
+        .show_changes => editor.toggleCompare(),
         .next_change => editor.jumpToChange(true),
         .prev_change => editor.jumpToChange(false),
         .peek_change => editor.peekChange(),

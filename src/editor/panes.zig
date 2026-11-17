@@ -15,6 +15,8 @@ pub const Tab = struct {
     view: View = .{},
     /// Sorted by position. The editor view draws them.
     decorations: std.ArrayList(Decoration) = .empty,
+    /// The file is shown beside its text at HEAD.
+    compare: bool = false,
     /// A change shown inline, until the text changes.
     peek: ?struct { line: usize, revision: u64 } = null,
 

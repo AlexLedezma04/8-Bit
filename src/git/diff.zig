@@ -35,6 +35,17 @@ fn lineOffset(text: []const u8, line: usize) usize {
     return offset;
 }
 
+/// The old line beside new line `line`: lines after a hunk move by its size.
+pub fn oldLine(hunks: []const Hunk, line: usize) usize {
+    var old = line;
+    for (hunks) |hunk| {
+        if (line < hunk.new_start) break;
+        if (line < hunk.new_start + hunk.new_len) return hunk.old_start + @min(line - hunk.new_start, hunk.old_len);
+        old = line - (hunk.new_start + hunk.new_len) + hunk.old_start + hunk.old_len;
+    }
+    return old;
+}
+
 /// The hunks that turn `old` into `new`, in order.
 pub fn diff(allocator: std.mem.Allocator, old: []const []const u8, new: []const []const u8) ![]Hunk {
     var prefix: usize = 0;
@@ -199,6 +210,17 @@ test "lineSpan keeps line breaks and stops at the end" {
     try testing.expectEqualStrings("b\r\nc\n", lineSpan("a\nb\r\nc\nd", 1, 2));
     try testing.expectEqualStrings("d", lineSpan("a\nb\r\nc\nd", 3, 5));
     try testing.expectEqualStrings("", lineSpan("a\n", 1, 1));
+}
+
+test "oldLine follows the sizes of the hunks before a line" {
+    const hunks = [_]Hunk{
+        .{ .old_start = 1, .old_len = 1, .new_start = 1, .new_len = 3 },
+        .{ .old_start = 4, .old_len = 2, .new_start = 6, .new_len = 0 },
+    };
+    try testing.expectEqual(@as(usize, 0), oldLine(&hunks, 0));
+    try testing.expectEqual(@as(usize, 2), oldLine(&hunks, 2));
+    try testing.expectEqual(@as(usize, 2), oldLine(&hunks, 4));
+    try testing.expectEqual(@as(usize, 6), oldLine(&hunks, 6));
 }
 
 test "added, removed and changed lines" {

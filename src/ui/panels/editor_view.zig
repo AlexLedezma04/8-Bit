@@ -63,14 +63,34 @@ pub const EditorView = struct {
         layout.placePanes(self.editor.allocator, self.editor.root, rect, &self.placed, &self.splitters) catch {};
     }
 
-    /// The text layout of a pane, for the tab it shows, inside the minimap
-    /// and the scrollbars.
-    fn textLayout(self: *const EditorView, rect: Rect, metrics: Metrics, tab: *const Tab) TextLayout {
-        const lines: ?usize = if (self.editor.settings.line_numbers) tab.file.doc.buffer.lineCount() else null;
+    /// Where a pane's text goes, gutter and all: inside the minimap and the
+    /// scrollbars.
+    fn textArea(rect: Rect, metrics: Metrics) Rect {
         var area = rect.splitTop(metrics.bar())[1];
         area.w = @max(0, area.w - Scrollbar.width(metrics) - Minimap.width(metrics));
         area.h = @max(0, area.h - Scrollbar.width(metrics));
+        return area;
+    }
+
+    /// The text layout of a pane, for the tab it shows: the right half of
+    /// the text area beside the text at HEAD.
+    fn textLayout(self: *const EditorView, rect: Rect, metrics: Metrics, tab: *const Tab) TextLayout {
+        const lines: ?usize = if (self.editor.settings.line_numbers) tab.file.doc.buffer.lineCount() else null;
+        var area = textArea(rect, metrics);
+        if (tab.compare) {
+            const half = @floor(area.w / 2);
+            area.x += half;
+            area.w -= half;
+        }
         return .init(area, metrics, lines, decoration.gutterTextWidth(tab.decorations.items));
+    }
+
+    /// The text at HEAD, left of the text of a tab that compares.
+    fn beforeRect(self: *const EditorView, rect: Rect, metrics: Metrics, tab: *const Tab) ?Rect {
+        if (!tab.compare) return null;
+        const area = textArea(rect, metrics);
+        const text = self.textLayout(rect, metrics, tab);
+        return .{ .x = area.x, .y = area.y, .w = text.gutter.x - area.x - 1, .h = text.text.h };
     }
 
     /// The scrollbars of a pane: lines at the right, columns of the widest
@@ -129,8 +149,10 @@ pub const EditorView = struct {
             const text = self.textLayout(item.rect, look.metrics, tab);
             tab.view.setSize(&tab.file.doc, self.editor.cursorOf(tab).pos, text.cols, text.rows);
             canvas.setClip(.{ .x = text.gutter.x, .y = text.gutter.y, .w = text.gutter.w + text.text.w, .h = text.text.h });
-            drawTab(canvas, look, self.editor, tab, &text, focused and active, &self.spans);
+            const before = self.beforeRect(item.rect, look.metrics, tab);
+            drawTab(canvas, look, self.editor, tab, &text, before, focused and active, &self.spans);
             canvas.setClip(null);
+            if (before) |left| canvas.fillRect(.{ .x = left.x + left.w, .y = left.y, .w = 1, .h = left.h }, look.theme.border);
             for (self.scrollbars(item.rect, look.metrics, tab)) |bar| bar.draw(canvas, look);
             self.minimap(item.rect, look.metrics, tab).draw(canvas, look, &tab.file.doc, tab.file.changes(), tab.view.top.line, tab.view.rows);
         }
@@ -174,6 +196,7 @@ pub const EditorView = struct {
                     scrollToMinimap(pane.tab(), map, mouse.y);
                     return .yes;
                 }
+                if (self.beforeRect(item.rect, metrics, pane.tab())) |left| if (left.contains(mouse.x, mouse.y)) return .yes;
                 const cell = self.textLayout(item.rect, metrics, pane.tab()).cellAt(mouse.x, mouse.y);
                 if (mouse.button == .right) return self.openMenu(cell, mouse.x, mouse.y);
                 editor.mouseDown(cell.x, cell.y, mouse.clicks, mouse.mods.shift);
@@ -445,25 +468,52 @@ const Painter = struct {
 
     /// The text at HEAD of a change, over the rows from `row`.
     fn drawPeek(self: Painter, hunk: diff.Hunk, row: usize) void {
-        const text_layout = self.layout;
         const view = &self.tab.view;
-        const tab_width = self.tab.file.doc.tab_width;
         var lines = std.mem.splitScalar(u8, diff.lineSpan(self.tab.file.tracking.head.ready, hunk.old_start, hunk.old_len), '\n');
         for (row..@min(row + hunk.old_len, view.rows)) |y| {
             var rect = self.gutterRows(.{ .line = 0, .first_wrap = 0, .rows = 1, .y = y });
-            rect.w += text_layout.text.w;
-            self.canvas.fillRect(rect, self.look.theme.diff_removed);
-            // Tabs as spaces, as the text draws them.
-            var buffer: [1024]u8 = undefined;
-            var len: usize = 0;
-            for (std.mem.trimEnd(u8, lines.next() orelse "", "\r")) |byte| {
-                const spaces = if (byte == '\t') tab_width - len % tab_width else 1;
-                if (len + spaces > buffer.len) break;
-                @memset(buffer[len..][0..spaces], if (byte == '\t') ' ' else byte);
-                len += spaces;
-            }
-            self.canvas.drawText(text_layout.text.x, rect.y, buffer[@min(view.left, len)..len], self.look.theme.text);
+            rect.w += self.layout.text.w;
+            self.drawOldLine(rect, self.layout.text.x, lines.next() orelse "", true);
         }
+    }
+
+    /// The text at HEAD in `rect`, from the line beside the top of the text.
+    fn drawBefore(self: Painter, rect: Rect) void {
+        const tracking = &self.tab.file.tracking;
+        const head = switch (tracking.head) {
+            .ready => |text| text,
+            else => return,
+        };
+        const hunks = tracking.hunks.items;
+        const first = diff.oldLine(hunks, self.tab.view.top.line);
+        var lines = std.mem.splitScalar(u8, diff.lineSpan(head, first, self.tab.view.rows), '\n');
+        for (0..self.tab.view.rows) |y| {
+            const text = lines.next() orelse break;
+            const line = first + y;
+            const removed = for (hunks) |hunk| {
+                if (line >= hunk.old_start and line < hunk.old_start + hunk.old_len) break true;
+            } else false;
+            var row = self.layout.cellRect(0, y, 0);
+            row.x = rect.x;
+            row.w = rect.w;
+            self.drawOldLine(row, rect.x + self.layout.metrics.cell, text, removed);
+        }
+    }
+
+    /// A line of the text at HEAD, red when it is removed or changed. Tabs
+    /// as spaces, as the text draws them.
+    fn drawOldLine(self: Painter, row: Rect, x: f32, text: []const u8, removed: bool) void {
+        if (removed) self.canvas.fillRect(row, self.look.theme.diff_removed);
+        const tab_width = self.tab.file.doc.tab_width;
+        var buffer: [1024]u8 = undefined;
+        var len: usize = 0;
+        for (std.mem.trimEnd(u8, text, "\r")) |byte| {
+            const spaces = if (byte == '\t') tab_width - len % tab_width else 1;
+            if (len + spaces > buffer.len) break;
+            @memset(buffer[len..][0..spaces], if (byte == '\t') ' ' else byte);
+            len += spaces;
+        }
+        self.canvas.drawText(x, row.y, buffer[@min(self.tab.view.left, len)..len], self.look.theme.text);
     }
 
     fn color(self: Painter, style: decoration.Style) Color {
@@ -473,7 +523,7 @@ const Painter = struct {
 
 /// Draws only the lines of a tab that are on screen, so the size of the
 /// file does not matter.
-fn drawTab(canvas: Canvas, look: Look, editor: *const Editor, tab: *const Tab, text: *const TextLayout, focused: bool, spans: *std.ArrayList(syntax.Span)) void {
+fn drawTab(canvas: Canvas, look: Look, editor: *const Editor, tab: *const Tab, text: *const TextLayout, before: ?Rect, focused: bool, spans: *std.ArrayList(syntax.Span)) void {
     const doc = &tab.file.doc;
     const view = &tab.view;
     canvas.fillRect(text.gutter, look.theme.gutter);
@@ -512,4 +562,8 @@ fn drawTab(canvas: Canvas, look: Look, editor: *const Editor, tab: *const Tab, t
     }
     if (line == below) peek_row = y;
     if (peek_row) |row| painter.drawPeek(peek.?, row);
+    if (before) |left| {
+        canvas.setClip(left);
+        painter.drawBefore(left);
+    }
 }

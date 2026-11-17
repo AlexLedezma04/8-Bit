@@ -358,6 +358,10 @@ pub const Editor = struct {
         const tracking = &item.file.tracking;
         list.appendSlice(self.allocator, item.file.marks.items) catch {};
         list.appendSlice(self.allocator, tracking.markers.items) catch {};
+        // Beside the text at HEAD, the new lines are green like the old ones are red.
+        if (item.compare) for (tracking.markers.items) |marker| if (marker.kind.gutter_marker != .removed) {
+            list.append(self.allocator, .{ .range = marker.range, .kind = .{ .line_background = .diff_added } }) catch {};
+        };
         if (item.peeked()) |hunk| if (hunk.new_len > 0) list.append(self.allocator, .{
             .range = .{ .start = doc_.buffer.lineStart(hunk.new_start), .end = doc_.buffer.lineStart(hunk.new_start + hunk.new_len - 1) },
             .kind = .{ .line_background = .diff_added },
@@ -1137,6 +1141,14 @@ pub const Editor = struct {
         }
         const found = target orelse return self.notify("No more changes", .{});
         active.doc.cursor = .{ .pos = buffer.lineStart(found) };
+    }
+
+    /// Shows the active file beside its text at HEAD, or alone again.
+    pub fn toggleCompare(self: *Editor) void {
+        const item = self.tab();
+        const file_ = item.file;
+        if (!item.compare and (file_.role != .text or file_.path == null or file_.tracking.head == .missing)) return self.notify("No git version of {s}", .{file_.name()});
+        item.compare = !item.compare;
     }
 
     /// Shows the text at HEAD of the change at the cursor, inline.

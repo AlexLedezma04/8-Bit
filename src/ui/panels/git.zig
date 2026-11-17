@@ -216,7 +216,7 @@ pub const GitPanel = struct {
                     collapsed.* = !collapsed.*;
                     return .yes;
                 };
-                git.showDiff(if (item.section == .staged) .{ .staged = entry.path } else .{ .changes = entry.path });
+                if (item.section == .staged) git.showDiff(.{ .staged = entry.path }) else git.compare(entry.path);
             },
             .history => git.showDiff(.{ .commit = git.history.commits.items[index].hash }),
             .branches => {

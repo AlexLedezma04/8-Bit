@@ -9,7 +9,6 @@ const Status = status_zig.Status;
 const Entry = status_zig.Entry;
 const log = @import("../git/log.zig");
 const diff = @import("../git/diff.zig");
-const fs = @import("../platform/fs.zig");
 const editor_zig = @import("editor.zig");
 const Editor = editor_zig.Editor;
 const Request = editor_zig.Request;
@@ -47,9 +46,7 @@ pub const Action = struct {
 
 /// What a diff view compares.
 pub const Source = union(enum) {
-    /// The work tree and the index, of a path relative to the root.
-    changes: []const u8,
-    /// The index and HEAD.
+    /// The index and HEAD, of a path relative to the root.
     staged: []const u8,
     /// A commit and its parent, by hash.
     commit: []const u8,
@@ -125,13 +122,6 @@ pub const Job = struct {
     fn makeDiff(self: *Job, source: Source) !void {
         const arena = self.arena.allocator();
         switch (source) {
-            .changes => |path| {
-                const disk = try std.fs.path.join(arena, &.{ self.cwd, path });
-                const new = fs.readAtMost(self.io, arena, disk, max_diff_file) catch "";
-                try self.addFile(null, try self.show("", path), new);
-                self.title = try std.fmt.allocPrint(arena, "{s} (changes)", .{std.fs.path.basename(path)});
-                self.like = path;
-            },
             .staged => |path| {
                 try self.addFile(null, try self.show("HEAD", path), try self.show("", path));
                 self.title = try std.fmt.allocPrint(arena, "{s} (staged)", .{std.fs.path.basename(path)});
@@ -455,26 +445,17 @@ pub const Git = struct {
         _ = self.start(.{ .diff = source }, self.root.?, &.{});
     }
 
-    /// The changes of an open file since HEAD, unsaved ones too.
-    pub fn showFileChanges(self: *Git, file: *File) !void {
-        const head = switch (file.tracking.head) {
-            .ready => |text| text,
-            else => return self.editor().notify("No git version of {s}", .{file.name()}),
-        };
-        var arena: std.heap.ArenaAllocator = .init(self.allocator);
-        defer arena.deinit();
-        const text = try arena.allocator().alloc(u8, file.doc.buffer.len());
-        _ = file.doc.buffer.copy(0, text);
-        const old = try diff.splitLines(arena.allocator(), head);
-        const new = try diff.splitLines(arena.allocator(), text);
-        const hunks = try diff.diff(arena.allocator(), old, new);
-        if (hunks.len == 0) return self.editor().notify("No changes in {s}", .{file.name()});
-        var unified: diff.Unified = .{};
-        defer unified.deinit(self.allocator);
-        try unified.add(self.allocator, old, new, hunks);
-        const title = try std.fmt.allocPrint(arena.allocator(), "{s} (changes)", .{file.name()});
-        const view = self.editor().openView(title, unified.text.items, file.path) orelse return;
-        try viewMarks(self.allocator, view, unified.kinds.items);
+    /// Opens a file of the repository side by side with its text at HEAD,
+    /// named as the file tree names it.
+    pub fn compare(self: *Git, path: []const u8) void {
+        const editor_ = self.editor();
+        const inside = std.mem.startsWith(u8, path, self.prefix) and editor_.folder != null;
+        const parts: [2][]const u8 = if (inside) .{ editor_.folder.?, path[self.prefix.len..] } else .{ self.root.?, path };
+        const joined = std.fs.path.join(self.allocator, &parts) catch return;
+        defer self.allocator.free(joined);
+        std.mem.replaceScalar(u8, joined, '/', std.fs.path.sep);
+        editor_.open(joined);
+        editor_.tab().compare = true;
     }
 
     /// Asks for the HEAD text of an open file.

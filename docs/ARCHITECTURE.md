@@ -210,6 +210,12 @@ third_party/      vendored C dependencies (SDL3, stb_truetype)
 - A diff view and the commit message are files with a `role`: a diff view is
   read-only (`Document.read_only`) with its lines as `File.marks`; the commit
   message is committed with Ctrl+Enter and is never "modified".
+- A file with changes, from the git panel or Alt+D, is compared in its own
+  tab (`Tab.compare`): the left half of the text area draws the text at HEAD,
+  its removed and changed lines red, from the old line beside the top line
+  (`diff.oldLine`); the right half is the file, editable, its new lines
+  green. Both follow the tracking hunks. Staged files and commits are
+  unified diff views.
 - The sidebar has the file tree and the git panel; each dock switches its
   panels with the tabs widget. Outside a repository the Git tab is hidden.
 - Every `Git.refresh` looks for the repository again, so one made, deleted
