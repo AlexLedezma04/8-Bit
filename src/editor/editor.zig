@@ -1347,3 +1347,15 @@ test "focus and docks" {
     try testing.expectEqual(Area.editor, editor.focus);
     try testing.expect(!editor.sidebar.shown);
 }
+
+test "recent folders: newest first, no repeats, at most ten" {
+    var editor = try testEditor("");
+    defer editor.deinit();
+    var name: [8]u8 = undefined;
+    for (0..25) |i| try editor.addRecent(try std.fmt.bufPrint(&name, "/f{d}", .{i}));
+    try editor.addRecent("/f20");
+    try testing.expectEqual(@as(usize, Editor.max_recent), editor.recent.items.len);
+    try testing.expectEqualStrings("/f20", editor.recent.items[0]);
+    try testing.expectEqualStrings("/f24", editor.recent.items[1]);
+    try testing.expectEqualStrings("/f15", editor.recent.items[9]);
+}
