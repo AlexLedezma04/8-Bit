@@ -199,6 +199,7 @@
 #define SDL_VIDEO_DRIVER_X11_XFIXES 1
 #define SDL_VIDEO_DRIVER_X11_XINPUT2 1
 #define SDL_VIDEO_DRIVER_X11_XINPUT2_SUPPORTS_MULTITOUCH 1
+#define SDL_VIDEO_DRIVER_X11_XINPUT2_SUPPORTS_SCROLLINFO 1
 #define SDL_VIDEO_DRIVER_X11_XRANDR 1
 
 /* Wayland (preferred when available), with every library loaded at runtime.
