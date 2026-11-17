@@ -9,7 +9,6 @@ const Metrics = layout.Metrics;
 const Look = @import("../panel.zig").Look;
 const event = @import("../../platform/event.zig");
 const Request = @import("../../editor/editor.zig").Request;
-const utf8 = @import("../../core/utf8.zig");
 
 pub const Item = struct {
     label: []const u8,
@@ -77,15 +76,15 @@ pub const Menu = struct {
 
     /// Where it is drawn: at the mouse, moved in to stay inside `window`.
     pub fn bounds(self: *const Menu, metrics: Metrics, window: Rect) Rect {
-        var label: usize = 0;
-        var shortcut: usize = 0;
+        var label: f32 = 0;
+        var shortcut: f32 = 0;
         for (self.shown()) |item| {
-            label = @max(label, utf8.count(item.label));
-            shortcut = @max(shortcut, utf8.count(item.shortcut));
+            label = @max(label, metrics.labelWidth(item.label));
+            shortcut = @max(shortcut, metrics.labelWidth(item.shortcut));
         }
-        const cols = pad + label + (if (shortcut > 0) gap + shortcut else 0) + pad;
-        const w = @as(f32, @floatFromInt(cols)) * metrics.cell;
-        const h = @as(f32, @floatFromInt(self.len)) * metrics.row + metrics.row / 2;
+        const spaces: f32 = if (shortcut > 0) 2 * pad + gap else 2 * pad;
+        const w = label + shortcut + spaces * metrics.cell;
+        const h = @as(f32, @floatFromInt(self.len)) * metrics.item() + 2 * margin(metrics);
         return .{
             .x = @max(window.x, @min(self.x, window.x + window.w - w)),
             .y = @max(window.y, @min(self.y, window.y + window.h - h)),
@@ -94,11 +93,17 @@ pub const Menu = struct {
         };
     }
 
+    /// Space above the first item and below the last.
+    fn margin(metrics: Metrics) f32 {
+        return @floor(metrics.row / 4);
+    }
+
     /// The item under a pixel.
     fn itemAt(self: *const Menu, metrics: Metrics, window: Rect, x: f32, y: f32) ?usize {
         const rect = self.bounds(metrics, window);
-        if (!rect.contains(x, y) or y < rect.y + metrics.row / 4) return null;
-        const index: usize = @intFromFloat((y - rect.y - metrics.row / 4) / metrics.row);
+        const top = rect.y + margin(metrics);
+        if (!rect.contains(x, y) or y < top) return null;
+        const index: usize = @intFromFloat((y - top) / metrics.item());
         return if (index < self.len) index else null;
     }
 
@@ -109,13 +114,15 @@ pub const Menu = struct {
         const rect = self.bounds(metrics, window);
         canvas.fillRect(.{ .x = rect.x - 1, .y = rect.y - 1, .w = rect.w + 2, .h = rect.h + 2 }, theme.border);
         canvas.fillRect(rect, theme.menu);
-        var y = rect.y + metrics.row / 4;
+        const inset = margin(metrics);
+        var top = rect.y + inset;
         for (self.shown(), 0..) |item, i| {
-            if (self.hover == i and item.enabled) canvas.fillRect(.{ .x = rect.x + 2, .y = y, .w = rect.w - 4, .h = metrics.row }, theme.list_selection);
-            canvas.drawText(rect.x + pad * metrics.cell, y, item.label, if (item.enabled) theme.text else theme.line_number);
-            const shortcut_x = rect.x + rect.w - @as(f32, @floatFromInt(pad + utf8.count(item.shortcut))) * metrics.cell;
-            canvas.drawText(shortcut_x, y, item.shortcut, theme.line_number);
-            y += metrics.row;
+            if (self.hover == i and item.enabled) canvas.fillRect(.{ .x = rect.x + inset, .y = top, .w = rect.w - 2 * inset, .h = metrics.item() }, theme.list_selection);
+            const y = metrics.center(top, metrics.item());
+            canvas.drawLabel(rect.x + pad * metrics.cell, y, item.label, if (item.enabled) theme.text else theme.line_number);
+            const shortcut_x = rect.x + rect.w - pad * metrics.cell - metrics.labelWidth(item.shortcut);
+            canvas.drawLabel(shortcut_x, y, item.shortcut, theme.line_number);
+            top += metrics.item();
         }
     }
 
@@ -183,10 +190,12 @@ test "the menu stays inside the window and finds items under the mouse" {
     var menu: Menu = .{};
     const metrics = Metrics.init(1);
     menu.open(&sample, 790, 595, .of(Picker, &picker));
-    // 2 + 5 + 4 + 6 + 2 cells wide, two rows and a half row high.
+    // The widest label and shortcut with 8 cells of space; two items of
+    // 24 pixels and 4 above and below.
+    const w = metrics.labelWidth("Paste") + metrics.labelWidth("Ctrl+C") + 8 * 8;
     const rect = menu.bounds(metrics, screen);
-    try testing.expectEqual(Rect{ .x = 800 - 19 * 8, .y = 600 - 40, .w = 19 * 8, .h = 40 }, rect);
-    try testing.expectEqual(@as(?usize, 1), menu.itemAt(metrics, screen, rect.x + 5, rect.y + 4 + 16));
+    try testing.expectEqual(Rect{ .x = 800 - w, .y = 600 - 56, .w = w, .h = 56 }, rect);
+    try testing.expectEqual(@as(?usize, 1), menu.itemAt(metrics, screen, rect.x + 5, rect.y + 4 + 24));
     try testing.expectEqual(@as(?usize, null), menu.itemAt(metrics, screen, rect.x - 1, rect.y + 10));
 }
 
@@ -197,7 +206,7 @@ test "clicks run enabled items; Esc and clicks outside close" {
     menu.open(&sample, 100, 100, .of(Picker, &picker));
     try testing.expectEqual(Outcome.open, menu.click(metrics, screen, 110, 104 + 2));
     try testing.expectEqual(@as(?usize, null), picker.chosen);
-    try testing.expect(menu.click(metrics, screen, 110, 104 + 16 + 2) == .chosen);
+    try testing.expect(menu.click(metrics, screen, 110, 104 + 24 + 2) == .chosen);
     try testing.expectEqual(@as(?usize, 1), picker.chosen);
     try testing.expect(!menu.isOpen());
 

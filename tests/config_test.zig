@@ -112,7 +112,7 @@ test "Alt+T switches themes, the settings file remembers it, and user themes joi
     _ = session.press("alt+t");
     try testing.expectEqualStrings("Theme: light", editor.lastMessage().?);
     try testing.expectEqualStrings("light", editor.settings.theme);
-    try testing.expectEqual(app.ui.theme.Color.rgb(0xf8f8f4), session.loadTheme().background);
+    try testing.expectEqual(app.ui.theme.Color.rgb(0xffffff), session.loadTheme().background);
     const text = try session.read("settings.zon");
     defer testing.allocator.free(text);
     try testing.expect(std.mem.indexOf(u8, text, ".theme = \"light\",") != null);

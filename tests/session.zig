@@ -208,7 +208,7 @@ pub const Session = struct {
 
     /// Text drawn in the status bar, the last row of the window.
     pub fn inStatusBar(self: *const Session, part: []const u8) bool {
-        const bottom = self.workbench.height - 16;
+        const bottom = self.workbench.height - app.ui.layout.Metrics.init(1).item();
         for (self.recorder.texts.items) |item| {
             if (item.y >= bottom and std.mem.indexOf(u8, item.text, part) != null) return true;
         }

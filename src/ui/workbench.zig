@@ -71,6 +71,8 @@ pub const Workbench = struct {
     captured: ?Area = null,
     /// The last key was used, so the text it also types is dropped.
     swallow_text: bool = false,
+    /// Where the mouse is, in window pixels, for hover colors.
+    mouse: ?[2]f32 = null,
 
     /// In place, because the panels point into it.
     pub fn init(self: *Workbench, editor: *Editor) void {
@@ -180,24 +182,24 @@ pub const Workbench = struct {
             self.theme = theme_zig.load(editor.loader, editor.config_arena.allocator(), editor.settings.theme, editor);
             self.theme_version = editor.config_version;
         }
-        return .{ .theme = &self.theme, .metrics = self.metrics() };
+        return .{ .theme = &self.theme, .metrics = self.metrics(), .mouse = self.mouse };
     }
 
     pub fn draw(self: *Workbench, canvas: Canvas) void {
         const style = self.look();
         const theme = style.theme;
         const target = self.frame();
-        canvas.fillRect(.{ .w = self.width, .h = self.height }, theme.border);
+        canvas.fillRect(.{ .w = self.width, .h = self.height }, theme.background);
         for (std.enums.values(Area)) |area| {
             const rect = rectOf(target, area) orelse continue;
             const focused = self.editor.focus == area;
-            canvas.fillRect(rect, theme.background);
+            canvas.fillRect(rect, if (area == .editor) theme.background else theme.panel);
             const content = self.contentOf(target, area).?;
             const item = self.panelOf(area);
             if (area != .editor) {
                 var items: [max_dock_panels]tabs.Item = undefined;
                 const shown, const active = self.dockTabs(area, &items);
-                tabs.draw(canvas, style, rect.splitTop(style.metrics.bar())[0], shown, active, focused);
+                tabs.draw(canvas, style, rect.splitTop(style.metrics.bar())[0], shown, active, focused, theme.panel);
             }
             canvas.setClip(content);
             item.draw(canvas, style, content, focused);
@@ -247,6 +249,7 @@ pub const Workbench = struct {
 
     pub fn handle(self: *Workbench, ev: Event) Outcome {
         const editor = self.editor;
+        if (ev == .mouse_move) self.mouse = .{ ev.mouse_move.x * self.density, ev.mouse_move.y * self.density };
         if (self.menu.isOpen()) switch (ev) {
             .key, .text, .mouse_down, .mouse_move, .mouse_up, .wheel => return self.toMenu(ev),
             else => {},
@@ -274,7 +277,8 @@ pub const Workbench = struct {
                     editor.dock(if (edge == .sidebar) .sidebar else .bottom).size = self.frame().sizeAt(edge, self.metrics(), x, y);
                     return .{};
                 }
-                const area = self.captured orelse return .{ .redraw = false };
+                // Without a capture only hover colors change.
+                const area = self.captured orelse return .{};
                 var scaled = mouse;
                 scaled.x = x;
                 scaled.y = y;

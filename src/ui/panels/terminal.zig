@@ -215,10 +215,10 @@ pub const TerminalPanel = struct {
         const metrics = look.metrics;
         const bar, const area = split(rect, metrics);
         const shown = self.current() orelse {
-            canvas.drawText(rect.x + metrics.cell, rect.y + metrics.row / 2, "No terminal: Ctrl+` starts one", look.theme.line_number);
+            canvas.drawLabel(rect.x + metrics.cell, rect.y + metrics.row / 2, "No terminal: Ctrl+` starts one", look.theme.line_number);
             return;
         };
-        tabs.draw(canvas, look, bar, self.tabItems(), self.editor.terminals.active, focused);
+        tabs.draw(canvas, look, bar, self.tabItems(), self.editor.terminals.active, focused, look.theme.panel);
         const session = &shown.session;
         const cols: u16 = @intCast(std.math.clamp(metrics.cols(area.w), 2, 1000));
         const rows: u16 = @intCast(std.math.clamp(List.rowsIn(area, metrics), 2, 1000));

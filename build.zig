@@ -29,6 +29,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .imports = &.{.{ .name = "assets", .module = assets }},
     });
+    addStb(b, sdl_free, target, optimize);
     const integration = b.createModule(.{
         .root_source_file = b.path("tests/root.zig"),
         .target = target,
@@ -81,7 +82,21 @@ fn addEditor(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.buil
         }),
     });
     exe.root_module.linkLibrary(buildSdl(b, target, optimize));
+    addStb(b, exe.root_module, target, optimize);
     return exe;
+}
+
+/// stb_truetype, which reads the built-in fonts: C code and its Zig import "stb".
+fn addStb(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
+    const stb_c = b.addTranslateC(.{
+        .root_source_file = b.path("third_party/stb/stb.h"),
+        .link_libc = true,
+        .target = target,
+        .optimize = optimize,
+    });
+    mod.addImport("stb", stb_c.createModule());
+    mod.link_libc = true;
+    mod.addCSourceFile(.{ .file = b.path("third_party/stb/stb_truetype.c"), .flags = &.{"-fno-sanitize=undefined"} });
 }
 
 /// The built-in data files of assets/, embedded in the exe. Every grammar

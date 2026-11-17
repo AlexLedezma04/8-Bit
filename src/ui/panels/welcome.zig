@@ -1,5 +1,5 @@
-//! The editor area while nothing is open: how to open a folder or a file,
-//! and the recent folders, newest first. A click or Enter opens one; its ×
+//! The editor area while nothing is open: the logo, how to open a folder
+//! or a file, and the recent folders, newest first. A click or Enter opens one; its ×
 //! or Delete removes it from the list.
 const std = @import("std");
 const Editor = @import("../../editor/editor.zig").Editor;
@@ -23,8 +23,10 @@ const actions = [_]Action{
     .{ .label = "Open File...", .shortcut = "Ctrl+O", .pick = .open_file },
 };
 
-/// Where each part is, from the top of the area down.
+/// Where each part is, from the top of the area down: the logo with the
+/// name beside it, the actions, and the recent folders.
 const Parts = struct {
+    logo: Rect,
     title: Rect,
     actions: [actions.len]Rect,
     heading: Rect,
@@ -34,17 +36,18 @@ const Parts = struct {
 
     fn of(rect: Rect, metrics: Metrics) Parts {
         const w = @min(rect.w - 4 * metrics.cell, max_cols * metrics.cell);
-        var row: Rect = .{ .x = rect.x + @floor((rect.w - w) / 2), .y = rect.y + 3 * metrics.row, .w = w, .h = metrics.row };
+        const x = rect.x + @floor((rect.w - w) / 2);
         var parts: Parts = undefined;
-        parts.title = row;
-        row.y += 2 * metrics.row;
+        parts.logo = .{ .x = x, .y = rect.y + 2 * metrics.row, .w = 4 * metrics.row, .h = 4 * metrics.row };
+        parts.title = .{ .x = x + parts.logo.w + metrics.cell, .y = metrics.center(parts.logo.y, parts.logo.h), .w = w, .h = metrics.row };
+        var row: Rect = .{ .x = x, .y = parts.logo.y + parts.logo.h + metrics.row, .w = w, .h = metrics.item() };
         for (&parts.actions) |*action| {
             action.* = row;
-            row.y += metrics.row;
+            row.y += row.h;
         }
         row.y += metrics.row;
         parts.heading = row;
-        row.y += metrics.row;
+        row.y += row.h;
         parts.list = .{ .x = row.x, .y = row.y, .w = w, .h = @max(0, rect.y + rect.h - row.y - metrics.row) };
         return parts;
     }
@@ -120,14 +123,16 @@ pub const Welcome = struct {
 
     pub fn draw(self: *Welcome, canvas: Canvas, look: Look, rect: Rect, focused: bool) void {
         const theme = look.theme;
-        const cell = look.metrics.cell;
         const parts = Parts.of(rect, look.metrics);
-        canvas.drawText(parts.title.x, parts.title.y, "8-Bit", theme.tab_active_text);
+        canvas.drawLogo(parts.logo, theme.tab_active_text);
+        canvas.drawLabel(parts.title.x, parts.title.y, "8-Bit", theme.tab_active_text);
         for (parts.actions, actions) |line, action| {
-            canvas.drawText(line.x, line.y, action.label, theme.accent);
-            canvas.drawText(line.x + line.w - @as(f32, @floatFromInt(action.shortcut.len)) * cell, line.y, action.shortcut, theme.line_number);
+            if (look.hovered(line)) canvas.fillRect(line, theme.hover);
+            const y = look.metrics.center(line.y, line.h);
+            canvas.drawLabel(line.x + look.metrics.cell, y, action.label, theme.accent);
+            canvas.drawLabel(line.x + line.w - look.metrics.cell - look.metrics.labelWidth(action.shortcut), y, action.shortcut, theme.line_number);
         }
-        canvas.drawText(parts.heading.x, parts.heading.y, if (self.count() > 0) "Recent folders" else "No recent folders", theme.line_number);
+        canvas.drawLabel(parts.heading.x + look.metrics.cell, look.metrics.center(parts.heading.y, parts.heading.h), if (self.count() > 0) "Recent folders" else "No recent folders", theme.line_number);
         self.list.draw(canvas, look, parts.list, self.count(), Rows{ .editor = self.editor, .theme = theme }, focused);
     }
 };

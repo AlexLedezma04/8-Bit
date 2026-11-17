@@ -232,7 +232,7 @@ pub const GitPanel = struct {
                     const item = self.panel.itemAt(index);
                     const entry = item.entry orelse {
                         const name, const size = if (item.section == .staged) .{ "Staged", self.panel.staged.items.len } else .{ "Changes", self.panel.changed.items.len };
-                        return .{ .text = std.fmt.bufPrint(&self.buffer, "{s} ({d})", .{ name, size }) catch name, .color = theme.line_number_current, .icon = 'v' };
+                        return .{ .text = std.fmt.bufPrint(&self.buffer, "{s} ({d})", .{ name, size }) catch name, .color = theme.line_number_current, .icon = 0x25BC };
                     };
                     const kind = if (item.section == .staged) entry.stagedKind() else entry.changedKind();
                     const color = theme.gitColor(kind);
@@ -255,17 +255,17 @@ pub const GitPanel = struct {
         const git = &self.editor.git;
         if (!git.ready()) {
             const text = if (!git.available) "git is not installed" else "No git repository";
-            canvas.drawText(rect.x + look.metrics.cell, rect.y + look.metrics.row / 2, text, look.theme.line_number);
+            canvas.drawLabel(rect.x + look.metrics.cell, rect.y + look.metrics.row / 2, text, look.theme.line_number);
             return;
         }
         self.sync();
         const bar, const area = split(rect, look.metrics);
         var buffer: [3]tabs.Item = undefined;
-        tabs.draw(canvas, look, bar, self.pageItems(&buffer), @backingInt(self.page()), focused);
+        tabs.draw(canvas, look, bar, self.pageItems(&buffer), @backingInt(self.page()), focused, look.theme.panel);
         var rows: Rows = .{ .panel = self, .theme = look.theme };
         self.list().draw(canvas, look, area, self.count(), &rows, focused);
         if (self.page() == .history and git.history.loading and self.count() == 0) {
-            canvas.drawText(area.x + look.metrics.cell, area.y, "Loading...", look.theme.line_number);
+            canvas.drawLabel(area.x + look.metrics.cell, area.y, "Loading...", look.theme.line_number);
         }
     }
 };

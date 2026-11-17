@@ -116,7 +116,7 @@ pub const Editor = struct {
     pane: *Node,
     focus: Area = .editor,
     sidebar: Dock = .{ .size = 30 },
-    bottom: Dock = .{ .size = 10 },
+    bottom: Dock = .{ .size = 14 },
     side_panel: SidePanel = .files,
     bottom_panel: BottomPanel = .messages,
     folder: ?[]u8 = null,

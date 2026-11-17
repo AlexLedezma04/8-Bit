@@ -31,17 +31,20 @@ pub const Theme = struct {
 
     status_bar: Color,
     status_bar_text: Color,
-    status_bar_message: Color,
     unsaved: Color,
 
-    tab: Color,
-    tab_active: Color,
+    /// Background of the sidebar, the bottom panel and their tab bars.
+    panel: Color,
     tab_text: Color,
     tab_active_text: Color,
 
     border: Color,
     accent: Color,
+    /// Under the mouse.
+    hover: Color,
+    /// The selected row of the focused list, and of the others.
     list_selection: Color,
+    list_inactive: Color,
     /// Background of context menus.
     menu: Color,
 
@@ -130,7 +133,7 @@ test "built-in themes set every color" {
     const dark = config.builtin(Theme, testing.allocator, arena.allocator(), "themes/dark");
     const light = config.builtin(Theme, testing.allocator, arena.allocator(), "themes/light");
     try testing.expectEqual(Color.rgb(0x1e1f22), dark.background);
-    try testing.expectEqual(Color.rgb(0xf8f8f4), light.background);
+    try testing.expectEqual(Color.rgb(0xffffff), light.background);
     try testing.expectEqual(dark.terminal.red, dark.terminal.get(1));
     try testing.expectEqual(dark.terminal.bright_white, dark.terminal.get(15));
 }
@@ -156,6 +159,6 @@ test "a theme that leaves colors out gets them from the default theme" {
     try testing.expectEqual(Color.rgb(0x7a7e85), mine.syntax.comment);
 
     const light = load(loader, arena.allocator(), "light", &notifier);
-    try testing.expectEqual(Color.rgb(0xf8f8f4), light.background);
+    try testing.expectEqual(Color.rgb(0xffffff), light.background);
     try testing.expectEqualStrings("", notifier.message);
 }

@@ -4,7 +4,7 @@
 src/
   main.zig        wires platform + editor + ui
   platform/       OS/SDL boundary: window, renderer, input, clipboard, dialog, pty
-                  SDL-free: event (input types), mailbox, fs
+                  SDL-free: event (input types), mailbox, fs, png
   core/           text model: buffer, cursor, edit, undo, newline, search, utf8
   syntax/         highlighting engine; language data lives in assets/grammars
   git/            VCS integration via the git CLI
@@ -19,17 +19,19 @@ src/
     layout.zig    where the parts of the window are; all sizes come from the cell
     widgets/      reusable controls (list, tabs, prompt, menu)
     panels/       one view per feature (editor_view, welcome, file_tree, messages, status_bar, ...)
-  font/           bitmap font
+  font/           the built-in fonts (stb_truetype), their metrics, the glyph atlas
 assets/           built-in ZON files, embedded in the exe (assets.zig lists them)
   settings.zon    default settings
   keymap.zon      user key bindings (empty: the defaults are in keymap.zig)
   state.zon       what the app remembers between runs (written by the app)
   themes/         theme data files
+  fonts/          JetBrains Mono and Inter, cut to the characters the app draws (OFL)
+  icons/          the app logo
   grammars/       one grammar file per language (docs/GRAMMARS.md)
 tests/            integration tests (unit tests stay next to the code)
 tools/            small build helpers (size_check: `zig build size`,
                   embed_dir: embeds every grammar file)
-third_party/      vendored C dependencies (SDL3)
+third_party/      vendored C dependencies (SDL3, stb_truetype)
 ```
 
 ## Dependency rules
@@ -59,14 +61,24 @@ third_party/      vendored C dependencies (SDL3)
 
 ## Drawing text
 
-- `font/spleen.zig` holds the glyph bits of the 8x16 Spleen font (ASCII,
-  Latin-1, box drawing, blocks; a missing character is a small box). `font/bitmap_font.zig` turns them into
-  atlas pixels and places the glyphs of a line. Both are SDL-free.
-- `platform/renderer.zig` uploads the atlas once and draws all text through
-  `drawText`, in batches, tinted with the text color.
+- Two fonts, embedded from `assets/fonts`: JetBrains Mono for code (editor,
+  gutter, terminal, prompt input) and Inter for the UI. `font/truetype.zig`
+  reads them with stb_truetype (C, so the test build links libc too).
+- `font/fonts.zig` sizes them like IntelliJ's 13 pixel fonts: at zoom 1 a
+  code character is 8 pixels wide and a row 16 high. Code text keeps to that
+  cell grid; UI text moves by each character's advance. `fonts.Pen` places
+  the characters of a line and `fonts.width` measures one, so the UI can
+  lay out labels (`Metrics.labelWidth`) without SDL.
+- `font/atlas.zig` draws the glyphs of both fonts at one zoom into one
+  picture. `platform/renderer.zig` uploads it and makes it again when the
+  zoom changes, so text is drawn at its own size and stays sharp.
+  `Canvas.drawText` draws code, `Canvas.drawLabel` the UI font.
+- The logo (`assets/icons`) is read by `platform/png.zig`; it is the window
+  icon and, tinted with the theme, the logo of the welcome screen.
 - Color values live only in theme files; `ui/theme.zig` defines the struct.
 - The main loop sleeps until an event comes, handles all waiting events, and
-  draws one frame only if something changed.
+  draws one frame only if something changed. Moving the mouse redraws for
+  hover colors (`Look.mouse`).
 
 ## The editor (`editor/`, `ui/`, `main.zig`)
 
@@ -120,8 +132,9 @@ third_party/      vendored C dependencies (SDL3)
   Cancel with an `ask` request; the answer comes back to `Editor.answer`.
 - **Messages.** Everything reports through `Editor.notify`; the messages
   panel keeps it. The status bar shows only the git branch and the language.
-- **Sizes.** `ui/layout.zig` derives every size from the cell size, which is
-  the 8x16 font times the zoom (1x to 4x).
+- **Sizes.** `ui/layout.zig` derives every size from the cell size, 8x16
+  pixels times the zoom (1x to 4x): tab bars are 2.5 rows, list rows, menu
+  items and the status bar 1.5 rows.
 
 ## Search
 

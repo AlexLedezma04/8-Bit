@@ -75,9 +75,9 @@ test "tabs: a second terminal, Ctrl+Tab switches, the close button stops one" {
     try testing.expectEqual(@as(usize, 0), terminals.active);
     try testing.expect(session.shows("first-one"));
 
-    // The close button is two cells after the title.
+    // The close button is right after the title.
     const tab = textAt(&session, "Terminal 1");
-    _ = session.click(tab.x + ("Terminal 1".len + 1) * 8 + 4, tab.y + 8);
+    _ = session.click(tab.x + app.ui.layout.Metrics.init(1).labelWidth("Terminal 1") + 8, tab.y + 8);
     try testing.expectEqual(@as(usize, 1), terminals.list.items.len);
     try testing.expect(session.shows("Terminal 2"));
     try testing.expect(!session.shows("Terminal 1"));

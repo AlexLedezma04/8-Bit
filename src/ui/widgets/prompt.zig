@@ -235,14 +235,14 @@ pub const Prompt = struct {
 
         const y = metrics.barText(box.y);
         const label_x = box.x + metrics.cell;
-        canvas.drawText(label_x, y, self.label, theme.line_number_current);
-        const text_x = label_x + @as(f32, @floatFromInt(self.label.len + 1)) * metrics.cell;
+        canvas.drawLabel(label_x, y, self.label, theme.line_number_current);
+        const text_x = label_x + metrics.labelWidth(self.label) + metrics.cell;
         var notes_x = box.x + box.w;
         var i = notes.len;
         while (i > 0) {
             i -= 1;
-            notes_x -= @as(f32, @floatFromInt(notes[i].text.len + 1)) * metrics.cell;
-            canvas.drawText(notes_x, y, notes[i].text, notes[i].color);
+            notes_x -= metrics.labelWidth(notes[i].text) + metrics.cell;
+            canvas.drawLabel(notes_x, y, notes[i].text, notes[i].color);
         }
         const visible = metrics.cols(notes_x - text_x) -| 1;
         const doc = &self.doc;
@@ -256,7 +256,7 @@ pub const Prompt = struct {
         const typed = self.text();
         canvas.drawText(text_x, y, utf8.prefix(typed[@min(doc.posAtColumn(0, first), typed.len)..], visible + 1), theme.text);
         const cursor_x = text_x + @as(f32, @floatFromInt(doc.columnOf(doc.cursor.pos) - first)) * metrics.cell;
-        canvas.fillRect(.{ .x = cursor_x, .y = y, .w = @max(1, @floor(metrics.cell / 8)), .h = metrics.row }, theme.cursor);
+        canvas.fillRect(.{ .x = cursor_x, .y = y, .w = metrics.caret(), .h = metrics.row }, theme.cursor);
 
         if (shown == 0) return;
         const rows: Rect = .{ .x = box.x, .y = box.y + metrics.bar(), .w = box.w, .h = box.h - metrics.bar() };

@@ -388,7 +388,7 @@ pub const FileTree = struct {
                 .text = std.fs.path.basename(entry.path),
                 .color = if (is_current) self.theme.accent else color,
                 .indent = entry.depth,
-                .icon = if (!entry.is_dir) ' ' else if (entry.open) 'v' else '>',
+                .icon = if (!entry.is_dir) ' ' else if (entry.open) 0x25BC else 0x25B6,
                 .mark = mark,
             };
         }
@@ -396,11 +396,6 @@ pub const FileTree = struct {
 
     pub fn draw(self: *FileTree, canvas: Canvas, look: Look, rect: Rect, focused: bool) void {
         self.sync();
-        if (self.editor.folder == null) {
-            canvas.drawText(rect.x + look.metrics.cell, rect.y + look.metrics.row / 2, "No folder open", look.theme.line_number);
-            canvas.drawText(rect.x + look.metrics.cell, rect.y + look.metrics.row * 1.5, "Ctrl+Shift+O", look.theme.line_number);
-            return;
-        }
         const rows: Rows = .{ .tree = self, .theme = look.theme, .current = self.editor.file().path };
         self.list.draw(canvas, look, rect, self.entries.items.len, rows, focused);
     }

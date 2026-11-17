@@ -1,6 +1,7 @@
 //! Window lifecycle. Drawing goes through platform/renderer.zig.
 const std = @import("std");
 const c = @import("sdl.zig").c;
+const Image = @import("png.zig").Image;
 
 pub const Window = struct {
     handle: *c.SDL_Window,
@@ -27,6 +28,12 @@ pub const Window = struct {
         // Text input events carry what AltGr and input methods produce.
         _ = c.SDL_StartTextInput(handle);
         return .{ .handle = handle };
+    }
+
+    pub fn setIcon(self: *Window, image: Image) void {
+        const surface = c.SDL_CreateSurfaceFrom(@intCast(image.width), @intCast(image.height), c.SDL_PIXELFORMAT_RGBA32, image.pixels.ptr, @intCast(image.width * 4)) orelse return;
+        defer c.SDL_DestroySurface(surface);
+        _ = c.SDL_SetWindowIcon(self.handle, surface);
     }
 
     pub fn deinit(self: *Window) void {

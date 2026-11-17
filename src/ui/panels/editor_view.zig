@@ -77,7 +77,7 @@ pub const EditorView = struct {
         for (self.placed.items) |item| {
             const pane = item.node.pane();
             const active = item.node == self.editor.pane;
-            tabs.draw(canvas, look, item.rect.splitTop(look.metrics.bar())[0], self.tabItems(pane), pane.active, focused and active);
+            tabs.draw(canvas, look, item.rect.splitTop(look.metrics.bar())[0], self.tabItems(pane), pane.active, focused and active, look.theme.background);
             const tab = pane.tab();
             const text = self.textLayout(item.rect, look.metrics, tab);
             tab.view.setSize(&tab.file.doc, self.editor.cursorOf(tab).pos, text.cols, text.rows);
@@ -350,7 +350,7 @@ const Painter = struct {
         const first = view.firstColumn(row.wrap);
         if (column < first or column - first >= view.cols) return;
         var bar = self.layout.cellRect(column - first, visible.y + row.wrap - visible.first_wrap, 0);
-        bar.w = @max(1, @floor(self.layout.metrics.cell / 8));
+        bar.w = self.layout.metrics.caret();
         self.canvas.fillRect(bar, self.look.theme.cursor);
     }
 
@@ -366,7 +366,7 @@ const Painter = struct {
             .removed => theme.git_removed,
             .diff_added => theme.diff_added,
             .diff_removed => theme.diff_removed,
-            .diff_header => theme.tab,
+            .diff_header => theme.panel,
         };
     }
 };

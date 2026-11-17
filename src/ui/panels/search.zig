@@ -74,7 +74,7 @@ pub const Search = struct {
         self.sync();
         const project = &self.editor.project;
         var buffer: [128]u8 = undefined;
-        canvas.drawText(rect.x + look.metrics.cell, rect.y, project.summary(&buffer), look.theme.line_number_current);
+        canvas.drawLabel(rect.x + look.metrics.cell, rect.y, project.summary(&buffer), look.theme.line_number_current);
         const hits = project.hits.items;
         self.list.draw(canvas, look, hitsRect(rect, look.metrics), hits.len, Rows{ .hits = hits, .color = look.theme.text }, focused);
     }

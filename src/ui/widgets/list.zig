@@ -10,7 +10,6 @@ const Metrics = layout.Metrics;
 const Look = @import("../panel.zig").Look;
 const Color = @import("../theme.zig").Color;
 const KeyPress = @import("../../platform/event.zig").KeyPress;
-const utf8 = @import("../../core/utf8.zig");
 
 pub const Row = struct {
     text: []const u8,
@@ -19,7 +18,8 @@ pub const Row = struct {
     detail: []const u8 = "",
     /// Levels of two cells each.
     indent: usize = 0,
-    icon: u8 = ' ',
+    /// Drawn in the code font, like the arrows of folders.
+    icon: u21 = ' ',
     /// A letter at the right end, like the git status of a file.
     mark: ?Mark = null,
 
@@ -35,7 +35,7 @@ pub const List = struct {
 
     /// Rows that fit in `rect`.
     pub fn rowsIn(rect: Rect, metrics: Metrics) usize {
-        return @intFromFloat(@max(0, rect.h) / metrics.row);
+        return @intFromFloat(@max(0, rect.h) / metrics.item());
     }
 
     /// Up, Down, Page Up, Page Down, Home and End move; Enter activates.
@@ -61,7 +61,7 @@ pub const List = struct {
     /// The row at pixel `y`, if there is one.
     pub fn rowAt(self: *const List, y: f32, rect: Rect, metrics: Metrics, count: usize) ?usize {
         if (y < rect.y) return null;
-        const row = self.top + @as(usize, @intFromFloat((y - rect.y) / metrics.row));
+        const row = self.top + @as(usize, @intFromFloat((y - rect.y) / metrics.item()));
         return if (row < count) row else null;
     }
 
@@ -90,29 +90,30 @@ pub const List = struct {
         const rows = rowsIn(rect, metrics);
         self.selected = @min(self.selected, count -| 1);
         self.top = @min(self.top, count -| rows);
-        var y = rect.y;
+        var top = rect.y;
         for (self.top..@min(count, self.top + rows)) |index| {
-            if (index == self.selected and count > 0) {
-                const fill = if (focused) look.theme.list_selection else look.theme.current_line;
-                canvas.fillRect(.{ .x = rect.x, .y = y, .w = rect.w, .h = metrics.row }, fill);
-            }
+            const line: Rect = .{ .x = rect.x, .y = top, .w = rect.w, .h = metrics.item() };
+            const fill = if (index == self.selected) (if (focused) look.theme.list_selection else look.theme.list_inactive) else if (look.hovered(line)) look.theme.hover else null;
+            if (fill) |color| canvas.fillRect(line, color);
             const row: Row = source.row(index);
             const x = rect.x + @as(f32, @floatFromInt(1 + 2 * row.indent)) * metrics.cell;
-            if (row.icon != ' ') canvas.drawText(x, y, &.{row.icon}, look.theme.line_number);
-            canvas.drawText(x + 2 * metrics.cell, y, row.text, row.color);
+            const y = metrics.center(top, line.h);
+            var bytes: [4]u8 = undefined;
+            if (row.icon != ' ') canvas.drawText(x, y, encode(row.icon, &bytes), look.theme.line_number);
+            canvas.drawLabel(x + 2 * metrics.cell, y, row.text, row.color);
             if (row.detail.len > 0) {
-                const detail_x = x + @as(f32, @floatFromInt(3 + utf8.count(row.text))) * metrics.cell;
-                canvas.drawText(detail_x, y, row.detail, look.theme.line_number);
+                const detail_x = x + 3 * metrics.cell + metrics.labelWidth(row.text);
+                canvas.drawLabel(detail_x, y, row.detail, look.theme.line_number);
             }
-            if (row.mark) |mark| {
-                var bytes: [4]u8 = undefined;
-                const len = std.unicode.utf8Encode(mark.char, &bytes) catch 0;
-                canvas.drawText(rect.x + rect.w - 2 * metrics.cell, y, bytes[0..len], mark.color);
-            }
-            y += metrics.row;
+            if (row.mark) |mark| canvas.drawLabel(rect.x + rect.w - 2 * metrics.cell, y, encode(mark.char, &bytes), mark.color);
+            top += line.h;
         }
     }
 };
+
+fn encode(char: u21, bytes: *[4]u8) []const u8 {
+    return bytes[0 .. std.unicode.utf8Encode(char, bytes) catch 0];
+}
 
 const testing = std.testing;
 
@@ -138,8 +139,8 @@ test "keys move the selection and keep it on screen" {
 test "clicks select, double clicks activate, the wheel scrolls" {
     var list: List = .{ .top = 5 };
     const metrics = Metrics.init(1);
-    const rect: Rect = .{ .y = 100, .w = 200, .h = 160 };
-    try testing.expectEqual(@as(?Action, .moved), list.click(100 + 33, rect, metrics, 50, 1));
+    const rect: Rect = .{ .y = 100, .w = 200, .h = 240 };
+    try testing.expectEqual(@as(?Action, .moved), list.click(100 + 49, rect, metrics, 50, 1));
     try testing.expectEqual(@as(usize, 7), list.selected);
     try testing.expectEqual(@as(?Action, .activate), list.click(100, rect, metrics, 50, 2));
     try testing.expectEqual(@as(?Action, null), list.click(159, rect, metrics, 6, 1));
@@ -169,7 +170,7 @@ test "only the visible rows of a huge list are drawn" {
     var list: List = .{ .selected = 99_990 };
     list.reveal(10);
     var source: Source = .{};
-    list.draw(recorder.canvas(), .{ .theme = &dark, .metrics = .init(1) }, .{ .w = 100, .h = 160 }, 100_000, &source, true);
+    list.draw(recorder.canvas(), .{ .theme = &dark, .metrics = .init(1) }, .{ .w = 100, .h = 240 }, 100_000, &source, true);
     try testing.expectEqual(@as(usize, 10), source.asked);
     // One cell of margin, two of indent, two for the icon.
     try testing.expectEqual(@as(f32, 5 * 8), recorder.find("row 99981").?.x);

@@ -2,7 +2,7 @@
 //! status bar, and the gutter and text of each pane. Pure math, no drawing.
 //! Every size comes from the cell size, so zooming scales everything.
 const std = @import("std");
-const bitmap_font = @import("../font/bitmap_font.zig");
+const fonts = @import("../font/fonts.zig");
 const panes = @import("../editor/panes.zig");
 
 pub const Rect = struct {
@@ -31,20 +31,43 @@ pub const Metrics = struct {
     /// Height of a row of text. The font has its own space between lines.
     row: f32,
 
-    /// `zoom` is screen pixels per font pixel.
     pub fn init(zoom: u8) Metrics {
         const scale: f32 = @floatFromInt(zoom);
-        return .{ .cell = bitmap_font.width * scale, .row = bitmap_font.height * scale };
+        return .{ .cell = fonts.cell_width * scale, .row = fonts.row_height * scale };
+    }
+
+    fn zoomLevel(self: Metrics) u8 {
+        return @intFromFloat(self.cell / fonts.cell_width);
+    }
+
+    /// Width of a text in the UI font.
+    pub fn labelWidth(self: Metrics, text: []const u8) f32 {
+        return fonts.width(.ui, text, self.zoomLevel());
     }
 
     /// Height of a tab bar or a panel title.
     pub fn bar(self: Metrics) f32 {
+        return @floor(self.row * 2.5);
+    }
+
+    /// Height of a list row, a menu item or the status bar.
+    pub fn item(self: Metrics) f32 {
         return self.row + @floor(self.row / 2);
+    }
+
+    /// Top of a row of text centered in `h` pixels from `top`.
+    pub fn center(self: Metrics, top: f32, h: f32) f32 {
+        return top + @floor((h - self.row) / 2);
     }
 
     /// Top of text that is centered in a bar starting at `top`.
     pub fn barText(self: Metrics, top: f32) f32 {
-        return top + @floor((self.bar() - self.row) / 2);
+        return self.center(top, self.bar());
+    }
+
+    /// Width of the text cursor.
+    pub fn caret(self: Metrics) f32 {
+        return @floor(self.cell / 4);
     }
 
     /// Whole cells that fit in `w` pixels.
@@ -68,7 +91,7 @@ pub const Frame = struct {
 
     /// `sidebar` is a width in cells, `bottom` a height in rows.
     pub fn init(width: f32, height: f32, metrics: Metrics, sidebar: ?u16, bottom: ?u16) Frame {
-        const status_h = @min(metrics.row, height);
+        const status_h = @min(metrics.item(), height);
         var main: Rect = .{ .w = width, .h = height - status_h };
         var frame: Frame = .{ .sidebar = null, .editor = main, .bottom = null, .status = .{ .y = main.h, .w = width, .h = status_h } };
         if (sidebar) |cols| {
@@ -220,20 +243,21 @@ const testing = std.testing;
 test "metrics scale with the zoom" {
     try testing.expectEqual(Metrics{ .cell = 8, .row = 16 }, Metrics.init(1));
     try testing.expectEqual(Metrics{ .cell = 16, .row = 32 }, Metrics.init(2));
-    try testing.expectEqual(@as(f32, 24), Metrics.init(1).bar());
-    try testing.expectEqual(@as(f32, 104), Metrics.init(1).barText(100));
+    try testing.expectEqual(@as(f32, 40), Metrics.init(1).bar());
+    try testing.expectEqual(@as(f32, 24), Metrics.init(1).item());
+    try testing.expectEqual(@as(f32, 112), Metrics.init(1).barText(100));
 }
 
 test "the window: sidebar, editor, bottom panel and status bar" {
     const metrics = Metrics.init(1);
     const plain = Frame.init(800, 600, metrics, null, null);
-    try testing.expectEqual(Rect{ .w = 800, .h = 584 }, plain.editor);
-    try testing.expectEqual(Rect{ .y = 584, .w = 800, .h = 16 }, plain.status);
+    try testing.expectEqual(Rect{ .w = 800, .h = 576 }, plain.editor);
+    try testing.expectEqual(Rect{ .y = 576, .w = 800, .h = 24 }, plain.status);
 
     const full = Frame.init(800, 600, metrics, 30, 10);
-    try testing.expectEqual(Rect{ .w = 240, .h = 584 }, full.sidebar.?);
-    try testing.expectEqual(Rect{ .x = 241, .y = 424, .w = 559, .h = 160 }, full.bottom.?);
-    try testing.expectEqual(Rect{ .x = 241, .w = 559, .h = 423 }, full.editor);
+    try testing.expectEqual(Rect{ .w = 240, .h = 576 }, full.sidebar.?);
+    try testing.expectEqual(Rect{ .x = 241, .y = 416, .w = 559, .h = 160 }, full.bottom.?);
+    try testing.expectEqual(Rect{ .x = 241, .w = 559, .h = 415 }, full.editor);
 
     // Docks never squeeze the editor away.
     const big = Frame.init(800, 600, metrics, 500, 500);
@@ -245,10 +269,10 @@ test "dock edges can be found and dragged" {
     const metrics = Metrics.init(1);
     const frame = Frame.init(800, 600, metrics, 30, 10);
     try testing.expectEqual(@as(?Frame.Edge, .sidebar), frame.edgeAt(242, 100));
-    try testing.expectEqual(@as(?Frame.Edge, .bottom), frame.edgeAt(400, 422));
+    try testing.expectEqual(@as(?Frame.Edge, .bottom), frame.edgeAt(400, 414));
     try testing.expectEqual(@as(?Frame.Edge, null), frame.edgeAt(400, 300));
     try testing.expectEqual(@as(u16, 40), frame.sizeAt(.sidebar, metrics, 320, 0));
-    try testing.expectEqual(@as(u16, 20), frame.sizeAt(.bottom, metrics, 0, 584 - 320));
+    try testing.expectEqual(@as(u16, 20), frame.sizeAt(.bottom, metrics, 0, 576 - 320));
 }
 
 test "panes are placed by the split tree" {
