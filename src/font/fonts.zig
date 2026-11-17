@@ -17,7 +17,7 @@ const ui_em = 13;
 var faces: ?[2]Face = null;
 
 pub fn face(kind: Kind) *const Face {
-    if (faces == null) faces = .{ .init(assets.code_font), .init(assets.ui_font) };
+    if (faces == null) faces = .{ .init(assets.get("fonts/code").?), .init(assets.get("fonts/ui").?) };
     return &faces.?[@backingInt(kind)];
 }
 

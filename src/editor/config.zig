@@ -49,7 +49,7 @@ pub const Loader = struct {
                 else => notifier.notify("Could not read {s}.zon: {t}", .{ name, err }),
             }
         }
-        return assets.files.get(name);
+        return assets.get(name);
     }
 
     /// `name.zon` filled in over `base`: fields it leaves out keep their value
@@ -78,7 +78,7 @@ pub const Loader = struct {
     /// Names of the files in a folder, built-in and the user's, sorted.
     pub fn names(self: Loader, arena: std.mem.Allocator, folder: []const u8) ![]const []const u8 {
         var list: std.ArrayList([]const u8) = .empty;
-        for (assets.files.keys()) |key| {
+        for (assets.names()) |key| {
             if (key.len > folder.len and std.mem.startsWith(u8, key, folder) and key[folder.len] == '/')
                 try list.append(arena, key[folder.len + 1 ..]);
         }
@@ -108,7 +108,7 @@ pub fn builtin(comptime T: type, gpa: std.mem.Allocator, arena: std.mem.Allocato
         }
     };
     var result: T = undefined;
-    fill(T, &result, parse(Zon(T, false), gpa, arena, assets.files.get(name).?, name, Panic{}).?);
+    fill(T, &result, parse(Zon(T, false), gpa, arena, assets.get(name).?, name, Panic{}).?);
     return result;
 }
 
