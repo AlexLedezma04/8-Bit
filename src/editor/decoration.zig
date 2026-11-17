@@ -34,6 +34,15 @@ pub const Decoration = struct {
         /// A short text in the gutter, before the line number.
         gutter_text: []const u8,
     };
+
+    /// The style of a mark of changed lines: a git marker or a diff view line.
+    pub fn changeStyle(self: Decoration) ?Style {
+        const style = switch (self.kind) {
+            .gutter_marker, .line_background => |style| style,
+            else => return null,
+        };
+        return if (style == .diff_header) null else style;
+    }
 };
 
 fn startsBefore(pos: usize, decoration: Decoration) bool {

@@ -17,7 +17,7 @@ src/
     workbench.zig the whole window: places panels, routes input, focus
     theme.zig     the color struct; theme files live in assets/themes
     layout.zig    where the parts of the window are; all sizes come from the cell
-    widgets/      reusable controls (list, tabs, prompt, menu, scrollbar)
+    widgets/      reusable controls (list, tabs, prompt, menu, scrollbar, minimap)
     panels/       one view per feature (editor_view, welcome, file_tree, git, terminal, status_bar)
   font/           the built-in fonts (stb_truetype), their metrics, the glyph atlas
 assets/           built-in ZON files, embedded in the exe (assets.zig lists them)
@@ -103,6 +103,11 @@ third_party/      vendored C dependencies (SDL3, stb_truetype)
   SDL's Linux build config). Files and lists show `ui/widgets/scrollbar.zig`
   when they do not fit: lines at the right, and below the text the columns
   of the widest line on screen, unless lines wrap.
+- **Minimap.** Left of a file's scrollbar, `ui/widgets/minimap.zig` draws
+  the whole file: a bar per word, two pixels a line, fewer when it does not
+  fit (lines are skipped, changes never). Its left edge has the changes
+  (`File.changes`) and the part on screen is shaded; a press or a drag
+  centers the line under the mouse.
 - **Resizing.** The sidebar's edge and the terminal's top edge can be
   dragged. Each grip reaches 2 pixels into its dock and 6 out of it, so the
   scrollbars beside it stay free; `Workbench.edgeCursor` gives the resize
@@ -195,10 +200,22 @@ third_party/      vendored C dependencies (SDL3, stb_truetype)
 - `editor/tracking.zig` is what git knows about one open file: its text at
   HEAD (fetched once), the gutter markers, and blame. `Editor.tick` asks for
   what is missing and makes markers again once the text has rested for
-  300 ms. Files over 50,000 lines get no markers.
+  300 ms. Files over 50,000 lines get no markers. It keeps the hunks the
+  markers come from: a click in the gutter of a changed line opens Previous
+  Change, Next Change, Show Diff and Revert, which puts the HEAD lines back
+  (`Tracking.revert`, Ctrl+Alt+Z) while the markers are of the current text.
+  Show Diff (Ctrl+Alt+D) is `Tab.peek`: the HEAD lines drawn over the rows
+  under the change, its new lines in green, until the next command, click
+  or edit.
 - A diff view and the commit message are files with a `role`: a diff view is
   read-only (`Document.read_only`) with its lines as `File.marks`; the commit
   message is committed with Ctrl+Enter and is never "modified".
+- A file with changes, from the git panel or Alt+D, is compared in its own
+  tab (`Tab.compare`): the left half of the text area draws the text at HEAD,
+  its removed and changed lines red, from the old line beside the top line
+  (`diff.oldLine`); the right half is the file, editable, its new lines
+  green. Both follow the tracking hunks. Staged files and commits are
+  unified diff views.
 - The sidebar has the file tree and the git panel; each dock switches its
   panels with the tabs widget. Outside a repository the Git tab is hidden.
 - Every `Git.refresh` looks for the repository again, so one made, deleted

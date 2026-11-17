@@ -292,6 +292,7 @@ pub const Editor = struct {
     /// A click on a cell of the active text area. Two clicks select a word,
     /// three a line.
     pub fn mouseDown(self: *Editor, cell_x: isize, cell_y: isize, clicks: u8, extend: bool) void {
+        self.tab().peek = null;
         const doc_ = self.doc();
         const pos = self.view().posAt(doc_, cell_x, cell_y);
         switch (clicks) {
@@ -357,6 +358,14 @@ pub const Editor = struct {
         const tracking = &item.file.tracking;
         list.appendSlice(self.allocator, item.file.marks.items) catch {};
         list.appendSlice(self.allocator, tracking.markers.items) catch {};
+        // Beside the text at HEAD, the new lines are green like the old ones are red.
+        if (item.compare) for (tracking.markers.items) |marker| if (marker.kind.gutter_marker != .removed) {
+            list.append(self.allocator, .{ .range = marker.range, .kind = .{ .line_background = .diff_added } }) catch {};
+        };
+        if (item.peeked()) |hunk| if (hunk.new_len > 0) list.append(self.allocator, .{
+            .range = .{ .start = doc_.buffer.lineStart(hunk.new_start), .end = doc_.buffer.lineStart(hunk.new_start + hunk.new_len - 1) },
+            .kind = .{ .line_background = .diff_added },
+        }) catch {};
         // Blame of saved text only: edits move the lines.
         if (self.git.blame and tracking.blame == .ready and !item.file.doc.history.isModified()) list.appendSlice(self.allocator, tracking.blame.ready.marks) catch {};
         std.mem.sort(Decoration, list.items, {}, byStart);
@@ -1116,15 +1125,10 @@ pub const Editor = struct {
         const active = self.file();
         const buffer = &active.doc.buffer;
         const line = buffer.lineOf(active.doc.cursor.pos);
-        const marks = if (active.role == .diff) active.marks.items else active.tracking.markers.items;
         var target: ?usize = null;
         var last: ?usize = null;
-        for (marks) |mark| {
-            const style = switch (mark.kind) {
-                .gutter_marker, .line_background => |style| style,
-                else => continue,
-            };
-            if (style == .diff_header) continue;
+        for (active.changes()) |mark| {
+            if (mark.changeStyle() == null) continue;
             const first = buffer.lineOf(mark.range.start);
             const starts = if (last) |end| first > end + 1 else true;
             last = buffer.lineOf(mark.range.end);
@@ -1137,6 +1141,28 @@ pub const Editor = struct {
         }
         const found = target orelse return self.notify("No more changes", .{});
         active.doc.cursor = .{ .pos = buffer.lineStart(found) };
+    }
+
+    /// Shows the active file beside its text at HEAD, or alone again.
+    pub fn toggleCompare(self: *Editor) void {
+        const item = self.tab();
+        const file_ = item.file;
+        if (!item.compare and (file_.role != .text or file_.path == null or file_.tracking.head == .missing)) return self.notify("No git version of {s}", .{file_.name()});
+        item.compare = !item.compare;
+    }
+
+    /// Shows the text at HEAD of the change at the cursor, inline.
+    pub fn peekChange(self: *Editor) void {
+        const doc_ = self.doc();
+        const line = doc_.buffer.lineOf(doc_.cursor.pos);
+        if (self.file().tracking.hunkAt(doc_, line) == null) return self.notify("No change here", .{});
+        self.tab().peek = .{ .line = line, .revision = doc_.revision };
+    }
+
+    /// Puts the text at HEAD back over the change at the cursor.
+    pub fn revertChange(self: *Editor) !void {
+        const doc_ = self.doc();
+        if (!try self.file().tracking.revert(doc_, doc_.buffer.lineOf(doc_.cursor.pos))) self.notify("No change here", .{});
     }
 
     pub fn toggleBlame(self: *Editor) void {

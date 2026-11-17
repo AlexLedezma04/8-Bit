@@ -69,9 +69,26 @@ pub const Theme = struct {
             .ignored => self.line_number,
         };
     }
+
+    /// The color of a decoration.
+    pub fn styleColor(self: *const Theme, style: DecorationStyle) Color {
+        return switch (style) {
+            .selection => self.selection,
+            .current_line => self.current_line,
+            .match => self.search_match,
+            .bracket => self.matching_bracket,
+            .added => self.git_added,
+            .changed => self.git_changed,
+            .removed => self.git_removed,
+            .diff_added => self.diff_added,
+            .diff_removed => self.diff_removed,
+            .diff_header => self.panel,
+        };
+    }
 };
 
 const GitKind = @import("../git/status.zig").Kind;
+const DecorationStyle = @import("../editor/decoration.zig").Style;
 
 pub const Syntax = struct {
     comment: Color,

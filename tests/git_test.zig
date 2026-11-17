@@ -171,7 +171,7 @@ test "gutter markers follow the text after a short delay, F7 jumps between chang
     try testing.expectEqual(@as(usize, 0), markerCount(&session));
 }
 
-test "diff viewer: the current file, the panel's changes and staged files, a commit" {
+test "diff viewer: a file beside its text at HEAD, from Alt+D or the panel; staged files, a commit" {
     var session: Session = undefined;
     try session.init();
     defer session.deinit();
@@ -182,23 +182,32 @@ test "diff viewer: the current file, the panel's changes and staged files, a com
     editorOpen(&session, "main.zig");
     _ = session.waitForGit();
 
-    // Alt+D: unsaved changes too, with the colors of the language.
+    // Alt+D: in the same tab, the text at HEAD at the left with the changed
+    // line red, beside the file, unsaved changes too, green.
+    _ = session.press("delete");
     _ = session.press("ctrl+end");
     session.typeKeys("const c = 3;");
+    settle(&session);
     _ = session.press("alt+d");
-    try testing.expectEqualStrings("main.zig (changes)", editor.name());
-    try testing.expect(docHas(&session, "@@ -1,2 +1,3 @@"));
-    try testing.expectEqual(session.workbench.theme.syntax.keyword, session.recorder.find("const").?.color);
-    try testing.expect(session.shows("+"));
-    try testing.expectEqualStrings("Zig", editor.status().language);
-    // Read only.
+    const theme = &session.workbench.theme;
+    try testing.expectEqualStrings("main.zig", editor.name());
+    const old = session.recorder.find("const a = 1;").?;
+    // The file's line is drawn first.
+    const new = session.recorder.find("onst").?;
+    try testing.expect(old.x < new.x);
+    try testing.expectEqual(old.y, new.y);
+    try testing.expectEqual(@as(usize, 1), session.recorder.filled(theme.diff_removed));
+    try testing.expectEqual(@as(usize, 2), session.recorder.filled(theme.diff_added));
+    // The right side is the file: it can be edited, and Alt+D shows it alone.
     session.typeKeys("x");
-    try testing.expect(!docHas(&session, "xconst"));
-    try testing.expect(!editor.isModified());
+    try testing.expect(docHas(&session, "const c = 3;x"));
+    _ = session.press("alt+d");
+    try testing.expect(!session.shows("const a = 1;"));
 
-    // From the panel: the work tree against the index.
-    _ = session.press("ctrl+w");
+    // From the panel: the file opens beside its text at HEAD.
+    _ = session.press("backspace");
     _ = session.press("ctrl+s");
+    _ = session.press("ctrl+w");
     _ = session.press("ctrl+shift+g");
     _ = session.waitForGit();
     try testing.expect(session.shows("Changes (1)"));
@@ -206,8 +215,9 @@ test "diff viewer: the current file, the panel's changes and staged files, a com
     _ = session.press("down");
     _ = session.press("enter");
     _ = session.waitForGit();
-    try testing.expectEqualStrings("main.zig (changes)", editor.name());
-    try testing.expect(docHas(&session, "const c = 3;"));
+    try testing.expectEqualStrings("main.zig", editor.name());
+    try testing.expect(editor.tab().compare);
+    try testing.expect(session.shows("const a = 1;"));
 
     // The index against HEAD.
     _ = session.press("alt+1");
@@ -237,7 +247,7 @@ test "diff viewer: the current file, the panel's changes and staged files, a com
     // F7 jumps to the changed lines of a diff.
     _ = session.press("ctrl+home");
     _ = session.press("f7");
-    try testing.expectEqualStrings("const c = 3;", currentLine(&session));
+    try testing.expectEqualStrings("const a = 1;", currentLine(&session));
 }
 
 fn currentLine(session: *Session) []const u8 {
@@ -464,7 +474,7 @@ test "blame: gutter text per line, hidden while edited, a click opens the commit
     try committed(&session);
     defer session.deinit();
     const editor = &session.editor;
-    try session.write("b.txt", "bee\nsecond line, long enough to scroll when blame takes room\n");
+    try session.write("b.txt", "bee\nsecond line, long enough to scroll with blame\n");
     try session.git(&.{ "commit", "-q", "-am", "Second line" });
     editorOpen(&session, "b.txt");
     _ = session.send(.{ .focus = true });
@@ -570,4 +580,63 @@ test "the Staged and Changes titles collapse and expand their files" {
 fn indexOf(session: *const Session, text: []const u8) usize {
     for (session.recorder.texts.items, 0..) |item, i| if (std.mem.eql(u8, item.text, text)) return i;
     unreachable;
+}
+
+/// Makes the markers again, as the main loop does once the text rests.
+fn settle(session: *Session) void {
+    _ = session.editor.tick();
+    session.editor.now_ms += app.editor.tracking.delay_ms;
+    _ = session.editor.tick();
+    session.draw();
+}
+
+/// Clicks the gutter beside the first marker drawn in `color`, past the
+/// sidebar's resize grip.
+fn clickMarker(session: *Session, color: app.ui.theme.Color) void {
+    for (session.recorder.fills.items) |fill| if (std.meta.eql(fill.color, color)) {
+        _ = session.click(fill.rect.x + 16, fill.rect.y + 1);
+        return;
+    };
+    std.debug.panic("no marker", .{});
+}
+
+test "a click on a changed line's gutter: next change, its diff inline, revert" {
+    var session: Session = undefined;
+    try session.init();
+    defer session.deinit();
+    const theme = &session.workbench.theme;
+    try session.write("c.txt", "one\ntwo\nthree\nfour\n");
+    try session.git(&.{ "add", "-A" });
+    try session.git(&.{ "commit", "-q", "-m", "First" });
+    try session.write("c.txt", "one\nTWO\nthree\nfour\nfive\n");
+    editorOpen(&session, "c.txt");
+    _ = session.waitForGit();
+
+    clickMarker(&session, theme.git_changed);
+    try testing.expect(session.shows("Revert"));
+    _ = session.clickMenu("Next Change");
+    try testing.expectEqual(@as(usize, 5), session.cursor()[0]);
+    _ = session.press("ctrl+alt+z");
+    try testing.expect(!docHas(&session, "five"));
+
+    // Show Diff: the line at HEAD under the changed one, in the same tab,
+    // until the next key.
+    settle(&session);
+    clickMarker(&session, theme.git_changed);
+    _ = session.clickMenu("Show Diff");
+    try testing.expectEqualStrings("c.txt", session.editor.name());
+    const old = session.recorder.find("two").?;
+    try testing.expect(old.y > session.recorder.find("TWO").?.y);
+    try testing.expectEqual(@as(usize, 1), session.recorder.filled(theme.diff_removed));
+    try testing.expectEqual(@as(usize, 1), session.recorder.filled(theme.diff_added));
+    _ = session.press("up");
+    try testing.expect(!session.shows("two"));
+
+    clickMarker(&session, theme.git_changed);
+    _ = session.clickMenu("Revert");
+    try testing.expect(docHas(&session, "one\ntwo\nthree\nfour\n"));
+    settle(&session);
+    try testing.expectEqual(@as(usize, 0), markerCount(&session));
+    _ = session.press("ctrl+alt+z");
+    try expectMessage(&session, "No change here");
 }

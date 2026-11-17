@@ -87,6 +87,11 @@ pub const File = struct {
         return self.role == .text and self.doc.history.isModified();
     }
 
+    /// The marks of changed lines: the lines of a diff view, else the git markers.
+    pub fn changes(self: *const File) []const Decoration {
+        return if (self.role == .diff) self.marks.items else self.tracking.markers.items;
+    }
+
     /// Unsaved, empty and without a path: can be replaced by an opened file.
     pub fn isBlank(self: *const File) bool {
         return self.role == .text and self.path == null and self.doc.buffer.len() == 0 and !self.doc.history.isModified();

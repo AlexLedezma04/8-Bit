@@ -1,9 +1,11 @@
 //! What git knows about one open file: its text at HEAD, the lines changed
-//! since then (gutter markers) and who last changed each line (blame).
+//! since then (gutter markers), which can be reverted, and who last changed
+//! each line (blame).
 //! The line diff runs a short time after the text changes, never per key,
 //! and not at all for very big files.
 const std = @import("std");
 const Document = @import("../core/edit.zig").Document;
+const Buffer = @import("../core/buffer.zig").Buffer;
 const Decoration = @import("decoration.zig").Decoration;
 const diff = @import("../git/diff.zig");
 const Blame = @import("../git/log.zig").Blame;
@@ -34,8 +36,9 @@ pub const Tracking = struct {
     seen: ?u64 = null,
     /// When the markers must be made again.
     due_ms: ?u64 = null,
-    /// Gutter markers, sorted by position.
+    /// Gutter markers, sorted by position, and the hunks they mark.
     markers: std.ArrayList(Decoration) = .empty,
+    hunks: std.ArrayList(diff.Hunk) = .empty,
     blame: Fetched(Lines) = .unknown,
 
     /// Blame as gutter texts, and the output they point into.
@@ -56,6 +59,7 @@ pub const Tracking = struct {
         self.forgetHead(allocator);
         self.forgetBlame(allocator);
         self.markers.deinit(allocator);
+        self.hunks.deinit(allocator);
     }
 
     /// HEAD moved: the head text is fetched again.
@@ -70,7 +74,12 @@ pub const Tracking = struct {
     pub fn forgetAll(self: *Tracking, allocator: std.mem.Allocator) void {
         self.forgetHead(allocator);
         self.forgetBlame(allocator);
+        self.clearChanges();
+    }
+
+    fn clearChanges(self: *Tracking) void {
         self.markers.clearRetainingCapacity();
+        self.hunks.clearRetainingCapacity();
     }
 
     pub fn forgetBlame(self: *Tracking, allocator: std.mem.Allocator) void {
@@ -115,9 +124,9 @@ pub const Tracking = struct {
         if (now_ms < self.due_ms.?) return false;
         self.due_ms = null;
         self.revision = doc.revision;
-        self.markers.clearRetainingCapacity();
+        self.clearChanges();
         if (doc.buffer.lineCount() > max_lines) return true;
-        self.makeMarkers(allocator, doc) catch self.markers.clearRetainingCapacity();
+        self.makeMarkers(allocator, doc) catch self.clearChanges();
         return true;
     }
 
@@ -137,19 +146,55 @@ pub const Tracking = struct {
         defer allocator.free(new);
         const hunks = try diff.diff(allocator, old, new);
         defer allocator.free(hunks);
+        try self.hunks.appendSlice(allocator, hunks);
         const buffer = &doc.buffer;
         for (hunks) |hunk| {
             const style: @import("decoration.zig").Style = if (hunk.new_len == 0) .removed else if (hunk.old_len == 0) .added else .changed;
-            // A removal is marked on the line after it.
-            const first = @min(hunk.new_start, buffer.lineCount() - 1);
-            const last = @min(hunk.new_start + hunk.new_len -| 1, buffer.lineCount() - 1);
+            const first, const last = markedLines(hunk, buffer.lineCount());
             try self.markers.append(allocator, .{
-                .range = .{ .start = buffer.lineStart(first), .end = buffer.lineStart(@max(first, last)) },
+                .range = .{ .start = buffer.lineStart(first), .end = buffer.lineStart(last) },
                 .kind = .{ .gutter_marker = style },
             });
         }
     }
+
+    /// The change marked on `line`, while the markers are of the text.
+    pub fn hunkAt(self: *const Tracking, doc: *const Document, line: usize) ?diff.Hunk {
+        if (self.revision != doc.revision) return null;
+        for (self.hunks.items) |hunk| {
+            const first, const last = markedLines(hunk, doc.buffer.lineCount());
+            if (line >= first and line <= last) return hunk;
+        }
+        return null;
+    }
+
+    /// Puts the text at HEAD back over the change marked on `line`, as one
+    /// undo step. False when no change is marked there.
+    pub fn revert(self: *const Tracking, doc: *Document, line: usize) !bool {
+        const hunk = self.hunkAt(doc, line) orelse return false;
+        const buffer = &doc.buffer;
+        const start = startOf(buffer, hunk.new_start);
+        // After a last line without a line break, the old lines need one first.
+        const len = buffer.len();
+        const join = if (start == len and len > 0 and buffer.byteAt(len - 1) != '\n') "\n" else "";
+        const text = try std.mem.concat(buffer.allocator, u8, &.{ join, diff.lineSpan(self.head.ready, hunk.old_start, hunk.old_len) });
+        defer buffer.allocator.free(text);
+        try doc.replace(.{ .start = start, .end = startOf(buffer, hunk.new_start + hunk.new_len) }, text);
+        return true;
+    }
 };
+
+/// The first and last line a hunk's marker covers. A removal is marked on
+/// the line after it.
+fn markedLines(hunk: diff.Hunk, line_count: usize) [2]usize {
+    const first = @min(hunk.new_start, line_count - 1);
+    return .{ first, @max(first, @min(hunk.new_start + hunk.new_len -| 1, line_count - 1)) };
+}
+
+/// Where `line` starts, or the end past the last line.
+fn startOf(buffer: *const Buffer, line: usize) usize {
+    return if (line < buffer.lineCount()) buffer.lineStart(line) else buffer.len();
+}
 
 const testing = std.testing;
 
@@ -188,6 +233,32 @@ test "markers come at once, then a while after the text changes" {
     try testing.expect(!tracking.tick(testing.allocator, &doc, 10_000));
     tracking.setHead(testing.allocator, null);
     try testing.expectEqual(Fetched([]u8).missing, tracking.head);
+}
+
+test "revert puts the text at HEAD back over one change" {
+    var doc = Document.init(testing.allocator);
+    defer doc.deinit();
+    try doc.load("one\nTWO\nthree\nnew\nfour");
+    var tracking: Tracking = .{};
+    defer tracking.deinit(testing.allocator);
+    tracking.setHead(testing.allocator, try testing.allocator.dupe(u8, "one\ntwo\nthree\nfour\nfive\n"));
+    _ = tracking.tick(testing.allocator, &doc, 0);
+    try testing.expectEqual(@as(?diff.Hunk, null), tracking.hunkAt(&doc, 0));
+
+    try testing.expect(try tracking.revert(&doc, 1));
+    try @import("../core/buffer.zig").expectText(&doc.buffer, "one\ntwo\nthree\nnew\nfour");
+    // The markers are of the old text until they are made again.
+    try testing.expect(!try tracking.revert(&doc, 3));
+    _ = tracking.tick(testing.allocator, &doc, 1000);
+    _ = tracking.tick(testing.allocator, &doc, 1000 + delay_ms);
+    try testing.expect(try tracking.revert(&doc, 3));
+    _ = tracking.tick(testing.allocator, &doc, 2000);
+    _ = tracking.tick(testing.allocator, &doc, 2000 + delay_ms);
+    // "five" is gone after a last line without a line break.
+    try testing.expect(try tracking.revert(&doc, 3));
+    try @import("../core/buffer.zig").expectText(&doc.buffer, "one\ntwo\nthree\nfour\nfive\n");
+    _ = try doc.undo();
+    try @import("../core/buffer.zig").expectText(&doc.buffer, "one\ntwo\nthree\nfour");
 }
 
 test "very big files get no markers" {

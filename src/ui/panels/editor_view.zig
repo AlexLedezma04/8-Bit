@@ -1,7 +1,8 @@
 //! The editor area panel: every pane with its tab bar and the visible part
 //! of its document (gutter, decorations, text, cursor). What is visible is
 //! decided by `editor/view.zig`; this file only draws it and routes typed
-//! text and the mouse. A right click opens Copy, Cut and Paste.
+//! text and the mouse. A right click opens Copy, Cut and Paste; a click in
+//! the gutter of a changed line opens what can be done with the change.
 const std = @import("std");
 const editor_zig = @import("../../editor/editor.zig");
 const Editor = editor_zig.Editor;
@@ -21,11 +22,13 @@ const tabs = @import("../widgets/tabs.zig");
 const menu_zig = @import("../widgets/menu.zig");
 const scrollbar_zig = @import("../widgets/scrollbar.zig");
 const Scrollbar = scrollbar_zig.Scrollbar;
+const Minimap = @import("../widgets/minimap.zig").Minimap;
 const commands = @import("../../editor/commands.zig");
 const Color = @import("../theme.zig").Color;
 const Event = @import("../../platform/event.zig").Event;
 const syntax = @import("../../syntax/syntax.zig");
 const Style = @import("../../syntax/grammar.zig").Style;
+const diff = @import("../../git/diff.zig");
 
 pub const EditorView = struct {
     editor: *Editor,
@@ -38,7 +41,9 @@ pub const EditorView = struct {
     spans: std.ArrayList(syntax.Span) = .empty,
     /// What the left mouse button is doing since it went down.
     /// `scroll` holds which scrollbar, and where its thumb was grabbed.
-    drag: union(enum) { none, select, split: *panes.Split, scroll: struct { axis: scrollbar_zig.Axis, grabbed: f32 } } = .none,
+    drag: union(enum) { none, select, split: *panes.Split, scroll: struct { axis: scrollbar_zig.Axis, grabbed: f32 }, minimap } = .none,
+    /// The commands of the open menu, by item.
+    actions: []const commands.Command = &.{},
 
     pub fn deinit(self: *EditorView) void {
         const allocator = self.editor.allocator;
@@ -58,13 +63,34 @@ pub const EditorView = struct {
         layout.placePanes(self.editor.allocator, self.editor.root, rect, &self.placed, &self.splitters) catch {};
     }
 
-    /// The text layout of a pane, for the tab it shows, inside the scrollbars.
+    /// Where a pane's text goes, gutter and all: inside the minimap and the
+    /// scrollbars.
+    fn textArea(rect: Rect, metrics: Metrics) Rect {
+        var area = rect.splitTop(metrics.bar())[1];
+        area.w = @max(0, area.w - Scrollbar.width(metrics) - Minimap.width(metrics));
+        area.h = @max(0, area.h - Scrollbar.width(metrics));
+        return area;
+    }
+
+    /// The text layout of a pane, for the tab it shows: the right half of
+    /// the text area beside the text at HEAD.
     fn textLayout(self: *const EditorView, rect: Rect, metrics: Metrics, tab: *const Tab) TextLayout {
         const lines: ?usize = if (self.editor.settings.line_numbers) tab.file.doc.buffer.lineCount() else null;
-        var area = rect.splitTop(metrics.bar())[1];
-        area.w = @max(0, area.w - Scrollbar.width(metrics));
-        area.h = @max(0, area.h - Scrollbar.width(metrics));
+        var area = textArea(rect, metrics);
+        if (tab.compare) {
+            const half = @floor(area.w / 2);
+            area.x += half;
+            area.w -= half;
+        }
         return .init(area, metrics, lines, decoration.gutterTextWidth(tab.decorations.items));
+    }
+
+    /// The text at HEAD, left of the text of a tab that compares.
+    fn beforeRect(self: *const EditorView, rect: Rect, metrics: Metrics, tab: *const Tab) ?Rect {
+        if (!tab.compare) return null;
+        const area = textArea(rect, metrics);
+        const text = self.textLayout(rect, metrics, tab);
+        return .{ .x = area.x, .y = area.y, .w = text.gutter.x - area.x - 1, .h = text.text.h };
     }
 
     /// The scrollbars of a pane: lines at the right, columns of the widest
@@ -87,6 +113,16 @@ pub const EditorView = struct {
                 .shown = view.cols,
             },
         };
+    }
+
+    fn minimap(self: *const EditorView, rect: Rect, metrics: Metrics, tab: *const Tab) Minimap {
+        const text = self.textLayout(rect, metrics, tab).text;
+        return .init(.{ .x = text.x + text.w, .y = text.y, .w = Minimap.width(metrics), .h = text.h }, metrics, tab.file.doc.buffer.lineCount());
+    }
+
+    /// Centers the line under the mouse.
+    fn scrollToMinimap(tab: *Tab, map: Minimap, y: f32) void {
+        tab.view.top = .{ .line = map.lineAt(y) -| tab.view.rows / 2 };
     }
 
     /// Scrolls a tab to what a scrollbar was dragged to.
@@ -113,9 +149,12 @@ pub const EditorView = struct {
             const text = self.textLayout(item.rect, look.metrics, tab);
             tab.view.setSize(&tab.file.doc, self.editor.cursorOf(tab).pos, text.cols, text.rows);
             canvas.setClip(.{ .x = text.gutter.x, .y = text.gutter.y, .w = text.gutter.w + text.text.w, .h = text.text.h });
-            drawTab(canvas, look, self.editor, tab, &text, focused and active, &self.spans);
+            const before = self.beforeRect(item.rect, look.metrics, tab);
+            drawTab(canvas, look, self.editor, tab, &text, before, focused and active, &self.spans);
             canvas.setClip(null);
+            if (before) |left| canvas.fillRect(.{ .x = left.x + left.w, .y = left.y, .w = 1, .h = left.h }, look.theme.border);
             for (self.scrollbars(item.rect, look.metrics, tab)) |bar| bar.draw(canvas, look);
+            self.minimap(item.rect, look.metrics, tab).draw(canvas, look, &tab.file.doc, tab.file.changes(), tab.view.top.line, tab.view.rows);
         }
         for (self.splitters.items) |splitter| canvas.fillRect(splitter.line, look.theme.border);
     }
@@ -151,10 +190,21 @@ pub const EditorView = struct {
                     scrollTo(pane.tab(), bar_, at, self.drag.scroll.grabbed);
                     return .yes;
                 }
+                const map = self.minimap(item.rect, metrics, pane.tab());
+                if (map.rect.contains(mouse.x, mouse.y)) {
+                    self.drag = .minimap;
+                    scrollToMinimap(pane.tab(), map, mouse.y);
+                    return .yes;
+                }
+                if (self.beforeRect(item.rect, metrics, pane.tab())) |left| if (left.contains(mouse.x, mouse.y)) return .yes;
                 const cell = self.textLayout(item.rect, metrics, pane.tab()).cellAt(mouse.x, mouse.y);
                 if (mouse.button == .right) return self.openMenu(cell, mouse.x, mouse.y);
                 editor.mouseDown(cell.x, cell.y, mouse.clicks, mouse.mods.shift);
-                if (cell.x < 0) editor.clickGutter(editor.doc().buffer.lineOf(editor.doc().cursor.pos));
+                if (cell.x < 0) {
+                    const line = editor.doc().buffer.lineOf(editor.doc().cursor.pos);
+                    if (editor.file().tracking.hunkAt(editor.doc(), line) != null) return self.openChangeMenu(mouse.x, mouse.y);
+                    editor.clickGutter(line);
+                }
                 self.drag = .select;
             },
             .mouse_move => |mouse| switch (self.drag) {
@@ -170,6 +220,10 @@ pub const EditorView = struct {
                     const tab = item.node.pane().tab();
                     const bar_ = self.scrollbars(item.rect, metrics, tab)[@backingInt(scroll.axis)];
                     scrollTo(tab, bar_, bar_.along(mouse.x, mouse.y), scroll.grabbed);
+                },
+                .minimap => for (self.placed.items) |item| if (item.node == editor.pane) {
+                    const tab = item.node.pane().tab();
+                    scrollToMinimap(tab, self.minimap(item.rect, metrics, tab), mouse.y);
                 },
             },
             .mouse_up => {
@@ -196,7 +250,8 @@ pub const EditorView = struct {
         return .yes;
     }
 
-    const actions = [_]commands.Command{ .copy, .cut, .paste };
+    const edit_actions = [_]commands.Command{ .copy, .cut, .paste };
+    const change_actions = [_]commands.Command{ .prev_change, .next_change, .peek_change, .revert_change };
 
     /// A right click outside the selection moves the cursor first.
     fn openMenu(self: *EditorView, cell: layout.Cell, x: f32, y: f32) Handled {
@@ -206,6 +261,7 @@ pub const EditorView = struct {
         const pos = editor.view().posAt(doc, cell.x, cell.y);
         if (pos < selection.start or pos > selection.end or selection.len() == 0) editor.mouseDown(cell.x, cell.y, 1, false);
         const selected = doc.cursor.selection().len() > 0;
+        self.actions = &edit_actions;
         self.menu.open(&.{
             .{ .label = "Copy", .shortcut = "Ctrl+C", .enabled = selected },
             .{ .label = "Cut", .shortcut = "Ctrl+X", .enabled = selected and !doc.read_only },
@@ -214,8 +270,20 @@ pub const EditorView = struct {
         return .yes;
     }
 
+    /// The change at the cursor line.
+    fn openChangeMenu(self: *EditorView, x: f32, y: f32) Handled {
+        self.actions = &change_actions;
+        self.menu.open(&.{
+            .{ .label = "Previous Change", .shortcut = "Shift+F7" },
+            .{ .label = "Next Change", .shortcut = "F7" },
+            .{ .label = "Show Diff", .shortcut = "Ctrl+Alt+D" },
+            .{ .label = "Revert", .shortcut = "Ctrl+Alt+Z" },
+        }, x, y, .of(EditorView, self));
+        return .yes;
+    }
+
     pub fn choose(self: *EditorView, index: usize) ?editor_zig.Request {
-        return commands.run(self.editor, actions[index]);
+        return commands.run(self.editor, self.actions[index]);
     }
 
     fn paneAt(self: *const EditorView, x: f32, y: f32) ?layout.Placed {
@@ -398,26 +466,64 @@ const Painter = struct {
         self.canvas.fillRect(bar, self.look.theme.cursor);
     }
 
-    fn color(self: Painter, style: decoration.Style) Color {
-        const theme = self.look.theme;
-        return switch (style) {
-            .selection => theme.selection,
-            .current_line => theme.current_line,
-            .match => theme.search_match,
-            .bracket => theme.matching_bracket,
-            .added => theme.git_added,
-            .changed => theme.git_changed,
-            .removed => theme.git_removed,
-            .diff_added => theme.diff_added,
-            .diff_removed => theme.diff_removed,
-            .diff_header => theme.panel,
+    /// The text at HEAD of a change, over the rows from `row`.
+    fn drawPeek(self: Painter, hunk: diff.Hunk, row: usize) void {
+        const view = &self.tab.view;
+        var lines = std.mem.splitScalar(u8, diff.lineSpan(self.tab.file.tracking.head.ready, hunk.old_start, hunk.old_len), '\n');
+        for (row..@min(row + hunk.old_len, view.rows)) |y| {
+            var rect = self.gutterRows(.{ .line = 0, .first_wrap = 0, .rows = 1, .y = y });
+            rect.w += self.layout.text.w;
+            self.drawOldLine(rect, self.layout.text.x, lines.next() orelse "", true);
+        }
+    }
+
+    /// The text at HEAD in `rect`, from the line beside the top of the text.
+    fn drawBefore(self: Painter, rect: Rect) void {
+        const tracking = &self.tab.file.tracking;
+        const head = switch (tracking.head) {
+            .ready => |text| text,
+            else => return,
         };
+        const hunks = tracking.hunks.items;
+        const first = diff.oldLine(hunks, self.tab.view.top.line);
+        var lines = std.mem.splitScalar(u8, diff.lineSpan(head, first, self.tab.view.rows), '\n');
+        for (0..self.tab.view.rows) |y| {
+            const text = lines.next() orelse break;
+            const line = first + y;
+            const removed = for (hunks) |hunk| {
+                if (line >= hunk.old_start and line < hunk.old_start + hunk.old_len) break true;
+            } else false;
+            var row = self.layout.cellRect(0, y, 0);
+            row.x = rect.x;
+            row.w = rect.w;
+            self.drawOldLine(row, rect.x + self.layout.metrics.cell, text, removed);
+        }
+    }
+
+    /// A line of the text at HEAD, red when it is removed or changed. Tabs
+    /// as spaces, as the text draws them.
+    fn drawOldLine(self: Painter, row: Rect, x: f32, text: []const u8, removed: bool) void {
+        if (removed) self.canvas.fillRect(row, self.look.theme.diff_removed);
+        const tab_width = self.tab.file.doc.tab_width;
+        var buffer: [1024]u8 = undefined;
+        var len: usize = 0;
+        for (std.mem.trimEnd(u8, text, "\r")) |byte| {
+            const spaces = if (byte == '\t') tab_width - len % tab_width else 1;
+            if (len + spaces > buffer.len) break;
+            @memset(buffer[len..][0..spaces], if (byte == '\t') ' ' else byte);
+            len += spaces;
+        }
+        self.canvas.drawText(x, row.y, buffer[@min(self.tab.view.left, len)..len], self.look.theme.text);
+    }
+
+    fn color(self: Painter, style: decoration.Style) Color {
+        return self.look.theme.styleColor(style);
     }
 };
 
 /// Draws only the lines of a tab that are on screen, so the size of the
 /// file does not matter.
-fn drawTab(canvas: Canvas, look: Look, editor: *const Editor, tab: *const Tab, text: *const TextLayout, focused: bool, spans: *std.ArrayList(syntax.Span)) void {
+fn drawTab(canvas: Canvas, look: Look, editor: *const Editor, tab: *const Tab, text: *const TextLayout, before: ?Rect, focused: bool, spans: *std.ArrayList(syntax.Span)) void {
     const doc = &tab.file.doc;
     const view = &tab.view;
     canvas.fillRect(text.gutter, look.theme.gutter);
@@ -438,15 +544,26 @@ fn drawTab(canvas: Canvas, look: Look, editor: *const Editor, tab: *const Tab, t
         }),
     };
 
+    const peek = tab.peeked();
+    // The old lines go where the line after the change starts.
+    const below = if (peek) |hunk| hunk.new_start + hunk.new_len else null;
+    var peek_row: ?usize = null;
     var line = top.line;
     var first_wrap = top.wrap;
     var y: usize = 0;
     while (y < view.rows and line < line_count) : (line += 1) {
+        if (line == below) peek_row = y;
         const rows = @min(view.rowsOf(doc, line) - first_wrap, view.rows - y);
         tab.file.highlighter.spans(&tab.file.doc, line, spans);
         painter.spans = spans.items;
         painter.drawLine(.{ .line = line, .first_wrap = first_wrap, .rows = rows, .y = y });
         y += rows;
         first_wrap = 0;
+    }
+    if (line == below) peek_row = y;
+    if (peek_row) |row| painter.drawPeek(peek.?, row);
+    if (before) |left| {
+        canvas.setClip(left);
+        painter.drawBefore(left);
     }
 }
