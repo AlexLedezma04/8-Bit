@@ -75,6 +75,7 @@ fn addEditor(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.buil
             .target = target,
             .optimize = optimize,
             .link_libc = true,
+            .unwind_tables = unwindTables(target, optimize),
             .imports = &.{
                 .{ .name = "sdl", .module = sdl_c.createModule() },
                 .{ .name = "assets", .module = assets },
@@ -84,6 +85,12 @@ fn addEditor(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.buil
     exe.root_module.linkLibrary(buildSdl(b, target, optimize));
     addStb(b, exe.root_module, target, optimize);
     return exe;
+}
+
+/// None in a Linux release: nothing unwinds the stack there, so the tables
+/// are only size. Windows needs them for SEH, debug builds for stack traces.
+fn unwindTables(target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) ?std.builtin.UnwindTables {
+    return if (target.result.os.tag == .windows or optimize == .debug) null else .none;
 }
 
 /// stb_truetype, which reads the built-in fonts: C code and its Zig import "stb".
@@ -125,6 +132,7 @@ fn buildSdl(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.built
         .target = target,
         .optimize = optimize,
         .link_libc = true,
+        .unwind_tables = unwindTables(target, optimize),
     });
     const lib = b.addLibrary(.{ .name = "SDL3", .root_module = mod, .linkage = .static });
     // One section per function/data, so the linker drops every SDL part we never call.
