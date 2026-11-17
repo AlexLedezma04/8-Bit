@@ -128,8 +128,12 @@ pub const Session = struct {
         self.tmp.cleanup();
     }
 
+    /// A file of the folder, named as the file tree names it: with the OS
+    /// separator after the folder, so paths compare equal on Windows too.
     pub fn path(self: *Session, name: []const u8) []const u8 {
-        return std.fmt.bufPrint(&self.path_buffer, "{s}/{s}", .{ self.folder[0..self.folder_len], name }) catch unreachable;
+        const joined = std.fmt.bufPrint(&self.path_buffer, "{s}" ++ std.fs.path.sep_str ++ "{s}", .{ self.folder[0..self.folder_len], name }) catch unreachable;
+        std.mem.replaceScalar(u8, joined[self.folder_len..], '/', std.fs.path.sep);
+        return joined;
     }
 
     pub fn write(self: *Session, name: []const u8, text: []const u8) !void {

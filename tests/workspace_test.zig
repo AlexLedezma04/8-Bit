@@ -158,10 +158,7 @@ test "file tree menu: new, copy, cut, paste and delete files and folders" {
     try testing.expect(session.shows("b copy.txt"));
 
     // Cut moves, and an open file follows.
-    // Named as the tree names it, with the OS separator.
-    const copy = try std.fs.path.join(testing.allocator, &.{ session.folderPath(), "b copy.txt" });
-    defer testing.allocator.free(copy);
-    editor.open(copy);
+    editor.open(session.path("b copy.txt"));
     _ = session.rightClickText("b copy.txt");
     _ = session.clickMenu("Cut");
     _ = session.rightClickText("a");
