@@ -5,6 +5,9 @@ const Rect = @import("layout.zig").Rect;
 const Color = @import("theme.zig").Color;
 pub const Font = @import("../font/fonts.zig").Kind;
 
+/// The logo with the name, for a dark background or for a light one.
+pub const Logo = enum { dark_mode, light_mode };
+
 pub const Canvas = struct {
     ptr: *anyopaque,
     vtable: *const VTable,
@@ -13,7 +16,7 @@ pub const Canvas = struct {
         fillRect: *const fn (*anyopaque, Rect, Color) void,
         drawText: *const fn (*anyopaque, f32, f32, []const u8, Color, Font) void,
         setClip: *const fn (*anyopaque, ?Rect) void,
-        drawLogo: *const fn (*anyopaque, Rect, Color) void,
+        drawLogo: *const fn (*anyopaque, Rect, Logo) void,
     };
 
     /// A canvas for `T`, which has these methods.
@@ -28,8 +31,8 @@ pub const Canvas = struct {
             fn setClip(ptr: *anyopaque, rect: ?Rect) void {
                 cast(ptr).setClip(rect);
             }
-            fn drawLogo(ptr: *anyopaque, rect: Rect, color: Color) void {
-                cast(ptr).drawLogo(rect, color);
+            fn drawLogo(ptr: *anyopaque, rect: Rect, logo: Logo) void {
+                cast(ptr).drawLogo(rect, logo);
             }
             fn cast(ptr: *anyopaque) *T {
                 return @ptrCast(@alignCast(ptr));
@@ -53,9 +56,9 @@ pub const Canvas = struct {
         self.vtable.drawText(self.ptr, x, y, text, color, .ui);
     }
 
-    /// The app logo scaled into `rect`, tinted with `color`.
-    pub fn drawLogo(self: Canvas, rect: Rect, color: Color) void {
-        self.vtable.drawLogo(self.ptr, rect, color);
+    /// The app logo scaled into `rect`, in its own colors.
+    pub fn drawLogo(self: Canvas, rect: Rect, logo: Logo) void {
+        self.vtable.drawLogo(self.ptr, rect, logo);
     }
 
     /// Drawing outside `rect` is dropped; null draws everywhere again.
@@ -115,7 +118,7 @@ pub const Recorder = struct {
 
     pub fn setClip(_: *Recorder, _: ?Rect) void {}
 
-    pub fn drawLogo(self: *Recorder, _: Rect, _: Color) void {
+    pub fn drawLogo(self: *Recorder, _: Rect, _: Logo) void {
         self.logos += 1;
     }
 };

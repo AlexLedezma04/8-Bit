@@ -14,6 +14,11 @@ pub const Color = struct {
     }
 
     pub const fromZon = rgb;
+
+    /// Darker than middle gray, by perceived brightness.
+    pub fn isDark(self: Color) bool {
+        return @as(u32, self.r) * 299 + @as(u32, self.g) * 587 + @as(u32, self.b) * 114 < 128 * 1000;
+    }
 };
 
 pub const Theme = struct {

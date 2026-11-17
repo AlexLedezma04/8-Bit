@@ -10,6 +10,28 @@ pub const Image = struct {
     pub fn deinit(self: Image, allocator: std.mem.Allocator) void {
         allocator.free(self.pixels);
     }
+
+    /// The image at `w` by `h` pixels, each the average of the pixels it
+    /// covers, weighted by alpha so transparent ones add no color.
+    pub fn shrink(self: Image, allocator: std.mem.Allocator, w: u32, h: u32) !Image {
+        const pixels = try allocator.alloc(u8, @as(usize, w) * h * 4);
+        for (0..h) |y| for (0..w) |x| {
+            const x0 = x * self.width / w;
+            const y0 = y * self.height / h;
+            const x1 = @max(x0 + 1, (x + 1) * self.width / w);
+            const y1 = @max(y0 + 1, (y + 1) * self.height / h);
+            var sum: [4]u64 = @splat(0);
+            for (y0..y1) |sy| for (x0..x1) |sx| {
+                const pixel = self.pixels[(sy * self.width + sx) * 4 ..][0..4];
+                for (0..3) |i| sum[i] += @as(u64, pixel[i]) * pixel[3];
+                sum[3] += pixel[3];
+            };
+            const out = pixels[(y * w + x) * 4 ..][0..4];
+            for (0..3) |i| out[i] = if (sum[3] == 0) 0 else @intCast(sum[i] / sum[3]);
+            out[3] = @intCast(sum[3] / ((x1 - x0) * (y1 - y0)));
+        };
+        return .{ .width = w, .height = h, .pixels = pixels };
+    }
 };
 
 const signature = "\x89PNG\r\n\x1a\n";
@@ -78,15 +100,15 @@ fn paeth(a: u8, b: u8, c: u8) u8 {
 
 const testing = std.testing;
 
-test "the logo decodes: transparent corners, opaque bars" {
-    const image = try decode(testing.allocator, @import("assets").logo);
+test "the icon decodes: transparent corners, opaque squares" {
+    const image = try decode(testing.allocator, @import("assets").icon);
     defer image.deinit(testing.allocator);
-    try testing.expectEqual(@as(u32, 512), image.width);
-    try testing.expectEqual(@as(u32, 512), image.height);
+    try testing.expectEqual(@as(u32, 1024), image.width);
+    try testing.expectEqual(@as(u32, 1024), image.height);
     try testing.expectEqual(@as(u8, 0), image.pixels[3]);
-    // A pixel inside the top bar.
-    const bar = (70 * 512 + 200) * 4;
-    try testing.expectEqual(@as(u8, 255), image.pixels[bar + 3]);
+    // A pixel inside the top-left square.
+    const square = (190 * 1024 + 190) * 4;
+    try testing.expectEqual(@as(u8, 255), image.pixels[square + 3]);
 }
 
 test "every row filter: none, sub, up, average and paeth" {
@@ -99,6 +121,20 @@ test "every row filter: none, sub, up, average and paeth" {
         20, 186, 50, 255, 23, 186, 90, 155, 30, 179, 50, 255, 33, 179, 90, 155,
         40, 172, 50, 255, 43, 172, 90, 155,
     }, image.pixels);
+}
+
+test "shrink averages what each pixel covers, by alpha" {
+    // Red opaque, red transparent, blue opaque, white half.
+    var pixels = [_]u8{ 255, 0, 0, 255, 0, 255, 0, 0, 0, 0, 255, 255, 255, 255, 255, 128 };
+    const image: Image = .{ .width = 2, .height = 2, .pixels = &pixels };
+    const one = try image.shrink(testing.allocator, 1, 1);
+    defer one.deinit(testing.allocator);
+    // The transparent green adds nothing; alpha is the plain average.
+    try testing.expectEqualSlices(u8, &.{ 153, 51, 153, 159 }, one.pixels);
+    const same = try image.shrink(testing.allocator, 2, 2);
+    defer same.deinit(testing.allocator);
+    // A pixel that covers only a transparent one has no color.
+    try testing.expectEqualSlices(u8, &.{ 255, 0, 0, 255, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 128 }, same.pixels);
 }
 
 test "a file that is not a PNG fails" {

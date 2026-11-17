@@ -26,7 +26,7 @@ assets/           built-in data files, deflated into the exe (build.zig lists th
   state.zon       what the app remembers between runs (written by the app)
   themes/         theme data files
   fonts/          JetBrains Mono and Inter, cut to the characters the app draws (OFL)
-  icons/          the app logo
+  icons/          the app logos, for dark and light backgrounds
   grammars/       one grammar file per language (docs/GRAMMARS.md)
 tests/            integration tests (unit tests stay next to the code)
 tools/            small build helpers (size_check: `zig build size`,
@@ -73,8 +73,11 @@ third_party/      vendored C dependencies (SDL3, stb_truetype)
   picture. `platform/renderer.zig` uploads it and makes it again when the
   zoom changes, so text is drawn at its own size and stays sharp.
   `Canvas.drawText` draws code, `Canvas.drawLabel` the UI font.
-- The logo (`assets/icons`) is read by `platform/png.zig`; it is the window
-  icon and, tinted with the theme, the logo of the welcome screen.
+- The logos (`assets/icons`) are read by `platform/png.zig`. The window
+  icon is the plain logo; the welcome screen draws the logo with the name,
+  in its own colors: the dark mode one on a dark theme background, else
+  the light mode one. The renderer shrinks it to the size drawn
+  (`Image.shrink`), once per size, so it stays smooth.
 - Color values live only in theme files; `ui/theme.zig` defines the struct.
 - The main loop sleeps until an event comes, handles all waiting events, and
   draws one frame only if something changed. Moving the mouse redraws for

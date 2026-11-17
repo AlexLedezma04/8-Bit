@@ -3,8 +3,15 @@
 const std = @import("std");
 const bundle = @import("bundle");
 
-/// The app logo: light bars on a transparent background. PNG is deflated already.
-pub const logo = @embedFile("icons/b-logo-light-512.png");
+/// PNG files are deflated already, so they are embedded as they are.
+/// The window icon: the logo's light bars on a transparent background.
+pub const icon = @embedFile("icons/8bit-logo-dark-mode.png");
+/// The logo with the name, for a dark background and for a light one, in
+/// the order of `Canvas.Logo`.
+pub const logos = [2][]const u8{
+    @embedFile("icons/8bit-logo-with-name-dark-mode.png"),
+    @embedFile("icons/8bit-logo-with-name-light-mode.png"),
+};
 
 const index: std.StaticStringMap([2]u32) = .initComptime(bundle.files);
 var unpacked: [bundle.size]u8 = undefined;
