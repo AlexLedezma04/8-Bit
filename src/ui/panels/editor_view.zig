@@ -1,6 +1,7 @@
 //! The editor area panel: every pane with its tab bar and the visible part
 //! of its document (gutter, decorations, text, cursor). What is visible is
-//! decided by `editor/view.zig`; this file only draws it and routes the mouse.
+//! decided by `editor/view.zig`; this file only draws it and routes typed
+//! text and the mouse. A right click opens Copy, Cut and Paste.
 const std = @import("std");
 const editor_zig = @import("../../editor/editor.zig");
 const Editor = editor_zig.Editor;
@@ -17,6 +18,8 @@ const panel = @import("../panel.zig");
 const Look = panel.Look;
 const Handled = panel.Handled;
 const tabs = @import("../widgets/tabs.zig");
+const menu_zig = @import("../widgets/menu.zig");
+const commands = @import("../../editor/commands.zig");
 const Color = @import("../theme.zig").Color;
 const Event = @import("../../platform/event.zig").Event;
 const syntax = @import("../../syntax/syntax.zig");
@@ -27,6 +30,7 @@ const wheel_rows = 3;
 
 pub const EditorView = struct {
     editor: *Editor,
+    menu: *menu_zig.Menu,
     /// Filled again on every draw and event.
     placed: std.ArrayList(layout.Placed) = .empty,
     splitters: std.ArrayList(layout.Splitter) = .empty,
@@ -106,9 +110,10 @@ pub const EditorView = struct {
                     if (hit.close or mouse.button == .middle) return .{ .request = editor.closeTab(hit.index) };
                     return .yes;
                 }
-                if (mouse.button != .left) return .yes;
+                if (mouse.button == .middle) return .yes;
                 if (item.node != editor.pane) editor.switchTo(item.node, pane.active);
                 const cell = self.textLayout(item.rect, metrics, pane.tab()).cellAt(mouse.x, mouse.y);
+                if (mouse.button == .right) return self.openMenu(cell, mouse.x, mouse.y);
                 editor.mouseDown(cell.x, cell.y, mouse.clicks, mouse.mods.shift);
                 if (cell.x < 0) editor.clickGutter(editor.doc().buffer.lineOf(editor.doc().cursor.pos));
                 self.drag = .select;
@@ -141,9 +146,32 @@ pub const EditorView = struct {
                 // Shift turns the wheel sideways.
                 if (wheel.mods.shift) tab.view.scrollBy(&tab.file.doc, 0, rows) else tab.view.scrollBy(&tab.file.doc, rows, cols);
             },
+            .text => |text| editor.typeText(text),
             else => return .no,
         }
         return .yes;
+    }
+
+    const actions = [_]commands.Command{ .copy, .cut, .paste };
+
+    /// A right click outside the selection moves the cursor first.
+    fn openMenu(self: *EditorView, cell: layout.Cell, x: f32, y: f32) Handled {
+        const editor = self.editor;
+        const doc = editor.doc();
+        const selection = doc.cursor.selection();
+        const pos = editor.view().posAt(doc, cell.x, cell.y);
+        if (pos < selection.start or pos > selection.end or selection.len() == 0) editor.mouseDown(cell.x, cell.y, 1, false);
+        const selected = doc.cursor.selection().len() > 0;
+        self.menu.open(&.{
+            .{ .label = "Copy", .shortcut = "Ctrl+C", .enabled = selected },
+            .{ .label = "Cut", .shortcut = "Ctrl+X", .enabled = selected and !doc.read_only },
+            .{ .label = "Paste", .shortcut = "Ctrl+V", .enabled = !doc.read_only },
+        }, x, y, .of(EditorView, self));
+        return .yes;
+    }
+
+    pub fn choose(self: *EditorView, index: usize) ?editor_zig.Request {
+        return commands.run(self.editor, actions[index]);
     }
 
     fn paneAt(self: *const EditorView, x: f32, y: f32) ?layout.Placed {

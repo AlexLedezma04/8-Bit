@@ -1,7 +1,8 @@
 //! The sidebar panel with the files of the open folder. Folders come first,
 //! sorted by name, and are read only when opened. `.git` is hidden. Files
-//! and folders can be made, renamed and deleted from here. Each one shows
-//! its git status: a color, and a letter for files.
+//! and folders can be made, renamed, deleted, copied, cut and pasted from
+//! here, with keys or the right-click menu. Each one shows its git status:
+//! a color, and a letter for files.
 const std = @import("std");
 const Editor = @import("../../editor/editor.zig").Editor;
 const fs = @import("../../platform/fs.zig");
@@ -15,6 +16,8 @@ const Handled = panel.Handled;
 const list_zig = @import("../widgets/list.zig");
 const List = list_zig.List;
 const Prompt = @import("../widgets/prompt.zig").Prompt;
+const Menu = @import("../widgets/menu.zig").Menu;
+const Request = @import("../../editor/editor.zig").Request;
 const Theme = @import("../theme.zig").Theme;
 const Event = @import("../../platform/event.zig").Event;
 const status = @import("../../git/status.zig");
@@ -22,6 +25,7 @@ const status = @import("../../git/status.zig");
 pub const FileTree = struct {
     editor: *Editor,
     prompt: *Prompt,
+    menu: *Menu,
     entries: std.ArrayList(Entry) = .empty,
     list: List = .{},
     /// The `folder_version` of the editor that `entries` show.
@@ -30,8 +34,16 @@ pub const FileTree = struct {
     target: ?[]u8 = null,
     /// What the prompt asks a name for.
     naming: Naming = .new_file,
+    /// The entry the menu was opened on; null for the folder itself.
+    context: ?usize = null,
+    /// What Copy or Cut took, for Paste.
+    clip: ?[]u8 = null,
+    clip_cut: bool = false,
 
     const Naming = enum { new_file, new_folder, rename };
+
+    /// The menu items, in order.
+    const Action = enum { new_file, new_folder, copy, cut, paste, delete };
 
     const Entry = struct { path: []u8, depth: usize, is_dir: bool, open: bool = false };
 
@@ -39,6 +51,7 @@ pub const FileTree = struct {
         self.clear();
         self.entries.deinit(self.editor.allocator);
         self.setTarget(null);
+        self.setClip(null, false);
     }
 
     pub fn title(_: *FileTree) []const u8 {
@@ -51,8 +64,17 @@ pub const FileTree = struct {
     }
 
     fn setTarget(self: *FileTree, path: ?[]const u8) void {
-        if (self.target) |old| self.editor.allocator.free(old);
-        self.target = if (path) |new| self.editor.allocator.dupe(u8, new) catch null else null;
+        self.target = self.replace(self.target, path);
+    }
+
+    fn setClip(self: *FileTree, path: ?[]const u8, cut: bool) void {
+        self.clip = self.replace(self.clip, path);
+        self.clip_cut = cut;
+    }
+
+    fn replace(self: *FileTree, old: ?[]u8, new: ?[]const u8) ?[]u8 {
+        if (old) |path| self.editor.allocator.free(path);
+        return if (new) |path| self.editor.allocator.dupe(u8, path) catch null else null;
     }
 
     /// Reads the folder again when the editor opened another one.
@@ -165,16 +187,16 @@ pub const FileTree = struct {
         if (entry.open) self.collapse(index) else self.expand(index);
     }
 
-    /// The folder of the selection: a new file goes there.
-    fn selectedFolder(self: *const FileTree) ?[]const u8 {
-        const entry = self.selectedEntry() orelse return self.editor.folder;
-        return if (entry.is_dir) entry.path else std.fs.path.dirname(entry.path) orelse self.editor.folder;
+    /// The folder an entry is, or is in: a new file goes there.
+    fn folderOf(self: *const FileTree, entry: ?Entry) ?[]const u8 {
+        const found = entry orelse return self.editor.folder;
+        return if (found.is_dir) found.path else std.fs.path.dirname(found.path) orelse self.editor.folder;
     }
 
-    fn ask(self: *FileTree, naming: Naming) void {
+    fn ask(self: *FileTree, naming: Naming, entry: ?Entry) void {
         const target = switch (naming) {
-            .new_file, .new_folder => self.selectedFolder(),
-            .rename => if (self.selectedEntry()) |entry| entry.path else null,
+            .new_file, .new_folder => self.folderOf(entry),
+            .rename => if (entry) |found| found.path else null,
         } orelse return;
         self.setTarget(target);
         self.naming = naming;
@@ -222,6 +244,68 @@ pub const FileTree = struct {
         };
     }
 
+    /// Pastes what Copy or Cut took into the folder of `entry`. A copy next
+    /// to the original gets a free name.
+    fn paste(self: *FileTree, entry: ?Entry) void {
+        const editor = self.editor;
+        const source = self.clip orelse return;
+        const folder = self.folderOf(entry) orelse return;
+        const name = std.fs.path.basename(source);
+        const inside = std.mem.startsWith(u8, folder, source) and (folder.len == source.len or std.fs.path.isSep(folder[source.len]));
+        if (inside) return editor.notify("Cannot paste {s} into itself", .{name});
+        const target = if (self.clip_cut)
+            std.fs.path.join(editor.allocator, &.{ folder, name }) catch return
+        else
+            fs.freePath(editor.io, editor.allocator, folder, name) catch return;
+        defer editor.allocator.free(target);
+        if (std.mem.eql(u8, source, target)) return;
+        if (self.clip_cut) {
+            fs.rename(editor.io, source, target) catch |err| return editor.notify("Could not move {s}: {t}", .{ name, err });
+            editor.renamed(source, target);
+            self.setClip(null, false);
+        } else {
+            fs.copy(editor.io, editor.allocator, source, target) catch |err| return editor.notify("Could not copy {s}: {t}", .{ name, err });
+        }
+        self.refresh();
+        self.select(target);
+    }
+
+    /// What the right-click menu chose, for the entry it was opened on.
+    pub fn choose(self: *FileTree, index: usize) ?Request {
+        const entry = if (self.context) |at| if (at < self.entries.items.len) self.entries.items[at] else null else null;
+        return self.run(@enumFromInt(index), entry);
+    }
+
+    fn run(self: *FileTree, action: Action, entry: ?Entry) ?Request {
+        switch (action) {
+            .new_file => self.ask(.new_file, entry),
+            .new_folder => self.ask(.new_folder, entry),
+            .copy, .cut => if (entry) |found| self.setClip(found.path, action == .cut),
+            .paste => self.paste(entry),
+            .delete => {
+                const found = entry orelse return null;
+                self.setTarget(found.path);
+                return .{ .ask = .{ .question = .delete, .name = std.fs.path.basename(found.path) } };
+            },
+        }
+        return null;
+    }
+
+    /// Selects the row under the mouse, or nothing below the last row.
+    fn openMenu(self: *FileTree, x: f32, y: f32, rect: Rect, metrics: Metrics) void {
+        self.context = self.list.rowAt(y, rect, metrics, self.entries.items.len);
+        if (self.context) |at| self.list.selected = at;
+        const on_entry = self.context != null;
+        self.menu.open(&.{
+            .{ .label = "New File", .shortcut = "N" },
+            .{ .label = "New Folder", .shortcut = "Shift+N" },
+            .{ .label = "Copy", .shortcut = "Ctrl+C", .enabled = on_entry },
+            .{ .label = "Cut", .shortcut = "Ctrl+X", .enabled = on_entry },
+            .{ .label = "Paste", .shortcut = "Ctrl+V", .enabled = self.clip != null },
+            .{ .label = "Delete", .shortcut = "Delete", .enabled = on_entry },
+        }, x, y, .of(FileTree, self));
+    }
+
     /// The answer to "Delete?".
     pub fn confirmDelete(self: *FileTree, yes: bool) void {
         const target = self.target orelse return;
@@ -239,15 +323,17 @@ pub const FileTree = struct {
         const rows = List.rowsIn(rect, metrics);
         switch (event) {
             .key => |press| {
+                if (press.mods.ctrl and !press.mods.shift and !press.mods.alt) switch (press.key) {
+                    .char('c') => return .{ .request = self.run(.copy, self.selectedEntry()) },
+                    .char('x') => return .{ .request = self.run(.cut, self.selectedEntry()) },
+                    .char('v') => return .{ .request = self.run(.paste, self.selectedEntry()) },
+                    else => return .no,
+                };
                 if (press.mods.ctrl or press.mods.alt) return .no;
                 switch (press.key) {
-                    .f2 => self.ask(.rename),
-                    .char('n') => self.ask(if (press.mods.shift) .new_folder else .new_file),
-                    .delete => {
-                        const entry = self.selectedEntry() orelse return .yes;
-                        self.setTarget(entry.path);
-                        return .{ .request = .{ .ask = .{ .question = .delete, .name = std.fs.path.basename(self.target.?) } } };
-                    },
+                    .f2 => self.ask(.rename, self.selectedEntry()),
+                    .char('n') => _ = self.run(if (press.mods.shift) .new_folder else .new_file, self.selectedEntry()),
+                    .delete => return .{ .request = self.run(.delete, self.selectedEntry()) },
                     .right => if (self.selectedEntry() != null) self.expand(self.list.selected),
                     // Closes the folder, or goes to the folder it is in.
                     .left => if (self.selectedEntry()) |entry| {
@@ -270,8 +356,10 @@ pub const FileTree = struct {
                 }
                 self.list.reveal(rows);
             },
-            .mouse_down => |mouse| {
-                if (self.list.click(mouse.y, rect, metrics, count, mouse.clicks)) |_| self.activate(self.list.selected);
+            .mouse_down => |mouse| switch (mouse.button) {
+                .left => if (self.list.click(mouse.y, rect, metrics, count, mouse.clicks)) |_| self.activate(self.list.selected),
+                .right => self.openMenu(mouse.x, mouse.y, rect, metrics),
+                .middle => {},
             },
             .wheel => |wheel| self.list.scroll(@intFromFloat(-wheel.dy * 3), count, rows),
             else => return .no,

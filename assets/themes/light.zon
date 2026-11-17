@@ -24,6 +24,7 @@
     .border = 0xd8d8d0,
     .accent = 0x3574f0,
     .list_selection = 0xd8d8e8,
+    .menu = 0xffffff,
 
     .git_added = 0x308030,
     .git_changed = 0x3060c0,

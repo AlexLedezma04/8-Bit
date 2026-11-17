@@ -42,6 +42,8 @@ pub const Theme = struct {
     border: Color,
     accent: Color,
     list_selection: Color,
+    /// Background of context menus.
+    menu: Color,
 
     git_added: Color,
     git_changed: Color,

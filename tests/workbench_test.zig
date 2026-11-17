@@ -85,15 +85,19 @@ test "new, rename and delete from the tree, through the prompt and a question" {
     try testing.expect(session.shows("Deleted renamed.txt"));
 }
 
-test "docks: Ctrl+B and Ctrl+J, and their edges can be dragged" {
+test "docks: the sidebar while a folder is open, Ctrl+J, and their edges can be dragged" {
     var session: Session = undefined;
     try session.init();
     defer session.deinit();
     const editor = &session.editor;
 
-    _ = session.press("ctrl+b");
+    try testing.expect(session.shows("Files"));
+    _ = session.press("ctrl+shift+w");
     try testing.expect(!session.shows("Files"));
-    _ = session.press("ctrl+b");
+    _ = session.press("alt+1");
+    try testing.expectEqual(app.editor.editor.Area.editor, editor.focus);
+    editor.openFolder(session.folderPath());
+    session.draw();
     try testing.expect(session.shows("Files"));
     _ = session.press("ctrl+j");
     try testing.expect(session.shows("Messages"));
@@ -118,7 +122,7 @@ test "split panes: their own tabs, click to focus, drag the line, close the last
     try session.init();
     defer session.deinit();
     const editor = &session.editor;
-    _ = session.press("ctrl+b");
+    _ = session.press("ctrl+shift+w");
     editor.open(session.path("b.txt"));
     session.draw();
 

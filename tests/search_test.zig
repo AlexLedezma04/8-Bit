@@ -92,7 +92,7 @@ test "replace: one, then all as one undo step" {
     try testing.expect(session.shows("1 of 2"));
     _ = session.press("alt+a");
     try app.core.buffer.expectText(buffer, "dog dog dog\n");
-    try testing.expect(session.shows("Replaced 2"));
+    try testing.expectEqualStrings("Replaced 2", session.editor.lastMessage().?);
     _ = session.press("escape");
 
     _ = session.press("ctrl+z");
@@ -117,17 +117,17 @@ test "go to line and line:column; bad input is reported" {
     session.typeKeys("3:2");
     _ = session.press("enter");
     try testing.expect(!session.shows("Go to line:"));
-    try testing.expect(session.shows("Ln 3, Col 2"));
+    try testing.expectEqual([2]usize{ 3, 2 }, session.cursor());
 
     _ = session.press("ctrl+g");
     session.typeKeys("99");
     _ = session.press("enter");
-    try testing.expect(session.shows("Ln 4, Col 1"));
+    try testing.expectEqual([2]usize{ 4, 1 }, session.cursor());
 
     _ = session.press("ctrl+g");
     session.typeKeys("x");
     _ = session.press("enter");
-    try testing.expect(session.shows("Not a line: x"));
+    try testing.expectEqualStrings("Not a line: x", session.editor.lastMessage().?);
 }
 
 test "find in project: results while it runs, Enter opens, Esc stops" {

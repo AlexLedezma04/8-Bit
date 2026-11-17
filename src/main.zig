@@ -102,6 +102,7 @@ pub fn main(init: std.process.Init) !void {
     defer if (config_dir) |dir| init.gpa.free(dir);
     app.editor.loader.dir = config_dir;
     app.editor.reloadConfig();
+    app.editor.restore(args.len <= 1);
     if (args.len > 1) {
         if (fs.isDir(init.io, args[1])) app.editor.openFolder(args[1]) else app.editor.open(args[1]);
     }

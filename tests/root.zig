@@ -11,4 +11,5 @@ test {
     _ = @import("text_draw_test.zig");
     _ = @import("text_model_test.zig");
     _ = @import("workbench_test.zig");
+    _ = @import("workspace_test.zig");
 }

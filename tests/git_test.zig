@@ -18,7 +18,7 @@ fn committed(session: *Session) !void {
 }
 
 fn expectMessage(session: *const Session, expected: []const u8) !void {
-    try testing.expectEqualStrings(expected, session.editor.currentMessage() orelse "(none)");
+    try testing.expectEqualStrings(expected, session.editor.lastMessage() orelse "(none)");
 }
 
 /// True when the text of the active tab has `part`. A line of code is
@@ -42,7 +42,7 @@ test "status: letters and colors in the tree, the branch in the status bar, refr
     defer session.deinit();
     const theme = &session.workbench.theme;
 
-    try testing.expect(session.shows("main  Ln 1"));
+    try testing.expect(session.inStatusBar("main"));
     try testing.expect(!session.shows("M"));
 
     try session.write("b.txt", "bee changed\n");
@@ -144,15 +144,15 @@ test "gutter markers follow the text after a short delay, F7 jumps between chang
     // Changed line 1, "four" removed above line 4, "seven" added on line 6.
     _ = session.press("ctrl+home");
     _ = session.press("f7");
-    try testing.expectEqual(@as(usize, 4), editor.status().line);
+    try testing.expectEqual(@as(usize, 4), editor.doc().buffer.lineOf(editor.doc().cursor.pos) + 1);
     _ = session.press("f7");
-    try testing.expectEqual(@as(usize, 6), editor.status().line);
+    try testing.expectEqual(@as(usize, 6), editor.doc().buffer.lineOf(editor.doc().cursor.pos) + 1);
     _ = session.press("f7");
     try expectMessage(&session, "No more changes");
     _ = session.press("shift+f7");
-    try testing.expectEqual(@as(usize, 4), editor.status().line);
+    try testing.expectEqual(@as(usize, 4), editor.doc().buffer.lineOf(editor.doc().cursor.pos) + 1);
     _ = session.press("shift+f7");
-    try testing.expectEqual(@as(usize, 1), editor.status().line);
+    try testing.expectEqual(@as(usize, 1), editor.doc().buffer.lineOf(editor.doc().cursor.pos) + 1);
 
     // A commit made outside the editor: once the window has focus again,
     // the markers are gone.
@@ -424,7 +424,7 @@ test "branches: list with the current one marked, create, switch, git refuses" {
     _ = session.press("enter");
     _ = session.waitForGit();
     try expectMessage(&session, "Created branch");
-    try testing.expect(session.shows("dev  Ln"));
+    try testing.expect(session.inStatusBar("dev"));
     try testing.expectEqual(session.workbench.theme.accent, session.recorder.find("dev").?.color);
 
     // A commit on dev, then back to main: the open file follows.
@@ -437,7 +437,7 @@ test "branches: list with the current one marked, create, switch, git refuses" {
     _ = session.press("enter");
     _ = session.waitForGit();
     try expectMessage(&session, "Switched branch");
-    try testing.expect(session.shows("main  Ln"));
+    try testing.expect(session.inStatusBar("main"));
     try testing.expect(session.shows("bee"));
     try testing.expect(!session.shows("bee on dev"));
 
@@ -447,7 +447,7 @@ test "branches: list with the current one marked, create, switch, git refuses" {
     _ = session.press("home");
     _ = session.press("enter");
     _ = session.waitForGit();
-    try testing.expect(std.mem.startsWith(u8, editor.currentMessage().?, "git: error: Your local changes"));
+    try testing.expect(std.mem.startsWith(u8, editor.lastMessage().?, "git: error: Your local changes"));
     try testing.expectEqualStrings("main", editor.status().branch);
 }
 

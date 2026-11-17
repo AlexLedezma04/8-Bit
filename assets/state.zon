@@ -1,0 +1,5 @@
+.{
+    .folder = "",
+    .recent = .{},
+    .side_panel = .files,
+}

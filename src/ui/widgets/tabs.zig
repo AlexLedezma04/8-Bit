@@ -8,6 +8,7 @@ const layout = @import("../layout.zig");
 const Rect = layout.Rect;
 const Metrics = layout.Metrics;
 const Look = @import("../panel.zig").Look;
+const utf8 = @import("../../core/utf8.zig");
 
 pub const Item = struct {
     title: []const u8,
@@ -20,7 +21,7 @@ pub const Hit = struct { index: usize, close: bool };
 
 /// A space, the title, a space, the close button, a space.
 fn cols(item: Item) usize {
-    return (std.unicode.utf8CountCodepoints(item.title) catch item.title.len) + @as(usize, if (item.closable) 4 else 2);
+    return utf8.count(item.title) + @as(usize, if (item.closable) 4 else 2);
 }
 
 /// One tab and the cells it takes.

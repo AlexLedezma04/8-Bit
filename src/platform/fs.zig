@@ -87,6 +87,40 @@ pub fn delete(io: Io, path: []const u8) !void {
     try Io.Dir.cwd().deleteTree(io, path);
 }
 
+/// Copies a file, or a folder with everything in it. Fails if `to` exists.
+pub fn copy(io: Io, allocator: std.mem.Allocator, from: []const u8, to: []const u8) !void {
+    if (modTime(io, to) != null) return error.PathAlreadyExists;
+    if (!isDir(io, from)) return Io.Dir.copyFile(.cwd(), from, .cwd(), to, io, .{});
+    try createDir(io, to);
+    const entries = try list(io, allocator, from);
+    defer freeList(allocator, entries);
+    for (entries) |entry| {
+        const source = try std.fs.path.join(allocator, &.{ from, entry.name });
+        defer allocator.free(source);
+        const target = try std.fs.path.join(allocator, &.{ to, entry.name });
+        defer allocator.free(target);
+        try copy(io, allocator, source, target);
+    }
+}
+
+/// `name` in `folder`, or `stem copy.ext`, `stem copy 2.ext`, ... when taken.
+pub fn freePath(io: Io, allocator: std.mem.Allocator, folder: []const u8, name: []const u8) ![]u8 {
+    const path = try std.fs.path.join(allocator, &.{ folder, name });
+    if (modTime(io, path) == null) return path;
+    allocator.free(path);
+    const ext = std.fs.path.extension(name);
+    const stem = name[0 .. name.len - ext.len];
+    var n: usize = 1;
+    while (true) : (n += 1) {
+        const free = if (n == 1)
+            try std.fmt.allocPrint(allocator, "{s}" ++ std.fs.path.sep_str ++ "{s} copy{s}", .{ folder, stem, ext })
+        else
+            try std.fmt.allocPrint(allocator, "{s}" ++ std.fs.path.sep_str ++ "{s} copy {d}{s}", .{ folder, stem, n, ext });
+        if (modTime(io, free) == null) return free;
+        allocator.free(free);
+    }
+}
+
 /// The folder for user settings: `%APPDATA%\8-bit` on Windows,
 /// `$XDG_CONFIG_HOME/8-bit` or `~/.config/8-bit` elsewhere.
 pub fn configDir(allocator: std.mem.Allocator, env: *const std.process.Environ.Map) ?[]u8 {
@@ -159,6 +193,31 @@ test "create, list, rename and delete files and folders" {
     try testing.expectError(error.PathAlreadyExists, rename(testing.io, try tmpPath(&tmp, &a, "sub/c.txt"), try tmpPath(&tmp, &b, "sub/b.txt")));
     try delete(testing.io, try tmpPath(&tmp, &a, "sub"));
     try testing.expectEqual(@as(?i96, null), modTime(testing.io, try tmpPath(&tmp, &a, "sub")));
+}
+
+test "copy a folder with everything in it; free names for copies" {
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var a: [128]u8 = undefined;
+    var b: [128]u8 = undefined;
+    try write(testing.io, try tmpPath(&tmp, &a, "src/in/x.txt"), &.{"ex"});
+    try copy(testing.io, testing.allocator, try tmpPath(&tmp, &a, "src"), try tmpPath(&tmp, &b, "dst"));
+    const text = try read(testing.io, testing.allocator, try tmpPath(&tmp, &a, "dst/in/x.txt"));
+    defer testing.allocator.free(text);
+    try testing.expectEqualStrings("ex", text);
+    try testing.expectError(error.PathAlreadyExists, copy(testing.io, testing.allocator, try tmpPath(&tmp, &a, "src"), try tmpPath(&tmp, &b, "dst")));
+
+    const folder = try tmpPath(&tmp, &a, "dst/in");
+    const first = try freePath(testing.io, testing.allocator, folder, "y.txt");
+    defer testing.allocator.free(first);
+    try testing.expect(std.mem.endsWith(u8, first, "y.txt"));
+    const second = try freePath(testing.io, testing.allocator, folder, "x.txt");
+    defer testing.allocator.free(second);
+    try testing.expect(std.mem.endsWith(u8, second, "x copy.txt"));
+    try copy(testing.io, testing.allocator, try tmpPath(&tmp, &b, "dst/in/x.txt"), second);
+    const third = try freePath(testing.io, testing.allocator, folder, "x.txt");
+    defer testing.allocator.free(third);
+    try testing.expect(std.mem.endsWith(u8, third, "x copy 2.txt"));
 }
 
 test "the config folder comes from the environment" {
