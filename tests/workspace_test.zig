@@ -329,3 +329,38 @@ test "tabs: the sidebar's share its whole width; file tabs have no underline" {
     try testing.expectEqual(app.editor.editor.Area.editor, session.editor.focus);
     try testing.expectEqual(@as(usize, 0), session.recorder.filled(session.workbench.theme.accent));
 }
+
+test "preview tabs: an opened file keeps its tab only once saved" {
+    var session: Session = undefined;
+    try session.init();
+    defer session.deinit();
+    const editor = &session.editor;
+    const theme = &session.workbench.theme;
+    const tabs = &editor.pane.pane().tabs;
+    try session.write("c.txt", "see\n");
+    _ = session.send(.{ .focus = true });
+
+    // Each file opened takes the preview's tab, drawn dimmer.
+    _ = session.clickText("b.txt");
+    try testing.expectEqual(theme.line_number_current, session.last("b.txt").?.color);
+    _ = session.clickText("c.txt");
+    try testing.expectEqual(@as(usize, 1), tabs.items.len);
+    try testing.expectEqualStrings("c.txt", editor.name());
+
+    // Saved, it stays; the next one opens next to it.
+    _ = session.press("ctrl+s");
+    try testing.expect(!editor.file().preview);
+    _ = session.clickText("b.txt");
+    try testing.expectEqual(@as(usize, 2), tabs.items.len);
+
+    // A preview with unsaved changes stays too, so nothing is lost.
+    editor.focus = .editor;
+    session.typeKeys("x");
+    editor.open(session.path("a/x.txt"));
+    try testing.expectEqual(@as(usize, 3), tabs.items.len);
+    try testing.expect(editor.findFile(session.path("b.txt")) != null);
+
+    // A new file does not take a preview's place.
+    _ = session.press("ctrl+n");
+    try testing.expectEqual(@as(usize, 4), tabs.items.len);
+}

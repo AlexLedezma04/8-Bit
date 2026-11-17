@@ -13,6 +13,8 @@ const Look = @import("../panel.zig").Look;
 pub const Item = struct {
     title: []const u8,
     modified: bool = false,
+    /// A preview, drawn dimmer until it is kept.
+    preview: bool = false,
     /// Has a close button.
     closable: bool = true,
 };
@@ -132,7 +134,8 @@ pub fn draw(canvas: Canvas, look: Look, rect: Rect, style: Style, items: []const
             canvas.fillRect(.{ .x = x, .y = rect.y + rect.h - line, .w = place.w, .h = line }, if (focused) theme.accent else theme.list_inactive);
         }
         const title_x = if (style == .dock) x + @floor((place.w - metrics.labelWidth(item.title)) / 2) else x + padOf(style) * metrics.cell;
-        canvas.drawLabel(title_x, text_y, item.title, if (is_active) theme.tab_active_text else theme.tab_text);
+        const color = if (item.preview) theme.line_number_current else if (is_active) theme.tab_active_text else theme.tab_text;
+        canvas.drawLabel(title_x, text_y, item.title, color);
         if (!item.closable) continue;
         const button_x = rect.x + buttonX(place, metrics, style);
         if (item.modified) {

@@ -37,7 +37,8 @@ test "the file tree: folders first, .git hidden, click opens, keys open folders"
     try testing.expectEqual(app.editor.editor.Area.editor, editor.focus);
     session.typeKeys("Z");
     try testing.expect(session.shows("Zex"));
-    try testing.expectEqual(@as(usize, 2), editor.pane.pane().tabs.items.len);
+    // b.txt was a preview, never saved: x.txt took its tab.
+    try testing.expectEqual(@as(usize, 1), editor.pane.pane().tabs.items.len);
 }
 
 test "new, rename and delete from the tree, through the prompt and a question" {

@@ -474,28 +474,37 @@ pub const Editor = struct {
         return false;
     }
 
-    /// Opens `path` in a new tab, or shows it if it is open.
+    /// Opens `path` in a preview tab, or shows it if it is open. The next
+    /// file opened takes the preview's place, until it is saved.
     pub fn open(self: *Editor, path: []const u8) void {
         if (self.findFile(path)) |found| if (self.show(found)) return;
         const opened = File.open(self.allocator, self.io, path) catch |err| {
             self.notify("Could not open {s}: {t}", .{ std.fs.path.basename(path), err });
             return;
         };
+        opened.preview = true;
         self.adopt(opened) catch {
             opened.destroy();
             return;
         };
-        self.place(opened) catch |err| {
+        self.place(opened, true) catch |err| {
             self.dropFile(opened);
             self.notify("Could not open {s}: {t}", .{ std.fs.path.basename(path), err });
         };
     }
 
-    /// Adds a tab for a new open file, in place of the placeholder.
-    fn place(self: *Editor, target: *File) !void {
-        const replace = self.file().placeholder and self.file().isBlank() and tabCount(self.root, self.file()) == 1;
+    /// Adds a tab for a new open file, in place of the placeholder, or of the
+    /// preview of the active pane when `over_preview`. A preview with unsaved
+    /// changes stays.
+    fn place(self: *Editor, target: *File, over_preview: bool) !void {
+        const pane = self.pane.pane();
+        const old: ?*File = for (pane.tabs.items) |item| {
+            const file_ = item.file;
+            const spare = (file_.placeholder and file_.isBlank()) or (over_preview and file_.preview and !file_.isModified());
+            if (spare and tabCount(self.root, file_) == 1) break file_;
+        } else null;
         try self.addTab(target);
-        if (replace) self.removeTab(self.pane.pane().active - 1);
+        if (old) |gone| self.removeTab(pane.find(gone).?);
     }
 
     /// The hidden blank file that keeps a pane from having no tab.
@@ -524,7 +533,7 @@ pub const Editor = struct {
             created.language = self.allocator.dupe(u8, rules.grammar.name) catch null;
         };
         self.applyLanguage(created);
-        self.place(created) catch {
+        self.place(created, false) catch {
             self.dropFile(created);
             return null;
         };
@@ -543,7 +552,7 @@ pub const Editor = struct {
             const created = self.newFile() catch return;
             created.language = self.allocator.dupe(u8, "Git Commit") catch null;
             self.applyLanguage(created);
-            self.place(created) catch return self.dropFile(created);
+            self.place(created, false) catch return self.dropFile(created);
             break :blk created;
         };
         message.role = .{ .commit = amend };
@@ -617,7 +626,7 @@ pub const Editor = struct {
 
     pub fn newTab(self: *Editor) !void {
         const created = try self.newFile();
-        self.place(created) catch |err| {
+        self.place(created, false) catch |err| {
             self.dropFile(created);
             return err;
         };
@@ -690,6 +699,7 @@ pub const Editor = struct {
             return null;
         };
         self.notify("Saved {s}", .{active.name()});
+        active.preview = false;
         active.tracking.forgetBlame(self.allocator);
         self.git.refresh();
         if (self.loader.dir) |dir| {

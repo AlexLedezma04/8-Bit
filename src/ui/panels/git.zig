@@ -1,6 +1,6 @@
 //! The git panel of the sidebar, with three pages picked from its tab bar
-//! or with Tab. Changes: the staged and the changed files; Enter opens a
-//! diff, `s` stages, `u` unstages (on a section title: all of it), Delete
+//! or with Tab. Changes: the staged and the changed files, under titles
+//! that a click or Enter collapses; Enter opens a diff, `s` stages, `u` unstages (on a section title: all of it), Delete
 //! discards, `c` writes a commit. History: the commits, a page at a time
 //! while you scroll; Enter opens one. Branches: Enter switches, `n` creates.
 const std = @import("std");
@@ -39,6 +39,8 @@ pub const GitPanel = struct {
     /// Indexes into the status entries of each section.
     staged: std.ArrayList(u32) = .empty,
     changed: std.ArrayList(u32) = .empty,
+    /// Sections whose files are hidden, by `Section`.
+    collapsed: [2]bool = .{ false, false },
     /// The file that Discard asks about.
     discarding: ?Entry = null,
     discard_path: std.ArrayList(u8) = .empty,
@@ -85,10 +87,16 @@ pub const GitPanel = struct {
         }
     }
 
+    /// The files of a section that are listed: none while it is collapsed.
+    fn shown(self: *const GitPanel, section: Section) []const u32 {
+        if (self.collapsed[@intFromEnum(section)]) return &.{};
+        return if (section == .staged) self.staged.items else self.changed.items;
+    }
+
     fn count(self: *const GitPanel) usize {
         const git = &self.editor.git;
         return switch (self.page()) {
-            .changes => self.staged.items.len + self.changed.items.len + 2,
+            .changes => self.shown(.staged).len + self.shown(.changes).len + 2,
             .history => git.history.commits.items.len,
             .branches => git.branches.items.len,
         };
@@ -96,11 +104,11 @@ pub const GitPanel = struct {
 
     fn itemAt(self: *const GitPanel, index: usize) Item {
         const entries = self.editor.git.status.entries;
-        const staged = self.staged.items.len;
+        const staged = self.shown(.staged);
         if (index == 0) return .{ .section = .staged, .entry = null };
-        if (index <= staged) return .{ .section = .staged, .entry = entries[self.staged.items[index - 1]] };
-        if (index == staged + 1) return .{ .section = .changes, .entry = null };
-        return .{ .section = .changes, .entry = entries[self.changed.items[index - staged - 2]] };
+        if (index <= staged.len) return .{ .section = .staged, .entry = entries[staged[index - 1]] };
+        if (index == staged.len + 1) return .{ .section = .changes, .entry = null };
+        return .{ .section = .changes, .entry = entries[self.shown(.changes)[index - staged.len - 2]] };
     }
 
     /// The tab bar of the pages, and the list below it.
@@ -150,7 +158,9 @@ pub const GitPanel = struct {
                     return .yes;
                 }
                 const action = list_.click(mouse.y, area, metrics, items, mouse.clicks) orelse return .yes;
-                if (action == .activate) return self.activate(list_.selected);
+                // A section title opens or closes with one click.
+                const on_title = self.page() == .changes and self.itemAt(list_.selected).entry == null;
+                if (action == .activate or on_title) return self.activate(list_.selected);
             },
             .wheel => |wheel| list_.scroll(@intFromFloat(-wheel.dy), items, rows),
             else => return .no,
@@ -201,7 +211,11 @@ pub const GitPanel = struct {
         switch (self.page()) {
             .changes => {
                 const item = self.itemAt(index);
-                const entry = item.entry orelse return .yes;
+                const entry = item.entry orelse {
+                    const collapsed = &self.collapsed[@intFromEnum(item.section)];
+                    collapsed.* = !collapsed.*;
+                    return .yes;
+                };
                 git.showDiff(if (item.section == .staged) .{ .staged = entry.path } else .{ .changes = entry.path });
             },
             .history => git.showDiff(.{ .commit = git.history.commits.items[index].hash }),
@@ -233,7 +247,8 @@ pub const GitPanel = struct {
                     const item = self.panel.itemAt(index);
                     const entry = item.entry orelse {
                         const name, const size = if (item.section == .staged) .{ "Staged", self.panel.staged.items.len } else .{ "Changes", self.panel.changed.items.len };
-                        return .{ .text = std.fmt.bufPrint(&self.buffer, "{s} ({d})", .{ name, size }) catch name, .color = theme.line_number_current, .icon = 0x25BC };
+                        const icon: u21 = if (self.panel.collapsed[@intFromEnum(item.section)]) 0x25B6 else 0x25BC;
+                        return .{ .text = std.fmt.bufPrint(&self.buffer, "{s} ({d})", .{ name, size }) catch name, .color = theme.line_number_current, .icon = icon };
                     };
                     const kind = if (item.section == .staged) entry.stagedKind() else entry.changedKind();
                     const color = theme.gitColor(kind);

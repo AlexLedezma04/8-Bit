@@ -120,6 +120,9 @@ third_party/      vendored C dependencies (SDL3, stb_truetype)
   is one view of a file with its own cursor and scroll. The active tab uses
   the document's cursor; the other tabs register theirs with
   `Document.follow`, and `apply` moves them on every change.
+- **Preview tabs.** `Editor.open` marks a file as a `preview`; the next file
+  opened in the pane takes its tab, unless it has unsaved changes. Saving
+  keeps it. Diff views, the commit message and new files never replace one.
 - **Changes on disk.** When the window gets focus, `Editor.checkDisk` reloads
   files that changed, or asks first when they have unsaved changes.
 - **Commands.** `editor/commands.zig` lists every action and runs it with

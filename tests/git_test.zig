@@ -537,3 +537,37 @@ test "a repository made or deleted outside while the folder is open" {
     try testing.expect(session.last("Git") != null);
     try testing.expect(session.inStatusBar("main"));
 }
+
+test "the Staged and Changes titles collapse and expand their files" {
+    var session: Session = undefined;
+    try committed(&session);
+    defer session.deinit();
+    try session.write("b.txt", "changed\n");
+    try session.write("new.txt", "new\n");
+    try session.git(&.{ "add", "new.txt" });
+    _ = session.press("ctrl+shift+g");
+    _ = session.waitForGit();
+    try testing.expect(session.shows("new.txt"));
+    try testing.expect(session.shows("b.txt"));
+
+    // One click on a title hides its files; the arrow turns.
+    _ = session.clickText("Changes (1)");
+    try testing.expect(!session.shows("b.txt"));
+    try testing.expect(session.shows("new.txt"));
+    try testing.expectEqualStrings("\u{25B6}", session.recorder.texts.items[indexOf(&session, "Changes (1)") - 1].text);
+    _ = session.clickText("Changes (1)");
+    try testing.expect(session.shows("b.txt"));
+
+    // Enter on a title does the same.
+    _ = session.press("home");
+    _ = session.press("enter");
+    try testing.expect(!session.shows("new.txt"));
+    try testing.expect(session.shows("Staged (1)"));
+    _ = session.press("enter");
+    try testing.expect(session.shows("new.txt"));
+}
+
+fn indexOf(session: *const Session, text: []const u8) usize {
+    for (session.recorder.texts.items, 0..) |item, i| if (std.mem.eql(u8, item.text, text)) return i;
+    unreachable;
+}
