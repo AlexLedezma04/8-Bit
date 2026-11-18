@@ -270,3 +270,22 @@ test "the shell gets the size of the panel, and the new one after a resize" {
     session.draw();
     try expectShellFillsPanel(&session);
 }
+
+test "a smaller panel keeps the bottom lines; a bigger one brings the top ones back" {
+    var session: Session = undefined;
+    try session.init();
+    defer session.deinit();
+    _ = session.press("ctrl+`");
+    run(&session, if (windows) "for /L %i in (1,1,30) do @echo L%i." else "seq -f L%g. 1 30");
+    try session.waitForTerminal("L30.");
+    try testing.expect(session.shows("L20."));
+
+    session.editor.bottom.size = 8;
+    session.draw();
+    try testing.expect(session.shows("L30."));
+    try testing.expect(!session.shows("L20."));
+    session.editor.bottom.size = 14;
+    session.draw();
+    try testing.expect(session.shows("L20."));
+    try testing.expect(session.shows("L30."));
+}

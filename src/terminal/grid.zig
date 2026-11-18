@@ -70,6 +70,13 @@ const Scrollback = struct {
         self.start = (self.start + 1) % self.max;
     }
 
+    /// Gives back the newest line; the caller frees it.
+    fn pop(self: *Scrollback) []Cell {
+        std.mem.rotate([]Cell, self.lines.items, self.start);
+        self.start = 0;
+        return self.lines.pop().?;
+    }
+
     fn count(self: *const Scrollback) usize {
         return self.lines.items.len;
     }
@@ -442,9 +449,10 @@ pub const Grid = struct {
 
     /// A new size. Lines keep their content and are cut or padded; nothing
     /// reflows. When rows go, the ones above the cursor go to the scrollback,
-    /// so the cursor line stays.
+    /// so the cursor line stays; when rows come, lines come back from it.
     pub fn resize(self: *Grid, cols: u16, rows: u16) !void {
         if (cols == self.cols and rows == self.rows) return;
+        const pull: u16 = if (self.alternate) 0 else @intCast(@min(rows -| self.rows, self.scrollback.count()));
         const shift = (self.cursor.y + 1) -| rows;
         const lines = try self.resizeScreen(self.lines, cols, rows, shift, !self.alternate);
         self.other = self.resizeScreen(self.other, cols, rows, 0, false) catch |err| {
@@ -456,9 +464,17 @@ pub const Grid = struct {
         self.rows = rows;
         self.top = 0;
         self.bottom = rows;
-        self.cursor.y -= shift;
+        for (0..pull) |_| {
+            self.scroll(0, rows, 1, false, false);
+            const back = self.scrollback.pop();
+            defer self.allocator.free(back);
+            @memset(self.lines[0], .{});
+            const width = @min(cols, back.len);
+            @memcpy(self.lines[0][0..width], back[0..width]);
+        }
+        self.cursor.y = self.cursor.y - shift + pull;
         self.moveTo(self.cursor.x, self.cursor.y);
-        self.saved.cursor = .{ .x = @min(self.saved.cursor.x, cols - 1), .y = @min(self.saved.cursor.y, rows - 1) };
+        self.saved.cursor = .{ .x = @min(self.saved.cursor.x, cols - 1), .y = @min(self.saved.cursor.y + pull, rows - 1) };
     }
 
     /// Frees `old` once the new screen is made; `shift` top lines leave first.
@@ -635,9 +651,27 @@ test "resize keeps the content and the cursor line" {
     try expectLine(&grid, 2, "gh");
     try testing.expectEqual(Point{ .x = 1, .y = 1 }, grid.cursor);
     try grid.resize(6, 3);
+    // The line that went comes back.
+    try testing.expectEqual(@as(usize, 0), grid.scrollbackCount());
+    try expectLine(&grid, 0, "abcd");
     try expectLine(&grid, 2, "gh");
-    try expectLine(&grid, 3, "");
+    try testing.expectEqual(Point{ .x = 1, .y = 2 }, grid.cursor);
     try testing.expectEqual(@as(usize, 6), grid.lines[0].len);
+    try grid.resize(6, 4);
+    try expectLine(&grid, 3, "");
+}
+
+test "a full scrollback gives its newest lines back first" {
+    var grid: Grid = try .init(testing.allocator, 3, 1, 2);
+    defer grid.deinit();
+    printAll(&grid, "1\n2\n3\n4");
+    try grid.resize(3, 2);
+    try expectLine(&grid, 0, "2");
+    try expectLine(&grid, 1, "3");
+    try expectLine(&grid, 2, "4");
+    printAll(&grid, "\n5\n6");
+    try expectLine(&grid, 0, "3");
+    try expectLine(&grid, 1, "4");
 }
 
 test "save and restore the cursor, tabs, line drawing, reset" {
