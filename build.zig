@@ -9,6 +9,8 @@ const size_limit = 2 * 1024 * 1024;
 const size_targets = [_]struct { name: []const u8, query: std.Target.Query }{
     .{ .name = "linux-x86_64", .query = .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu } },
     .{ .name = "windows-x86_64", .query = .{ .cpu_arch = .x86_64, .os_tag = .windows } },
+    .{ .name = "linux-aarch64", .query = .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .gnu } },
+    .{ .name = "windows-aarch64", .query = .{ .cpu_arch = .aarch64, .os_tag = .windows } },
 };
 
 pub fn build(b: *std.Build) void {
@@ -16,8 +18,12 @@ pub fn build(b: *std.Build) void {
     // `zig build` is a debug build; `zig build --release` the small release exe.
     const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .small });
 
+    // A .rc file with the Windows exe's icon and version info. The release workflow
+    // makes it; a normal build goes without.
+    const win_resource = b.option(std.Build.LazyPath, "win-resource", "Windows resource script (.rc) for the exe");
+
     const assets = addAssets(b);
-    const exe = addEditor(b, target, optimize, assets);
+    const exe = addEditor(b, target, optimize, assets, win_resource);
     b.installArtifact(exe);
 
     const run = b.addRunArtifact(exe);
@@ -55,13 +61,13 @@ pub fn build(b: *std.Build) void {
     size_check.addArg(b.fmt("{d}", .{size_limit}));
     for (size_targets) |t| {
         size_check.addArg(t.name);
-        size_check.addFileArg(addEditor(b, b.resolveTargetQuery(t.query), .ReleaseSmall, assets).getEmittedBin());
+        size_check.addFileArg(addEditor(b, b.resolveTargetQuery(t.query), .ReleaseSmall, assets, null).getEmittedBin());
     }
     b.step("size", "Fail if a release exe is over 2 MiB").dependOn(&size_check.step);
 }
 
 /// The editor exe with SDL linked in. Used by the normal build and by the size check.
-fn addEditor(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, assets: *std.Build.Module) *std.Build.Step.Compile {
+fn addEditor(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, assets: *std.Build.Module, win_resource: ?std.Build.LazyPath) *std.Build.Step.Compile {
     const sdl_c = b.addTranslateC(.{
         .root_source_file = b.path("src/platform/sdl.h"),
         .target = target,
@@ -85,6 +91,10 @@ fn addEditor(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.buil
     });
     exe.root_module.linkLibrary(buildSdl(b, target, optimize));
     addStb(b, exe.root_module, target, optimize);
+    // A window app: no console window opens behind it.
+    if (target.result.os.tag == .windows) exe.subsystem = .windows;
+    // The icon and version info Windows shows for the exe.
+    if (target.result.os.tag == .windows) if (win_resource) |rc| exe.root_module.addWin32ResourceFile(.{ .file = rc });
     return exe;
 }
 
