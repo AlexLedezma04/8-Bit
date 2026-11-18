@@ -3,6 +3,9 @@ const std = @import("std");
 const c = @import("sdl.zig").c;
 const Image = @import("png.zig").Image;
 
+/// Also the name of the .desktop file and of the icon.
+pub const app_id = "8-bit";
+
 pub const Window = struct {
     handle: *c.SDL_Window,
     /// The resize cursors, made when first needed, and the one shown.
@@ -20,6 +23,9 @@ pub const Window = struct {
 
     /// Initialises SDL video and creates the window, ready for typed text.
     pub fn init(opts: Options) !Window {
+        // The desktop matches the window to packaging/linux/8-bit.desktop by this id
+        // (Wayland app id, X11 WM_CLASS), which gives the right icon and name.
+        _ = c.SDL_SetAppMetadata("8-Bit", "1.0.0", app_id);
         if (!c.SDL_Init(c.SDL_INIT_VIDEO)) return error.SdlInit;
         errdefer c.SDL_Quit();
 
