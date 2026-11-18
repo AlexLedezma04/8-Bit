@@ -248,3 +248,25 @@ test "the + button opens more terminals; numbers are reused, smallest first" {
     session.draw();
     for ([_][]const u8{ "Terminal 1", "Terminal 3", "Terminal 2", "Terminal 4" }) |name| try testing.expect(session.shows(name));
 }
+
+/// `stty size` says the rows and columns that fill the panel below its tabs.
+fn expectShellFillsPanel(session: *Session) !void {
+    const metrics: app.ui.layout.Metrics = .init(1);
+    const bottom = session.workbench.frame().bottom.?;
+    const rows = metrics.rows(bottom.h - app.ui.tabs.height(metrics, .compact));
+    var buffer: [32]u8 = undefined;
+    run(session, "echo size-$(stty size)");
+    try session.waitForTerminal(try std.fmt.bufPrint(&buffer, "size-{d} {d}", .{ rows, metrics.cols(bottom.w) }));
+}
+
+test "the shell gets the size of the panel, and the new one after a resize" {
+    if (windows) return error.SkipZigTest;
+    var session: Session = undefined;
+    try session.init();
+    defer session.deinit();
+    _ = session.press("ctrl+`");
+    try expectShellFillsPanel(&session);
+    session.editor.bottom.size = 25;
+    session.draw();
+    try expectShellFillsPanel(&session);
+}

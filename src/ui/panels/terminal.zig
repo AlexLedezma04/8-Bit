@@ -20,7 +20,6 @@ const panel = @import("../panel.zig");
 const Look = panel.Look;
 const Handled = panel.Handled;
 const tabs = @import("../widgets/tabs.zig");
-const List = @import("../widgets/list.zig").List;
 const theme_zig = @import("../theme.zig");
 const Color = theme_zig.Color;
 const event = @import("../../platform/event.zig");
@@ -249,7 +248,7 @@ pub const TerminalPanel = struct {
         drawPlus(canvas, metrics, plus, look.theme.line_number_current);
         const session = &shown.session;
         const cols: u16 = @intCast(std.math.clamp(metrics.cols(area.w), 2, 1000));
-        const rows: u16 = @intCast(std.math.clamp(List.rowsIn(area, metrics), 2, 1000));
+        const rows: u16 = @intCast(std.math.clamp(metrics.rows(area.h), 2, 1000));
         session.resize(cols, rows);
         const grid = &session.grid;
         const first = self.firstLine(grid);
