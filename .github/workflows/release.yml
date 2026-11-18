@@ -222,9 +222,11 @@ jobs:
                   <Component Id="MainExe">
                     <File Id="Exe" Source="winfiles/8-bit.exe" KeyPath="yes" />
                   </Component>
-                  <Component Id="Notices">
-                    <File Id="License" Source="winfiles/LICENSE" KeyPath="yes" />
-                    <File Id="ThirdParty" Source="winfiles/THIRD_PARTY.md" />
+                  <Component Id="License">
+                    <File Id="LicenseFile" Source="winfiles/LICENSE" KeyPath="yes" />
+                  </Component>
+                  <Component Id="ThirdParty">
+                    <File Id="ThirdPartyFile" Source="winfiles/THIRD_PARTY.md" KeyPath="yes" />
                   </Component>
                 </Directory>
               </StandardDirectory>
@@ -236,7 +238,8 @@ jobs:
               </StandardDirectory>
               <Feature Id="Main">
                 <ComponentRef Id="MainExe" />
-                <ComponentRef Id="Notices" />
+                <ComponentRef Id="License" />
+                <ComponentRef Id="ThirdParty" />
                 <ComponentRef Id="StartMenu" />
               </Feature>
             </Package>
