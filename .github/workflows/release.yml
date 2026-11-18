@@ -169,7 +169,7 @@ jobs:
           for arch in x86_64 aarch64; do
             name="8-bit-$VERSION-linux-$arch"
             mkdir "$name"
-            cp out/linux-$arch/bin/8-bit linux-files/* res/i512.png LICENSE THIRD_PARTY.md README.md "$name/"
+            cp out/linux-$arch/bin/8-bit linux-files/* res/i512.png LICENSE README.md "$name/"
             mv "$name/i512.png" "$name/8-bit.png"
             tar -czf "dist/$name.tar.gz" "$name"
           done
@@ -177,7 +177,7 @@ jobs:
       - name: Keep what the Windows job needs
         run: |
           mkdir winfiles
-          cp res/8-bit.ico LICENSE THIRD_PARTY.md winfiles/
+          cp res/8-bit.ico LICENSE winfiles/
           cp out/windows-x86_64/bin/8-bit.exe winfiles/8-bit-x64.exe
           cp out/windows-aarch64/bin/8-bit.exe winfiles/8-bit-arm64.exe
 
@@ -225,9 +225,6 @@ jobs:
                   <Component Id="License">
                     <File Id="LicenseFile" Source="winfiles/LICENSE" KeyPath="yes" />
                   </Component>
-                  <Component Id="ThirdParty">
-                    <File Id="ThirdPartyFile" Source="winfiles/THIRD_PARTY.md" KeyPath="yes" />
-                  </Component>
                 </Directory>
               </StandardDirectory>
               <StandardDirectory Id="ProgramMenuFolder">
@@ -239,7 +236,6 @@ jobs:
               <Feature Id="Main">
                 <ComponentRef Id="MainExe" />
                 <ComponentRef Id="License" />
-                <ComponentRef Id="ThirdParty" />
                 <ComponentRef Id="StartMenu" />
               </Feature>
             </Package>
