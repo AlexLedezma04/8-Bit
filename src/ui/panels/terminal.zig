@@ -221,6 +221,7 @@ pub const TerminalPanel = struct {
             const start = text.items.len;
             for (cells[first..@max(first, end)]) |cell| {
                 var buffer: [4]u8 = undefined;
+                if (cell.char == Cell.spacer) continue;
                 const len = std.unicode.utf8Encode(cell.char, &buffer) catch 1;
                 text.appendSlice(allocator, buffer[0..len]) catch return null;
             }
@@ -324,7 +325,7 @@ const Painter = struct {
             var len: usize = 0;
             while (end < cells.len and len + 4 <= buffer.len) : (end += 1) {
                 if (!std.meta.eql(self.colorsOf(cells[end], self.isSelected(index, end)), colors)) break;
-                len += std.unicode.utf8Encode(cells[end].char, buffer[len..]) catch 0;
+                len += std.unicode.utf8Encode(cells[end].shown(), buffer[len..]) catch 0;
             }
             const rect = self.cellRect(start, row, end - start);
             if (!std.meta.eql(colors.bg, self.look.theme.background)) self.canvas.fillRect(rect, colors.bg);
@@ -347,7 +348,7 @@ const Painter = struct {
         self.canvas.fillRect(rect, self.look.theme.cursor);
         const cell = grid.lines[at.y][at.x];
         var buffer: [4]u8 = undefined;
-        const len = std.unicode.utf8Encode(cell.char, &buffer) catch return;
-        if (cell.char != ' ') self.canvas.drawText(rect.x, rect.y, buffer[0..len], self.look.theme.background);
+        const len = std.unicode.utf8Encode(cell.shown(), &buffer) catch return;
+        if (cell.shown() != ' ') self.canvas.drawText(rect.x, rect.y, buffer[0..len], self.look.theme.background);
     }
 };

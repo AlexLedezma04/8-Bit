@@ -289,3 +289,18 @@ test "a smaller panel keeps the bottom lines; a bigger one brings the top ones b
     try testing.expect(session.shows("L20."));
     try testing.expect(session.shows("L30."));
 }
+
+test "wide characters take two cells and copy without the gap; combining marks take none" {
+    if (windows) return error.SkipZigTest;
+    var session: Session = undefined;
+    try session.init();
+    defer session.deinit();
+    session.editor.bottom.size = 30;
+    _ = session.press("ctrl+`");
+    // 日, 本 and a combining acute accent, in octal.
+    run(&session, "printf 'W\\346\\227\\245\\346\\234\\254e\\314\\201|end\\n'");
+    try session.waitForTerminal("W日 本 e|end");
+    const row = textAt(&session, "W日 本 e|end");
+    session.drag(row.x + 10 * 8 + 1, row.y + 8, row.x + 6, row.y + 8);
+    try testing.expectEqualStrings("W日本e|end", session.press("ctrl+shift+c").?.copy);
+}
