@@ -11,8 +11,34 @@ pub const Glyph = struct { x: u16 = 0, y: u16 = 0, w: u16 = 0, h: u16 = 0, left:
 
 /// Characters that get a glyph. The rest share the box of glyph 0.
 const ranges = [_][2]u21{
-    .{ 0x20, 0x7E },     .{ 0xA0, 0xFF },     .{ 0x2022, 0x2022 }, .{ 0x2026, 0x2026 },
-    .{ 0x2190, 0x2193 }, .{ 0x2500, 0x259F }, .{ 0x25B6, 0x25BF }, .{ 0x25CF, 0x25CF },
+    .{ 0x20, 0x7E },     .{ 0xA0, 0xFF },     .{ 0x2013, 0x2014 }, .{ 0x2016, 0x2016 }, .{ 0x2018, 0x2022 },
+    .{ 0x2026, 0x2026 }, .{ 0x2039, 0x203A }, .{ 0x20AC, 0x20AC }, .{ 0x2190, 0x2199 }, .{ 0x2212, 0x2212 },
+    .{ 0x2248, 0x2248 }, .{ 0x2260, 0x2260 }, .{ 0x2264, 0x2265 }, .{ 0x23CE, 0x23CE }, .{ 0x2500, 0x25A1 },
+    .{ 0x25AA, 0x25AB }, .{ 0x25B2, 0x25CF }, .{ 0x25E6, 0x25E6 }, .{ 0x25EF, 0x25EF }, .{ 0x26A0, 0x26A1 },
+    .{ 0x2713, 0x2713 }, .{ 0x2717, 0x2717 }, .{ 0x2736, 0x2736 }, .{ 0x276E, 0x2771 }, .{ 0x2794, 0x2794 },
+    .{ 0x279C, 0x279C },
+};
+
+/// Symbols of terminal programs the font lacks, drawn as a look-alike.
+const similar = [_][2]u21{
+    .{ '⏺', '●' },
+    .{ '⎿', '└' },
+    .{ '⏵', '▸' },
+    .{ '⏴', '◂' },
+    .{ '✔', '✓' },
+    .{ '✘', '✗' },
+    .{ '✻', '*' },
+    .{ '✳', '*' },
+    .{ '✽', '*' },
+    .{ '✱', '*' },
+    .{ '✢', '+' },
+    .{ '★', '✶' },
+    .{ '✦', '◆' },
+    .{ '☐', '□' },
+    .{ '↵', '⏎' },
+    .{ '⇡', '↑' },
+    .{ '⇣', '↓' },
+    .{ '⏸', '‖' },
 };
 
 const count = blk: {
@@ -28,6 +54,7 @@ fn slot(cp: u21) usize {
         if (cp >= range[0] and cp <= range[1]) return base + cp - range[0];
         base += range[1] - range[0] + 1;
     }
+    for (similar) |pair| if (pair[0] == cp) return slot(pair[1]);
     return 0;
 }
 
@@ -125,6 +152,18 @@ test "every glyph is drawn inside the picture; a space has none" {
     // A character outside the ranges is the box.
     try testing.expectEqual(atlas.glyph(.code, 0), atlas.glyph(.code, 0x1F600));
     try testing.expect(alphaSum(&atlas, atlas.glyph(.code, 0x1F600)) > 0);
+}
+
+test "symbols of terminal programs have a glyph, or a look-alike's" {
+    var atlas: Atlas = try .init(testing.allocator, 1);
+    defer atlas.deinit(testing.allocator);
+    const box = atlas.glyph(.code, 0);
+    var chars = (try std.unicode.Utf8View.init("–“”€≠≥⏎■◆○⚠✓✗✶❯➜")).iterator();
+    while (chars.nextCodepoint()) |cp| try testing.expect(!std.meta.eql(box, atlas.glyph(.code, cp)));
+    for (similar) |pair| {
+        try testing.expect(!std.meta.eql(box, atlas.glyph(.code, pair[1])));
+        try testing.expectEqual(atlas.glyph(.code, pair[1]), atlas.glyph(.code, pair[0]));
+    }
 }
 
 test "glyphs sit in the row and grow with the zoom" {
