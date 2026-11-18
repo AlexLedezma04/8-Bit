@@ -74,6 +74,11 @@ pub const Metrics = struct {
     pub fn cols(self: Metrics, w: f32) usize {
         return @intFromFloat(@max(0, w) / self.cell);
     }
+
+    /// Whole rows of text that fit in `h` pixels.
+    pub fn rows(self: Metrics, h: f32) usize {
+        return @intFromFloat(@max(0, h) / self.row);
+    }
 };
 
 /// The parts of the window. A hidden dock is null.
@@ -220,7 +225,7 @@ pub const TextLayout = struct {
             .gutter_text_cols = gutter_text_cols,
             .number_cols = number_cols,
             .cols = metrics.cols(text.w),
-            .rows = @intFromFloat(@max(0, text.h) / metrics.row),
+            .rows = metrics.rows(text.h),
         };
     }
 

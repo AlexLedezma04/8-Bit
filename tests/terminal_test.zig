@@ -248,3 +248,59 @@ test "the + button opens more terminals; numbers are reused, smallest first" {
     session.draw();
     for ([_][]const u8{ "Terminal 1", "Terminal 3", "Terminal 2", "Terminal 4" }) |name| try testing.expect(session.shows(name));
 }
+
+/// `stty size` says the rows and columns that fill the panel below its tabs.
+fn expectShellFillsPanel(session: *Session) !void {
+    const metrics: app.ui.layout.Metrics = .init(1);
+    const bottom = session.workbench.frame().bottom.?;
+    const rows = metrics.rows(bottom.h - app.ui.tabs.height(metrics, .compact));
+    var buffer: [32]u8 = undefined;
+    run(session, "echo size-$(stty size)");
+    try session.waitForTerminal(try std.fmt.bufPrint(&buffer, "size-{d} {d}", .{ rows, metrics.cols(bottom.w) }));
+}
+
+test "the shell gets the size of the panel, and the new one after a resize" {
+    if (windows) return error.SkipZigTest;
+    var session: Session = undefined;
+    try session.init();
+    defer session.deinit();
+    _ = session.press("ctrl+`");
+    try expectShellFillsPanel(&session);
+    session.editor.bottom.size = 25;
+    session.draw();
+    try expectShellFillsPanel(&session);
+}
+
+test "a smaller panel keeps the bottom lines; a bigger one brings the top ones back" {
+    var session: Session = undefined;
+    try session.init();
+    defer session.deinit();
+    _ = session.press("ctrl+`");
+    run(&session, if (windows) "for /L %i in (1,1,30) do @echo L%i." else "seq -f L%g. 1 30");
+    try session.waitForTerminal("L30.");
+    try testing.expect(session.shows("L20."));
+
+    session.editor.bottom.size = 8;
+    session.draw();
+    try testing.expect(session.shows("L30."));
+    try testing.expect(!session.shows("L20."));
+    session.editor.bottom.size = 14;
+    session.draw();
+    try testing.expect(session.shows("L20."));
+    try testing.expect(session.shows("L30."));
+}
+
+test "wide characters take two cells and copy without the gap; combining marks take none" {
+    if (windows) return error.SkipZigTest;
+    var session: Session = undefined;
+    try session.init();
+    defer session.deinit();
+    session.editor.bottom.size = 30;
+    _ = session.press("ctrl+`");
+    // 日, 本 and a combining acute accent, in octal.
+    run(&session, "printf 'W\\346\\227\\245\\346\\234\\254e\\314\\201|end\\n'");
+    try session.waitForTerminal("W日 本 e|end");
+    const row = textAt(&session, "W日 本 e|end");
+    session.drag(row.x + 10 * 8 + 1, row.y + 8, row.x + 6, row.y + 8);
+    try testing.expectEqualStrings("W日本e|end", session.press("ctrl+shift+c").?.copy);
+}

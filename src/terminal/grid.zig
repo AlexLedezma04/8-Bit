@@ -3,6 +3,7 @@
 //! what the screen does; `terminal.zig` maps escape sequences to it.
 //! SDL-free.
 const std = @import("std");
+const utf8 = @import("../core/utf8.zig");
 
 /// A terminal color: the default one, one of the 256 colors, or true color.
 pub const Color = packed struct(u32) {
@@ -32,6 +33,14 @@ pub const Style = struct {
 pub const Cell = struct {
     char: u21 = ' ',
     style: Style = .{},
+
+    /// The char of the right half of a wide character.
+    pub const spacer: u21 = 0;
+
+    /// What is drawn or copied: the spacer is a blank.
+    pub fn shown(self: Cell) u21 {
+        return if (self.char == spacer) ' ' else self.char;
+    }
 };
 
 pub const Point = struct { x: u16 = 0, y: u16 = 0 };
@@ -68,6 +77,13 @@ const Scrollback = struct {
         allocator.free(self.lines.items[self.start]);
         self.lines.items[self.start] = kept;
         self.start = (self.start + 1) % self.max;
+    }
+
+    /// Gives back the newest line; the caller frees it.
+    fn pop(self: *Scrollback) []Cell {
+        std.mem.rotate([]Cell, self.lines.items, self.start);
+        self.start = 0;
+        return self.lines.pop().?;
     }
 
     fn count(self: *const Scrollback) usize {
@@ -169,13 +185,23 @@ pub const Grid = struct {
 
     // Writing
 
+    /// A wide character takes two cells; a zero-width one is dropped.
     pub fn print(self: *Grid, char: u21) void {
-        if (self.wrap_pending) {
+        const wide = switch (utf8.width(char)) {
+            0 => return,
+            1 => false,
+            else => true,
+        };
+        if (self.wrap_pending or (wide and self.autowrap and self.cursor.x + 1 == self.cols)) {
             self.carriageReturn();
             self.lineFeed();
         }
-        const shown = if (self.graphics) lineDrawing(char) else char;
-        self.lines[self.cursor.y][self.cursor.x] = .{ .char = shown, .style = self.style };
+        const row = self.lines[self.cursor.y];
+        row[self.cursor.x] = .{ .char = if (self.graphics) lineDrawing(char) else char, .style = self.style };
+        if (wide and self.cursor.x + 1 < self.cols) {
+            self.cursor.x += 1;
+            row[self.cursor.x] = .{ .char = Cell.spacer, .style = self.style };
+        }
         if (self.cursor.x + 1 < self.cols) {
             self.cursor.x += 1;
         } else if (self.autowrap) {
@@ -442,9 +468,10 @@ pub const Grid = struct {
 
     /// A new size. Lines keep their content and are cut or padded; nothing
     /// reflows. When rows go, the ones above the cursor go to the scrollback,
-    /// so the cursor line stays.
+    /// so the cursor line stays; when rows come, lines come back from it.
     pub fn resize(self: *Grid, cols: u16, rows: u16) !void {
         if (cols == self.cols and rows == self.rows) return;
+        const pull: u16 = if (self.alternate) 0 else @intCast(@min(rows -| self.rows, self.scrollback.count()));
         const shift = (self.cursor.y + 1) -| rows;
         const lines = try self.resizeScreen(self.lines, cols, rows, shift, !self.alternate);
         self.other = self.resizeScreen(self.other, cols, rows, 0, false) catch |err| {
@@ -456,9 +483,17 @@ pub const Grid = struct {
         self.rows = rows;
         self.top = 0;
         self.bottom = rows;
-        self.cursor.y -= shift;
+        for (0..pull) |_| {
+            self.scroll(0, rows, 1, false, false);
+            const back = self.scrollback.pop();
+            defer self.allocator.free(back);
+            @memset(self.lines[0], .{});
+            const width = @min(cols, back.len);
+            @memcpy(self.lines[0][0..width], back[0..width]);
+        }
+        self.cursor.y = self.cursor.y - shift + pull;
         self.moveTo(self.cursor.x, self.cursor.y);
-        self.saved.cursor = .{ .x = @min(self.saved.cursor.x, cols - 1), .y = @min(self.saved.cursor.y, rows - 1) };
+        self.saved.cursor = .{ .x = @min(self.saved.cursor.x, cols - 1), .y = @min(self.saved.cursor.y + pull, rows - 1) };
     }
 
     /// Frees `old` once the new screen is made; `shift` top lines leave first.
@@ -507,7 +542,7 @@ fn printAll(grid: *Grid, text: []const u8) void {
 fn expectLine(grid: *const Grid, index: usize, expected: []const u8) !void {
     var buffer: [256]u8 = undefined;
     var len: usize = 0;
-    for (grid.line(index)) |cell| len += std.unicode.utf8Encode(cell.char, buffer[len..]) catch unreachable;
+    for (grid.line(index)) |cell| len += std.unicode.utf8Encode(cell.shown(), buffer[len..]) catch unreachable;
     try testing.expectEqualStrings(expected, std.mem.trimEnd(u8, buffer[0..len], " "));
 }
 
@@ -635,9 +670,27 @@ test "resize keeps the content and the cursor line" {
     try expectLine(&grid, 2, "gh");
     try testing.expectEqual(Point{ .x = 1, .y = 1 }, grid.cursor);
     try grid.resize(6, 3);
+    // The line that went comes back.
+    try testing.expectEqual(@as(usize, 0), grid.scrollbackCount());
+    try expectLine(&grid, 0, "abcd");
     try expectLine(&grid, 2, "gh");
-    try expectLine(&grid, 3, "");
+    try testing.expectEqual(Point{ .x = 1, .y = 2 }, grid.cursor);
     try testing.expectEqual(@as(usize, 6), grid.lines[0].len);
+    try grid.resize(6, 4);
+    try expectLine(&grid, 3, "");
+}
+
+test "a full scrollback gives its newest lines back first" {
+    var grid: Grid = try .init(testing.allocator, 3, 1, 2);
+    defer grid.deinit();
+    printAll(&grid, "1\n2\n3\n4");
+    try grid.resize(3, 2);
+    try expectLine(&grid, 0, "2");
+    try expectLine(&grid, 1, "3");
+    try expectLine(&grid, 2, "4");
+    printAll(&grid, "\n5\n6");
+    try expectLine(&grid, 0, "3");
+    try expectLine(&grid, 1, "4");
 }
 
 test "save and restore the cursor, tabs, line drawing, reset" {
@@ -660,4 +713,18 @@ test "save and restore the cursor, tabs, line drawing, reset" {
     try testing.expectEqual(Point{}, grid.cursor);
     try testing.expect(!grid.graphics);
     try expectLine(&grid, 1, "");
+}
+
+test "wide characters take two cells and wrap whole; combining marks take none" {
+    var grid = try testGrid(5, 2);
+    defer grid.deinit();
+    printAll(&grid, "日e\u{301}本x");
+    try expectLine(&grid, 0, "日 e本");
+    try testing.expectEqual(Cell.spacer, grid.line(0)[1].char);
+    try expectLine(&grid, 1, "x");
+    try testing.expectEqual(Point{ .x = 1, .y = 1 }, grid.cursor);
+    // At the last column it goes to the next line.
+    printAll(&grid, "abc本");
+    try expectLine(&grid, 1, "xabc");
+    try expectLine(&grid, 2, "本");
 }
