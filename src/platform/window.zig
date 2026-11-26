@@ -25,7 +25,7 @@ pub const Window = struct {
     pub fn init(opts: Options) !Window {
         // The desktop matches the window to packaging/linux/8-bit.desktop by this id
         // (Wayland app id, X11 WM_CLASS), which gives the right icon and name.
-        _ = c.SDL_SetAppMetadata("8-Bit", "1.0.0", app_id);
+        _ = c.SDL_SetAppMetadata("8-Bit", @import("build_options").version, app_id);
         // Keypad keys come as the keys they type, or as arrows, Home, End and
         // so on without Num Lock (hide_numpad); the rest are SDL's defaults.
         _ = c.SDL_SetHint(c.SDL_HINT_KEYCODE_OPTIONS, "hide_numpad,french_numbers,latin_letters");
