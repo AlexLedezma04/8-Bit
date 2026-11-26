@@ -158,6 +158,18 @@ test "colors and the alternate screen of a real program" {
     try testing.expect(!session.shows("fullscreen"));
 }
 
+test "keypad digits and operators reach the shell, also right after Enter" {
+    var session: Session = undefined;
+    try session.init();
+    defer session.deinit();
+    _ = session.press("ctrl+`");
+    // Enter is the shell's: the text of the next key must not be swallowed.
+    // SDL sends keypad keys as the keys they type (hide_numpad).
+    _ = session.press("enter");
+    run(&session, echo("7/8*9", "1+2.5"));
+    try session.waitForTerminal("7/8*9-1+2.5");
+}
+
 test "the wheel goes to a fullscreen program that asks for the mouse" {
     if (windows) return error.SkipZigTest;
     var session: Session = undefined;
