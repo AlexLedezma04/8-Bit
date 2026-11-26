@@ -89,6 +89,10 @@ fn addEditor(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.buil
             },
         }),
     });
+    // The version comes from build.zig.zon only; the code reads it as "build_options".
+    const options = b.addOptions();
+    options.addOption([:0]const u8, "version", @import("build.zig.zon").version);
+    exe.root_module.addOptions("build_options", options);
     exe.root_module.linkLibrary(buildSdl(b, target, optimize));
     addStb(b, exe.root_module, target, optimize);
     // A window app: no console window opens behind it.
