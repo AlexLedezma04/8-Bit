@@ -84,7 +84,7 @@ fn translate(ev: c.SDL_Event) ?Event {
         // Outside the window nothing is under the mouse.
         c.SDL_EVENT_WINDOW_MOUSE_LEAVE => .{ .mouse_move = .{ .x = -1, .y = -1, .left_down = false } },
         c.SDL_EVENT_KEY_DOWN => .{ .key = .{
-            .key = keyOf(ev.key.key) orelse return null,
+            .key = keyOf(ev.key.key) orelse .other,
             .mods = modsOf(ev.key.mod),
         } },
         c.SDL_EVENT_TEXT_INPUT => .{ .text = std.mem.span(ev.text.text) },

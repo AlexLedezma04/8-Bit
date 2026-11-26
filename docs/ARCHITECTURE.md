@@ -98,7 +98,8 @@ third_party/      vendored C dependencies (SDL3, stb_truetype)
   `platform/event.zig`, and `main.zig` hands them to `ui/workbench.zig`. A
   key goes to the open menu or prompt, else to the focused panel, else it
   is looked up in the `editor/keymap.zig` table and becomes a `Command`.
-  Typed text goes to the focused panel too.
+  Typed text goes to the focused panel too. A key with no name of its own
+  (ñ, é) comes as `Key.other`, so its text is never taken for the last key's.
 - **Panels.** The sidebar (file tree, git), the editor area and the bottom
   panel (the terminal) follow `ui/panel.zig`: `title`, `draw(rect)` and `handle(event)`.
   One area has focus; a click gives focus. The workbench draws and routes

@@ -170,6 +170,20 @@ test "keypad digits and operators reach the shell, also right after Enter" {
     try session.waitForTerminal("7/8*9-1+2.5");
 }
 
+test "a key without a name (ñ) reaches the shell right after a key the shell takes" {
+    if (windows) return error.SkipZigTest; // cmd.exe's code page is not UTF-8
+    var session: Session = undefined;
+    try session.init();
+    defer session.deinit();
+    _ = session.press("ctrl+`");
+    session.typeKeys("echo nix");
+    _ = session.press("backspace");
+    _ = session.send(.{ .key = .{ .key = .other } });
+    _ = session.send(.{ .text = "ñ" });
+    run(&session, "o''-ok");
+    try session.waitForTerminal("niño-ok");
+}
+
 test "the wheel goes to a fullscreen program that asks for the mouse" {
     if (windows) return error.SkipZigTest;
     var session: Session = undefined;
