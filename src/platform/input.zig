@@ -17,10 +17,6 @@ const named_keys = [_]struct { sdl: c.SDL_Keycode, key: Key }{
     .{ .sdl = c.SDLK_PAGEUP, .key = .page_up },
     .{ .sdl = c.SDLK_PAGEDOWN, .key = .page_down },
     .{ .sdl = c.SDLK_INSERT, .key = .insert },
-    .{ .sdl = c.SDLK_KP_ENTER, .key = .enter },
-    .{ .sdl = c.SDLK_KP_PLUS, .key = .char('+') },
-    .{ .sdl = c.SDLK_KP_MINUS, .key = .char('-') },
-    .{ .sdl = c.SDLK_KP_0, .key = .char('0') },
     .{ .sdl = c.SDLK_F1, .key = .f1 },
     .{ .sdl = c.SDLK_F2, .key = .f2 },
     .{ .sdl = c.SDLK_F3, .key = .f3 },
@@ -88,7 +84,7 @@ fn translate(ev: c.SDL_Event) ?Event {
         // Outside the window nothing is under the mouse.
         c.SDL_EVENT_WINDOW_MOUSE_LEAVE => .{ .mouse_move = .{ .x = -1, .y = -1, .left_down = false } },
         c.SDL_EVENT_KEY_DOWN => .{ .key = .{
-            .key = keyOf(ev.key.key) orelse return null,
+            .key = keyOf(ev.key.key) orelse .other,
             .mods = modsOf(ev.key.mod),
         } },
         c.SDL_EVENT_TEXT_INPUT => .{ .text = std.mem.span(ev.text.text) },

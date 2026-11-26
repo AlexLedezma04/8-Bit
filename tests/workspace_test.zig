@@ -48,6 +48,23 @@ test "open a folder or a file; the open folder comes back on the next start, a c
     try testing.expect(session.shows("Recent folders"));
 }
 
+test "a cancelled Open Folder leaves the welcome screen without a sidebar" {
+    var session: Session = undefined;
+    try session.init();
+    defer session.deinit();
+    const editor = &session.editor;
+    _ = editor.closeFolder();
+    session.draw();
+
+    try testing.expectEqual(Request{ .pick = .open_folder }, session.clickText("Open Folder...").?);
+    _ = editor.receive(.cancelled);
+    session.draw();
+    try testing.expectEqual(@as(?[]u8, null), editor.folder);
+    try testing.expect(!editor.sidebar.shown);
+    try testing.expect(session.workbench.frame().sidebar == null);
+    try testing.expect(session.shows("Open Folder..."));
+}
+
 test "welcome: recent folders newest first, click opens, x and Delete remove, kept between runs" {
     var session: Session = undefined;
     var config: testing.TmpDir = undefined;

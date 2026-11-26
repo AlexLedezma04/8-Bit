@@ -158,6 +158,48 @@ test "colors and the alternate screen of a real program" {
     try testing.expect(!session.shows("fullscreen"));
 }
 
+test "keypad digits and operators reach the shell, also right after Enter" {
+    var session: Session = undefined;
+    try session.init();
+    defer session.deinit();
+    _ = session.press("ctrl+`");
+    // Enter is the shell's: the text of the next key must not be swallowed.
+    // SDL sends keypad keys as the keys they type (hide_numpad).
+    _ = session.press("enter");
+    run(&session, echo("7/8*9", "1+2.5"));
+    try session.waitForTerminal("7/8*9-1+2.5");
+}
+
+test "a key without a name (ñ) reaches the shell right after a key the shell takes" {
+    if (windows) return error.SkipZigTest; // cmd.exe's code page is not UTF-8
+    var session: Session = undefined;
+    try session.init();
+    defer session.deinit();
+    _ = session.press("ctrl+`");
+    session.typeKeys("echo nix");
+    _ = session.press("backspace");
+    _ = session.send(.{ .key = .{ .key = .other } });
+    _ = session.send(.{ .text = "ñ" });
+    run(&session, "o''-ok");
+    try session.waitForTerminal("niño-ok");
+}
+
+test "the wheel goes to a fullscreen program that asks for the mouse" {
+    if (windows) return error.SkipZigTest;
+    var session: Session = undefined;
+    try session.init();
+    defer session.deinit();
+    _ = session.press("ctrl+`");
+    // Like Claude Code: SGR mouse reports, then it reads what comes.
+    run(&session, "printf '\\033[?1000h\\033[?1006hre''ady\\n'; head -n 1 | sed 's/^.\\[</whe''el-/'");
+    try session.waitForTerminal("ready");
+    const bottom = session.workbench.frame().bottom.?;
+    _ = session.send(.{ .wheel = .{ .x = bottom.x + 8 * 4 + 2, .y = bottom.y + bottom.h - 4, .dx = 0, .dy = 1, .mods = .{} } });
+    _ = session.press("enter");
+    try session.waitForTerminal("wheel-64;5;");
+    try testing.expectEqual(@as(usize, 0), session.workbench.terminal.offset);
+}
+
 test "the terminal button in the status bar and Alt+T show and hide the terminal" {
     var session: Session = undefined;
     try session.init();

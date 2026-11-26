@@ -7,6 +7,23 @@ const Session = @import("session.zig").Session;
 const testing = std.testing;
 const fs = app.platform.fs;
 
+/// A key without a name of its own, as SDL sends ñ on a Spanish keyboard.
+fn typeOther(session: *Session, text: []const u8) void {
+    _ = session.send(.{ .key = .{ .key = .other } });
+    _ = session.send(.{ .text = text });
+}
+
+test "a key without a name types its text, also right after a shortcut" {
+    var session: Session = undefined;
+    try session.init();
+    defer session.deinit();
+    session.editor.open(session.path("b.txt"));
+    // Ctrl+S is a command: its own text, if any, is swallowed, not the next key's.
+    _ = session.press("ctrl+s");
+    typeOther(&session, "ñ");
+    try testing.expect(session.shows("ñbee"));
+}
+
 test "the file tree: folders first, .git hidden, click opens, keys open folders" {
     var session: Session = undefined;
     try session.init();

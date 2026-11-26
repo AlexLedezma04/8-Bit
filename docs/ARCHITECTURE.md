@@ -98,7 +98,8 @@ third_party/      vendored C dependencies (SDL3, stb_truetype)
   `platform/event.zig`, and `main.zig` hands them to `ui/workbench.zig`. A
   key goes to the open menu or prompt, else to the focused panel, else it
   is looked up in the `editor/keymap.zig` table and becomes a `Command`.
-  Typed text goes to the focused panel too.
+  Typed text goes to the focused panel too. A key with no name of its own
+  (ñ, é) comes as `Key.other`, so its text is never taken for the last key's.
 - **Panels.** The sidebar (file tree, git), the editor area and the bottom
   panel (the terminal) follow `ui/panel.zig`: `title`, `draw(rect)` and `handle(event)`.
   One area has focus; a click gives focus. The workbench draws and routes
@@ -252,7 +253,9 @@ third_party/      vendored C dependencies (SDL3, stb_truetype)
   Resizing cuts or pads lines and never reflows.
 - `terminal/keys.zig` turns keys into bytes; typed text comes from text events.
 - `terminal/terminal.zig` has `Session`: it maps parser actions to the grid
-  and answers status queries. It gets the shell as a `Port` (write, resize),
+  and answers status queries. A program that asks for the mouse (modes
+  1000, 1002, 1003; SGR with 1006) gets the wheel as mouse reports;
+  otherwise the wheel scrolls back. It gets the shell as a `Port` (write, resize),
   so its tests use a fake one.
 - `editor/terminals.zig` owns the terminals. The pty thread posts output
   through the mailbox with the terminal's id; output of a closed one is dropped.

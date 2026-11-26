@@ -36,6 +36,9 @@ pub const Key = enum(u8) {
     f10,
     f11,
     f12,
+    /// A key with no name here, such as ñ or é. Its text comes as a text
+    /// event; the key still comes, so the text is not taken for the last key's.
+    other,
     _,
 
     pub fn char(ascii: u8) Key {
