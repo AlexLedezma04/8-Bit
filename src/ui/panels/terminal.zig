@@ -1,7 +1,8 @@
 //! The terminal panel of the bottom dock: a tab per terminal, and the screen
 //! of the one shown, drawn with `drawText` like the editor. Keys go to the
 //! shell except the few that work everywhere. Drag selects, Ctrl+Shift+C
-//! copies, Ctrl+Shift+V pastes, the wheel scrolls back, Ctrl+Tab switches.
+//! copies, Ctrl+Shift+V pastes, the wheel scrolls back (or goes to a program
+//! that asks for the mouse), Ctrl+Tab switches.
 const std = @import("std");
 const editor_zig = @import("../../editor/editor.zig");
 const Editor = editor_zig.Editor;
@@ -159,6 +160,8 @@ pub const TerminalPanel = struct {
             },
             .wheel => |wheel| {
                 const rows: isize = @intFromFloat(wheel.dy);
+                const col, const row = cellAt(&session.grid, area, metrics, wheel.x, wheel.y);
+                if (session.wheel(rows, @min(col, session.grid.cols - 1), row)) return .yes;
                 const offset = @as(isize, @intCast(self.offset)) + rows;
                 self.offset = @intCast(std.math.clamp(offset, 0, @as(isize, @intCast(session.grid.scrollbackCount()))));
             },
@@ -186,13 +189,17 @@ pub const TerminalPanel = struct {
         return grid.lineCount() - grid.rows - @min(self.offset, grid.scrollbackCount());
     }
 
-    fn pointAt(self: *const TerminalPanel, grid: *const Grid, area: Rect, metrics: Metrics, x: f32, y: f32) Point {
+    /// The column and screen row under a pixel. The column may be one past
+    /// the last, so a selection can take the whole line.
+    fn cellAt(grid: *const Grid, area: Rect, metrics: Metrics, x: f32, y: f32) [2]usize {
         const col: usize = @intFromFloat(@max(0, x - area.x) / metrics.cell);
         const row: usize = @intFromFloat(@max(0, y - area.y) / metrics.row);
-        return .{
-            .line = @min(self.firstLine(grid) + row, grid.lineCount() - 1),
-            .col = @min(col, grid.cols),
-        };
+        return .{ @min(col, grid.cols), @min(row, grid.rows - 1) };
+    }
+
+    fn pointAt(self: *const TerminalPanel, grid: *const Grid, area: Rect, metrics: Metrics, x: f32, y: f32) Point {
+        const col, const row = cellAt(grid, area, metrics, x, y);
+        return .{ .line = @min(self.firstLine(grid) + row, grid.lineCount() - 1), .col = col };
     }
 
     /// The selection from its first cell up to, not including, its end.

@@ -252,7 +252,9 @@ third_party/      vendored C dependencies (SDL3, stb_truetype)
   Resizing cuts or pads lines and never reflows.
 - `terminal/keys.zig` turns keys into bytes; typed text comes from text events.
 - `terminal/terminal.zig` has `Session`: it maps parser actions to the grid
-  and answers status queries. It gets the shell as a `Port` (write, resize),
+  and answers status queries. A program that asks for the mouse (modes
+  1000, 1002, 1003; SGR with 1006) gets the wheel as mouse reports;
+  otherwise the wheel scrolls back. It gets the shell as a `Port` (write, resize),
   so its tests use a fake one.
 - `editor/terminals.zig` owns the terminals. The pty thread posts output
   through the mailbox with the terminal's id; output of a closed one is dropped.

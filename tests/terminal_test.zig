@@ -158,6 +158,22 @@ test "colors and the alternate screen of a real program" {
     try testing.expect(!session.shows("fullscreen"));
 }
 
+test "the wheel goes to a fullscreen program that asks for the mouse" {
+    if (windows) return error.SkipZigTest;
+    var session: Session = undefined;
+    try session.init();
+    defer session.deinit();
+    _ = session.press("ctrl+`");
+    // Like Claude Code: SGR mouse reports, then it reads what comes.
+    run(&session, "printf '\\033[?1000h\\033[?1006hre''ady\\n'; head -n 1 | sed 's/^.\\[</whe''el-/'");
+    try session.waitForTerminal("ready");
+    const bottom = session.workbench.frame().bottom.?;
+    _ = session.send(.{ .wheel = .{ .x = bottom.x + 8 * 4 + 2, .y = bottom.y + bottom.h - 4, .dx = 0, .dy = 1, .mods = .{} } });
+    _ = session.press("enter");
+    try session.waitForTerminal("wheel-64;5;");
+    try testing.expectEqual(@as(usize, 0), session.workbench.terminal.offset);
+}
+
 test "the terminal button in the status bar and Alt+T show and hide the terminal" {
     var session: Session = undefined;
     try session.init();

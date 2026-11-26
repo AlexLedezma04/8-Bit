@@ -50,6 +50,10 @@ pub const Session = struct {
     /// DECCKM: arrows send `ESC O`.
     app_cursor: bool = false,
     bracketed_paste: bool = false,
+    /// The program asked for mouse reports (modes 1000, 1002, 1003).
+    mouse: bool = false,
+    /// Mouse reports as `CSI < ... M` (mode 1006), else the X10 bytes.
+    sgr_mouse: bool = false,
     /// The shell is gone.
     ended: bool = false,
 
@@ -79,6 +83,26 @@ pub const Session = struct {
         var buffer: [16]u8 = undefined;
         self.port.write(keys.encode(press, self.app_cursor, &buffer) orelse return false);
         return true;
+    }
+
+    /// Sends `rows` wheel steps at a zero-based cell, positive away from
+    /// the user. False when the program does not ask for the mouse, so the
+    /// wheel scrolls back instead.
+    pub fn wheel(self: *Session, rows: isize, col: usize, row: usize) bool {
+        if (!self.mouse) return false;
+        const button: usize = if (rows > 0) 64 else 65;
+        var buffer: [32]u8 = undefined;
+        const report = if (self.sgr_mouse)
+            std.fmt.bufPrint(&buffer, "\x1b[<{d};{d};{d}M", .{ button, col + 1, row + 1 }) catch unreachable
+        else
+            std.fmt.bufPrint(&buffer, "\x1b[M{c}{c}{c}", .{ x10(button), x10(col + 1), x10(row + 1) }) catch unreachable;
+        for (0..@abs(rows)) |_| self.port.write(report);
+        return true;
+    }
+
+    /// A number as one byte of an X10 report, which stops at 223.
+    fn x10(number: usize) u8 {
+        return @intCast(32 + @min(number, 223));
     }
 
     pub fn typeText(self: *Session, text: []const u8) void {
@@ -149,6 +173,8 @@ const Handler = struct {
                 grid.reset();
                 self.session.app_cursor = false;
                 self.session.bracketed_paste = false;
+                self.session.mouse = false;
+                self.session.sgr_mouse = false;
             },
             else => {},
         }
@@ -234,6 +260,8 @@ const Handler = struct {
                 grid.setAlternate(false);
                 grid.restoreCursor();
             },
+            1000, 1002, 1003 => session.mouse = on,
+            1006 => session.sgr_mouse = on,
             2004 => session.bracketed_paste = on,
             else => {},
         };
@@ -314,6 +342,25 @@ test "the alternate screen, cursor keys mode and bracketed paste" {
     port.sent.clearRetainingCapacity();
     _ = session.key(.{ .key = .up });
     try testing.expectEqualStrings("\x1b[A", port.sent.items);
+}
+
+test "the wheel goes to a program that asks for the mouse" {
+    var port: FakePort = .{};
+    defer port.deinit();
+    var session: Session = try .init(testing.allocator, .of(FakePort, &port), 10, 3, 100);
+    defer session.deinit();
+    try testing.expect(!session.wheel(1, 0, 0));
+
+    session.output("\x1b[?1000h");
+    try testing.expect(session.wheel(1, 2, 1));
+    try testing.expectEqualStrings("\x1b[M`#\"", port.sent.items);
+    port.sent.clearRetainingCapacity();
+    session.output("\x1b[?1002h\x1b[?1006h");
+    try testing.expect(session.wheel(-2, 4, 0));
+    try testing.expectEqualStrings("\x1b[<65;5;1M\x1b[<65;5;1M", port.sent.items);
+
+    session.output("\x1b[?1000l");
+    try testing.expect(!session.wheel(1, 0, 0));
 }
 
 test "resize goes to the shell; an ended shell says so" {
