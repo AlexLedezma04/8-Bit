@@ -29,13 +29,14 @@ pub fn show(pick: Pick, window: *const Window) void {
     }
 }
 
-/// `files` is null on an error and empty when the user cancelled.
+/// `files` is null on an error. When the user cancelled it is empty, or
+/// holds one empty path (zenity).
 fn onResult(context: ?*anyopaque, files: [*c]const [*c]const u8, _: c_int) callconv(.c) void {
     const pick: *const Pick = @ptrCast(@alignCast(context));
     const allocator = results.allocator;
     const posted: Posted = if (files == null)
         .dialog_failed
-    else if (files[0] == null)
+    else if (files[0] == null or files[0][0] == 0)
         .cancelled
     else
         .{ .picked = .{ .pick = pick.*, .path = allocator.dupe(u8, std.mem.span(files[0])) catch return } };
